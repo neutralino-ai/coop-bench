@@ -1,6 +1,6 @@
 # Coop Bench · 合作桌游环境
 
-**Windows / macOS 桌面客户端、通用游戏 API、10 款可运行环境、可重放训练轨迹。** 0.5.0 源码新增设置面板、账户密码登录与密码设置，默认使用本地打包界面连接远程 API，不在电脑上启动游戏服务器；`--local` 保留原单机环境。Electron 复用同一套界面，macOS Intel / Apple Silicon 提供原生构建目标，尚待原生 CI 和签名公证验证。[远程客户端设计与使用](docs/desktop-client.md)。从已选定的 13 款中核查规则与组件；Just One、So Clover!、Codenames: Duet 因未取得足够完整的原版组件数据而排除。10 款不等于全部战役和扩展，每款覆盖范围见下表。
+**Windows / macOS 桌面客户端、通用游戏 API、10 款可运行环境、可重放训练轨迹。** 0.5.0 新增设置面板、账户密码登录与密码设置，默认使用本地打包界面连接远程 API，不在电脑上启动游戏服务器；`--local` 保留原单机环境。Electron 复用同一套界面，Windows、macOS Intel / Apple Silicon 的原生 CI 与打包后应用验收均已通过；安装器尚未签名公证。[远程客户端设计与使用](docs/desktop-client.md)。从已选定的 13 款中核查规则与组件；Just One、So Clover!、Codenames: Duet 因未取得足够完整的原版组件数据而排除。10 款不等于全部战役和扩展，每款覆盖范围见下表。
 
 仓库：[neutralino-ai/coop-bench](https://github.com/neutralino-ai/coop-bench)。这是可独立克隆的项目，无需相邻的其他源码目录；Windows / macOS 开发步骤见[新电脑开发指南](docs/development.md)。
 
@@ -28,7 +28,7 @@
 
 现有北京服务器按备案完成后提供 API 的方案继续使用。桌面客户端不会绕过备案拦截；换成 8080 / 8443 也不能替代备案。[腾讯云备案说明](https://cloud.tencent.com/document/api/243/19630)
 
-**Windows 0.5.0**：[本地安装包](release/Coop-Bench-0.5.0-win-x64.exe)，111,507,757 字节，未签名。包内真实应用的 27 项远程检查（含设置密码、退出、密码登录）与 14 项本地检查通过，完整自动测试 **288/288 通过**。安装包和本地验证 artifacts 不纳入 Git；克隆后可按开发指南自行构建。Mac Intel / Apple Silicon 的原生构建和验证流程已配置，仍待实际 CI 执行；尚未生成经过验证的 Mac 安装包。
+**Windows 0.5.0**：[本地安装包](release/Coop-Bench-0.5.0-win-x64.exe)，111,507,757 字节，未签名。包内真实应用的 27 项远程检查（含设置密码、退出、密码登录）与 14 项本地检查通过，完整自动测试 **288/288 通过**。Windows、Mac Intel、Mac Apple Silicon 的首次 CI 均已通过，可在[构建产物](https://github.com/neutralino-ai/coop-bench/actions/runs/35302731612)下载对应安装包；需登录 GitHub，产物保留 14 天。安装包和本地验证 artifacts 不纳入 Git，之后仍可从源码重新构建。
 
 历史 0.4.1 为 24 项远程检查、14 项本地检查、251/251 自动测试；0.3.0 为历史单机版本。历史记录不替代当前版本验收。
 

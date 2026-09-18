@@ -24,4 +24,6 @@
 
 私有仓库：[neutralino-ai/coop-bench](https://github.com/neutralino-ai/coop-bench)。依赖已内置，不需要克隆旁边的项目。源码、锁文件及构建流程进入 Git；真实凭证、数据、轨迹、安装包和机器配置均不进入 Git。见 [开发说明](development.md)。
 
-CI 已配置 Windows、Mac Intel 和 Mac Apple Silicon，包括打包后应用验收。Windows 本机验收通过不代表 Mac 已通过；请以相应 GitHub Actions 运行结果为准。
+Windows x64、Mac Intel 和 Mac Apple Silicon 的首次原生 CI **全部通过**，每个平台均运行了打包后应用验收。[CI 运行及安装包下载](https://github.com/neutralino-ai/coop-bench/actions/runs/35302731612)，对应代码提交 `0b9c6eb8d4f7583cfd8dc43adfa670ef8edeb2dc`。
+
+登录 GitHub 后，在运行页面的 Artifacts 中选择 `coop-bench-windows-x64`、`coop-bench-macos-x64` 或 `coop-bench-macos-arm64`。产物保留 14 天，之后仍可从源码重新构建。安装器尚未签名或完成 Apple 公证，CI 未执行安装向导的人工验收。

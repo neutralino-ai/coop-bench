@@ -101,13 +101,13 @@ pnpm dist:mac         # macOS Intel / Apple Silicon DMG、ZIP 构建
 
 当前源码版本为 **0.5.0**。Windows 包内真实应用已通过 **27 项远程模式检查**（含密码设置、退出和密码登录）及 **14 项本地模式检查**，完整自动测试 **288/288 通过**。这些合成测试不写入生产对局；云端另行完成 36 项 API 检查和 15 项真实包内客户端只读检查，没有设置真实账户密码。[发布验证](release-0.5.0.md)。[本地 Windows 安装包](../release/Coop-Bench-0.5.0-win-x64.exe) 为 111,507,757 字节，未签名，SHA-256 为 `20c2e555a95da2bc402bc76f47fb04f560c2396b30f8eed9f6a0829d1e271d06`。安装包和本地 artifacts 不纳入 Git。
 
-| 平台 | 构建目标 | 发布前仍需核实 |
+| 平台 | 构建目标 | 验证状态 |
 |---|---|---|
 | Windows x64 | NSIS `.exe` | 0.5.0 包内远程模式 27 项、本地模式 14 项检查通过；未签名 |
-| macOS Intel | `.dmg` / `.zip` | macOS 原生 CI、安装与运行、签名和 Apple 公证 |
-| macOS Apple Silicon | `.dmg` / `.zip` | macOS 原生 CI、安装与运行、签名和 Apple 公证 |
+| macOS Intel | `.dmg` / `.zip` | 原生 CI 与打包后应用验收通过；未签名、公证 |
+| macOS Apple Silicon | `.dmg` / `.zip` | 原生 CI 与打包后应用验收通过；未签名、公证 |
 
-macOS 原生 CI 尚待执行，本机没有据此宣称生成或验证了 macOS 成品。签名、公证需要相应开发者账户与证书；未签名研究构建不能描述成经过签名的正式发行版。
+[三平台 CI 结果与安装包下载](https://github.com/neutralino-ai/coop-bench/actions/runs/35302731612)已经可用；安装向导仍需人工验收。签名、公证需要相应开发者账户与证书；当前产物是未签名研究构建。
 
 验证使用隔离的合成测试 API，覆盖登录、10 游戏目录、创建对局、逐席配置复制、原始消息展开、历史回放、附件字节与 SHA-256、系统安全存储、退出清除和渲染器隔离。没有把这些测试数据写到真实云端对局。
 

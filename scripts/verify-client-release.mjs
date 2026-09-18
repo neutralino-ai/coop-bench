@@ -27,7 +27,7 @@ const sha256 = createHash('sha256').update(readFileSync(installer)).digest('hex'
 const result = { at: new Date().toISOString(), version, platform: 'win32', arch: 'x64', installer: filename, byteLength: statSync(installer).size, sha256,
   authenticode: 'NotSigned (verified separately with Get-AuthenticodeSignature)', installerWizardExecuted: false, packagedApplicationExecuted: true,
   packagedFiles: files, containsProductionCredentialsOrData: false, remoteChecks: remote.checks, localChecks: local.checks,
-  macOS: 'Source and native CI prepared; user will provide a Mac for building and testing.' };
+  macOS: 'This report verifies the Windows package. Consult docs/release-0.5.0.md and the corresponding native GitHub Actions run for Mac evidence.' };
 writeFileSync(path('artifacts/client-release.json'), JSON.stringify(result, null, 2) + '\n');
 const sums = path('release/SHA256SUMS.txt'), previous = existsSync(sums) ? readFileSync(sums, 'utf8').trim().split(/\r?\n/).filter(line => line && !line.endsWith(filename)) : [];
 writeFileSync(sums, [...previous, `${sha256}  ${filename}`].join('\n') + '\n');
