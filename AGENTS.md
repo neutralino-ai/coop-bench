@@ -45,7 +45,7 @@ Take Time 引擎及少量维护辅助代码已内置在 `src/vendor/` 和 `scrip
 
 ## 4. 接手时的已知基线（2026-09-18）
 
-- 公开仓库：<https://github.com/neutralino-ai/coop-bench>；版本 `0.7.1`。
+- 公开仓库：<https://github.com/neutralino-ai/coop-bench>；版本 `0.7.2`。
 - Node.js `24.21.0`，pnpm `11.19.0`。使用 `pnpm-lock.yaml` 和 `pnpm install --frozen-lockfile`，不另建 npm 锁文件。
 - Windows 本机 0.7.1：299 项测试、包内远程 37 项和本地兼容 14 项通过；一屏回放在 1280×800 与 1440×900 验证。详见 [0.7.1 更新](docs/release-0.7.1.md)。
 - [首次三平台 CI](https://github.com/neutralino-ai/coop-bench/actions/runs/35302731612) 的 Windows x64、Mac Intel、Mac Apple Silicon 均通过，测试代码提交为 `0b9c6eb8d4f7583cfd8dc43adfa670ef8edeb2dc`。CI 包含打包后远程客户端运行；不等同于用户电脑上的安装向导、Gatekeeper 和实际钥匙串验收。
@@ -55,6 +55,8 @@ Take Time 引擎及少量维护辅助代码已内置在 `src/vendor/` 和 `scrip
 - 当时 owner 尚未设置密码；后续可能已改变，接手时通过账户接口核实，不能重置。当前部署细节见 [0.5.0 记录](docs/release-0.5.0.md)。
 
 ## 4.1 0.7.1 更新
+
+**0.7.2 后续修复**：见 [发布说明](docs/release-0.7.2.md)。增加静态启动提示、回放占位 / 超时重试、取消旧请求；首屏不预取整局消息和附件清单，按选中步骤读取本局缓存。GET 限流重试有上限，POST 不自动重试。复制座位配置包含游戏、场景、玩家。Windows 303 项自动测试、41 项开发 / 包内远程检查通过；打包 UI 对云端花火只读实测首屏 1.92 秒。Mac 按对应 tag 的 CI 与实机结果区分。没有新增 MCP 服务器或修改云端游戏核。
 
 - 用户已授权将仓库改为公开；代码历史已检查，真实凭证、数据、规则书下载和模型轨迹仍不得提交。
 - 设置增加 GitHub Releases 更新：按当前平台 / 架构选安装包，固定仓库，不使用游戏凭证，校验 SHA-256 后由用户打开安装器。`desktop/update-client.mjs` 是主进程实现。三平台 CI 全部通过后，版本 tag 才会发布 Release。

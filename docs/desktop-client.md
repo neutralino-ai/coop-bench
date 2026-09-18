@@ -1,4 +1,6 @@
-# Coop Bench 0.7.1 · Windows / macOS 远程客户端
+# Coop Bench 0.7.2 · Windows / macOS 远程客户端
+
+0.7.2 增加启动 / 回放加载提示、超时重试、按所选步骤读取模型记录，以及可直接交给 Agent 的完整座位配置。[更新和性能测量](release-0.7.2.md)。
 
 ## 方案与边界
 

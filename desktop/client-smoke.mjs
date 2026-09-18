@@ -58,6 +58,15 @@ export async function startClientFixture(dataDir) {
 }
 
 export async function runClientSmoke({ window, fixture, remote, dataDir, getCopied }) {
+  const apiReads=[],fetcher=remote.fetcher;let failDetail=false;
+  remote.fetcher=async(url,options)=>{
+    const path=new URL(url).pathname+new URL(url).search;apiReads.push(path);
+    if(/\/rollouts\/[^/?]+$/.test(path)){
+      await new Promise(resolve=>setTimeout(resolve,800));
+      if(failDetail){failDetail=false;return Response.json({error:{code:'SYNTHETIC_FAILURE',message:'Synthetic loading failure'}},{status:503});}
+    }
+    return fetcher(url,options);
+  };
   const checks = [], check = (value, name) => { assert.ok(value, name); checks.push(name); };
   const run = (fn, ...args) => window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`, true);
   const wait = async (fn, message) => { const deadline = Date.now() + 18000; while (!await fn()) { if (Date.now() > deadline) throw new Error(message); await new Promise(r => setTimeout(r, 50)); } };
@@ -118,10 +127,24 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   const info = await run(() => window.coopDesktop.getConnection());
   check(info.connected && !Object.hasOwn(info, 'token') && !Object.hasOwn(info, 'adminToken'), 'connection descriptor contains no credential');
   check(!readFileSync(join(dataDir, 'remote-connection.json'), 'utf8').includes(fixture.adminToken), 'non-remembered token absent from disk config');
-  await wait(() => run(() => document.getElementById('episode-title').textContent.includes('Hanabi') && document.getElementById('artifacts').querySelector('button') && document.getElementById('model-messages').textContent.includes('synthetic-ui-message')), 'Audit/messages/artifacts failed to render.');
+  await wait(()=>run(()=>!document.getElementById('replay-loading').hidden),'Loading screen did not appear during slow response');
+  const loadingUi=await run(()=>({startupHidden:document.getElementById('startup-screen').hidden,detailHidden:document.getElementById('detail').hidden,animation:getComputedStyle(document.querySelector('#replay-loading .loading-spinner')).animationName,reduced:matchMedia('(prefers-reduced-motion:reduce)').matches}));
+  check(loadingUi.startupHidden&&loadingUi.detailHidden&&(loadingUi.animation==='loading-spin'||loadingUi.reduced),`startup finishes and replay loader honors motion preference: ${JSON.stringify(loadingUi)}`);
+  await capture('client-replay-loading.png');
+  await wait(()=>run(()=>!document.getElementById('detail').hidden&&document.getElementById('player-grid').dataset.messages==='ready'),'Board/current decision failed to render');
+  check(!apiReads.some(path=>/\/artifacts/.test(path)||/limit=25/.test(path)||/playerId=p[23]/.test(path)),'first board does not prefetch attachments, duplicate raw-message pages, or idle players');
+  failDetail=true;await run(id=>{void selectEpisode(id);},fixture.id);
+  await wait(()=>run(()=>document.getElementById('replay-loading').dataset.failed==='true'),'Failed replay did not show retry');
+  check(await run(()=>!document.getElementById('retry-replay').hidden&&document.getElementById('detail').hidden),'failed replay has explicit error and retry, without stale cards');
+  await run(()=>document.getElementById('retry-replay').click());
+  await wait(()=>run(()=>!document.getElementById('detail').hidden&&document.getElementById('player-grid').dataset.messages==='ready'),'Replay retry did not recover');
+  check(await run(()=>document.getElementById('replay-loading').hidden),'replay retry restores board');
+  await run(()=>document.getElementById('open-evidence').click());
+  await wait(() => run(() => document.getElementById('episode-title').textContent.includes('Hanabi') && document.getElementById('artifacts').querySelector('button') && document.getElementById('model-messages').textContent.includes('synthetic-ui-message')), 'On-demand messages/artifacts failed to render.');
   await run(() => { for (const detail of document.getElementById('model-messages').querySelectorAll('details')) detail.open = true; });
   await wait(() => run(() => document.getElementById('model-messages').textContent.includes('合成验收消息')), 'Original message text did not expand.');
   checks.push('original in-game message expands without rewriting');
+  await run(()=>document.getElementById('evidence-dialog').close());
   await wait(() => run(() => document.getElementById('player-grid').dataset.messages === 'ready'), 'Focused per-seat message reads did not finish.');
   check(await run(()=>document.getElementById('hint-counter').textContent.includes('剩余提示 8 / 8')&&document.querySelectorAll('#hint-counter .hint-tokens i.available').length===8),'Hanabi shared hint pool displays remaining tokens and maximum');
   await run(()=>document.getElementById('open-rules').click());
@@ -168,6 +191,9 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   try { const picture = await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); assert.ok(!picture.isEmpty()); writeFileSync(join(dataDir, 'client-audit.png'), picture.toPNG()); screenshot = { saved: true }; }
   catch (error) { screenshot = { saved: false, error: String(error) }; }
   await capture('client-connection-success.png');
+  // The failure/retry and paging checks above deliberately spend the shared
+  // heavy-read burst. Let one token refill before testing a non-retryable POST.
+  await new Promise(resolve=>setTimeout(resolve,3500));
   await run(() => {
     document.getElementById('open-create').click();
     const game = document.getElementById('create-game'); game.value = 'hanabi'; game.dispatchEvent(new Event('change'));
@@ -177,7 +203,7 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   check(await run(() => document.getElementById('seat-list').textContent.includes('p1')), 'three private player connection configs rendered');
   await run(() => document.getElementById('seat-list').querySelector('button').click());
   await wait(() => Promise.resolve(getCopied()?.includes('seatToken')), 'Copy seat config failed.');
-  const copied = JSON.parse(getCopied()); check(copied.baseUrl === fixture.apiUrl && copied.episodeId !== fixture.id && typeof copied.seatToken === 'string', 'seat config copies current API and new episode');
+  const copied = JSON.parse(getCopied()); check(copied.baseUrl === fixture.apiUrl && copied.episodeId !== fixture.id && typeof copied.seatToken === 'string' && copied.gameId==='hanabi' && copied.scenarioId==='base' && copied.playerId==='p1', 'seat config copies current API, episode, game, scenario and own player');
   await fixture.call(`/episodes/${copied.episodeId}/truncate`, fixture.adminToken, { reason: 'synthetic UI-created episode cleanup' });
   if (remote.store.encryption.isEncryptionAvailable()) {
     await remote.connect({ apiUrl: fixture.apiUrl, token: fixture.adminToken, remember: true });

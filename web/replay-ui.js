@@ -1,7 +1,8 @@
 /* Focused human replay. No data from these combined audit views is sent to seats. */
 (() => {
   const R = globalThis.CoopReplay;
-  let epoch = 0, episode = '', seats = {}, busy = false;
+  let epoch = 0, episode = '', seats = {}, busy = false, controller;
+  let readCredits=4, creditAt=Date.now();
   const dialog = (id, title) => {
     const box = node('dialog', 'audit-dialog'); box.id = id;
     const heading = node('header','drawer-heading'); heading.append(node('h2','',title));
@@ -17,7 +18,8 @@
   const addButton=(id,label,fn)=>{const b=node('button','button subtle',label);b.id=id;b.type='button';b.onclick=()=>{stopPlayback();fn();};toolbar.append(b);return b;};
   addButton('open-library','对局记录',()=>library.box.showModal());
   addButton('open-create','＋ 新对局',()=>{if(!state.token){$('auth-panel').hidden=false;return;}create.box.showModal();});
-  addButton('open-evidence','完整记录',()=>evidence.box.showModal());
+  const openEvidence=()=>{evidence.box.showModal();if(!state.artifacts.length&&!state.artifactLoading)void loadArtifacts();if(!state.modelMessages.length&&!state.modelMessageLoading)void loadModelMessages();};
+  addButton('open-evidence','完整记录',openEvidence);
   addButton('open-rules','游戏规则',showRules);
   document.querySelector('.top-actions').prepend(toolbar);
   const focus=node('section','focus-replay');focus.id='focus-replay';
@@ -27,33 +29,37 @@
   focus.append(shared,grid,chat);detail.append(focus,timeline);
   const title=node('strong','focus-step-title');title.id='focus-step-title';timeline.prepend(title);
   const phase=node('span','focus-timing','手牌 / 可见信息：动作前');phase.id='focus-timing';document.querySelector('.episode-header-actions').prepend(phase);
-  const more=node('button','button subtle','读取更多消息');more.id='focus-load-more';more.hidden=true;more.onclick=()=>load();evidence.content.prepend(more);
+  const more=node('button','button subtle','读取更多消息');more.id='focus-load-more';more.hidden=true;more.onclick=()=>load(true);evidence.content.prepend(more);
 
   function clear() {
-    epoch++;episode='';seats={};busy=false;document.body.dataset.audit='false';
+    controller?.abort();epoch++;episode='';seats={};busy=false;document.body.dataset.audit='false';
     for(const box of [library.box,create.box,evidence.box,full.box,rules.box])if(box.open)box.close();
     rules.content.replaceChildren();
     grid.replaceChildren();shared.replaceChildren();chat.replaceChildren();full.content.replaceChildren();more.hidden=true;
   }
-  async function load() {
+  async function load(all=false) {
     const id=state.rollout?.summary.episodeId;if(!id||!state.token)return;
     if(episode!==id){epoch++;episode=id;seats={};busy=false;}
     if(busy)return;busy=true;grid.dataset.messages='loading';const serial=epoch,session=state.session;
+    controller=new AbortController();const signal=controller.signal;
     const valid=()=>epoch===serial&&session===state.session&&state.rollout?.summary.episodeId===id;
     // Bounded pages per click, streaming progress. Larger traces remain available
     // in the paginated original-message viewer rather than freezing the renderer.
-    let lastFetch=0;
-    for(const player of state.rollout.players){
+    const selectedIndex=state.index,targets=R.snapshot(state.rollout,state.index).players;
+    for(const {player,decision} of targets){
       const seat=seats[player]??(seats[player]={messages:[],bytes:0,after:-1,more:true,error:'',loading:true});
-      if(seat.capped||seat.completion&&!seat.more)continue;
-      seat.loading=true;seat.error='';
+      const available=()=>R.linkedMessages(seat.messages,decision,player).some(m=>m.kind==='model-output');
+      seat.loading=false;
+      if(seat.capped||!seat.more||!all&&(!decision||seat.error||available()))continue;
+      seat.loading=true;seat.error='';render();
       try{
         for(let page=0;page<5;page++){
-          // The API shares a 20/min heavy-read budget with exports/replays. Pace
-          // background trace reads instead of exhausting it with parallel pages.
-          const delay=Math.max(0,3100-(Date.now()-lastFetch));if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
-          if(!valid())return;lastFetch=Date.now();
-          const data=await request(`/rollouts/${encodeURIComponent(id)}/messages?playerId=${encodeURIComponent(player)}&after=${seat.after}&limit=100`);
+          // Use a small initial burst, then refill at the server's read budget.
+          // Only read seats needed at the selected step; never block the board.
+          readCredits=Math.min(4,readCredits+(Date.now()-creditAt)/3100);creditAt=Date.now();
+          if(readCredits<1){await new Promise(resolve=>setTimeout(resolve,(1-readCredits)*3100));readCredits=1;creditAt=Date.now();}
+          if(!valid())return;readCredits--;
+          const data=await request(`/rollouts/${encodeURIComponent(id)}/messages?playerId=${encodeURIComponent(player)}&after=${seat.after}&limit=100`,undefined,{signal});
           if(!valid())return;
           if(!Array.isArray(data.messages))throw Error('消息响应不完整');
           const next=data.nextAfter;
@@ -61,12 +67,12 @@
           const bytes=JSON.stringify(data.messages).length;
           if(seat.bytes+bytes>8*1024*1024||seat.messages.length+data.messages.length>2000){seat.capped=true;seat.more=false;break;}
           seat.messages.push(...data.messages);seat.bytes+=bytes;seat.after=Number.isInteger(next)?next:seat.after;seat.more=!!data.hasMore;
-          seat.completion=data.completion;render();if(!seat.more)break;
+          seat.completion=data.completion;render();if(!seat.more||!all&&available())break;
         }
-      }catch(error){if(valid())seat.error='消息读取失败，可在完整记录中重试。';}
+      }catch(error){if(valid())seat.error=error.status===429?'读取频率已达上限；稍后在完整记录中重试。':'消息读取失败，可在完整记录中重试。';}
       finally{if(valid()){seat.loading=false;render();}}
     }
-    if(valid()){busy=false;grid.dataset.messages='ready';more.hidden=!Object.values(seats).some(s=>s.more||s.error);more.textContent=Object.values(seats).some(s=>s.error)?'重试读取消息':'读取更多消息';render();}
+    if(valid()){busy=false;grid.dataset.messages='ready';more.hidden=!Object.values(seats).some(s=>s.more||s.error);more.textContent=Object.values(seats).some(s=>s.error)?'重试读取消息':'读取更多消息';render();if(state.index!==selectedIndex)void load();}
   }
   const button=(label,fn)=>{const b=node('button','text-button',label);b.type='button';b.onclick=()=>{stopPlayback();fn();};return b;};
   function showOriginal(p) {
@@ -119,7 +125,7 @@
       const keys=['phase','current','level','hints','lives','piles','stacks','trick','tasks','position','altitude','speed'];
       for(const k of keys.filter(k=>view[k]!==undefined).slice(0,5))shared.append(node('span','',`${labels[k]??k}：${compact(view[k])}`));
     }
-    shared.append(button('展开棋盘',()=>{evidence.box.showModal();document.querySelector('.board-panel').scrollIntoView({block:'start'});}));
+    shared.append(button('展开棋盘',()=>{openEvidence();document.querySelector('.board-panel').scrollIntoView({block:'start'});}));
   }
   function showRules() {
     rules.content.replaceChildren();
@@ -182,8 +188,9 @@
     const matched=R.linkedMessages(seats[p.player]?.messages??[],p.decision,p.player),thoughts=R.reasoning(matched);
     const reasoning=thoughts.length?thoughts.map(t=>t.text).join('\n'):p.decision?.decisionSummary;
     decision.append(node('span','thinking-source',thoughts.length?`${thoughts[0].label} · 客户端来源未核验`:p.decision?.decisionSummary?'决策简述 · 非完整 thinking':'没有已记录的决策简述'));
-    decision.append(node('p','thinking-excerpt',reasoning??(p.decision?'该步没有可读的思考记录。':'还没有轮到它行动。')));
-    const status=seats[p.player];if(status?.error||status?.loading||status?.more||status?.capped)decision.append(node('span','trace-status',status.error|| (status.capped?'大轨迹 · 在完整记录中分页查看':status.loading?'正在读取对应消息…':'消息未全部读取 · 完整记录中可继续读取')));
+    const status=seats[p.player];
+    decision.append(node('p','thinking-excerpt',reasoning??(p.decision?status?.more!==false?'正在查找该步的模型记录…':'该步没有可读的思考记录。':'还没有轮到它行动。')));
+    if(p.decision&&(status?.error||status?.loading||status?.more||status?.capped))decision.append(node('span','trace-status',status.error|| (status.capped?'大轨迹 · 在完整记录中分页查看':status.loading?'正在读取对应消息…':'已载入部分消息 · 完整记录中可继续读取')));
     decision.append(button('完整输入 / 思考 / 消息 ↗',()=>showOriginal(p)));panel.append(decision);
     const action=node('section',`player-action${p.decision?.error?' rejected-action':''}`);action.append(node('span','action-label',p.decisionIndex===state.index?'做了什么':'上次做了什么'),node('strong','action-description',p.decision?R.actionText(p.decision):'等待行动'));
     if(p.decision?.error)action.append(node('span','','服务器拒绝，未生效'));
@@ -198,9 +205,9 @@
     grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);
     const communications=state.rollout.frames.slice(0,state.index+1).map(f=>({frame:f,text:publicCommunication(f)})).filter(m=>m.text);
     const last=communications.at(-1);chat.replaceChildren(node('strong','','公开交流'),node('span','chat-preview',last?`${last.frame.playerId} · ${last.text}`:'截至这一步还没有公开交流。'));
-    chat.append(button(`全部 ${communications.length} 条 ↗`,()=>{evidence.box.showModal();$('communication-panel').scrollIntoView({block:'start'});}));
+    chat.append(button(`全部 ${communications.length} 条 ↗`,()=>{openEvidence();$('communication-panel').scrollIntoView({block:'start'});}));
   }
-  window.CoopFocus={clear,load,render,selected(){epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();full.content.replaceChildren();}};
+  window.CoopFocus={clear,load,render,selected(){controller?.abort();epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();if(evidence.box.open)evidence.box.close();full.content.replaceChildren();}};
   window.addEventListener('keydown',event=>{
     if(!state.rollout||document.querySelector('dialog[open]')||['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName))return;
     if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();stopPlayback();selectFrame(state.index+(event.key==='ArrowRight'?1:-1));}

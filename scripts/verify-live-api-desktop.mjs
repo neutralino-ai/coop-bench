@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
-const output=join(root,'artifacts/replay-0.6.0-live-check');
+const output=join(root,'artifacts/replay-0.7.2-live-check');
 const profile=join(output,'profile');
 const archive=join(root,'release/win-unpacked/resources/app.asar');
 const apiUrl='https://coop.neutrinophysics.cn:34935/api/v1';
@@ -21,7 +21,7 @@ let ownerToken='',remote,window,apiSession,publicConnectionError,finished=false;
 const checks=[],requests=[],rendererErrors=[];
 const report={schema:'coop-live-desktop-check/v1',startedAt:new Date().toISOString(),apiUrl,episodeId,
  packagedSources:{archive:'release/win-unpacked/resources/app.asar',remoteSession:'desktop/remote-session.mjs',preload:'desktop/preload.cjs',web:'runtime/coop-bench/web'},
- readOnly:true,isolatedProfile:'artifacts/replay-0.6.0-live-check/profile',windowShown:false,checks,requests,rendererErrors};
+ readOnly:true,isolatedProfile:'artifacts/replay-0.7.2-live-check/profile',windowShown:false,checks,requests,rendererErrors};
 function check(value,name){assert.ok(value,name);checks.push(name);}
 function safeError(error){return publicConnectionError?publicConnectionError(error):{code:'VERIFICATION_ERROR',message:'无法初始化隔离客户端验证。'};}
 const trusted=url=>{try{const value=new URL(url);return value.protocol==='coop:'&&value.host==='app'&&!value.username&&!value.password&&['/','/index.html'].includes(value.pathname);}catch{return false;}};
@@ -53,7 +53,7 @@ async function main(){
   assert.equal(target.origin,expected.origin,'Live verifier restricts the API origin');
   assert.ok(target.pathname.startsWith('/api/v1/'),'Live verifier restricts the API path');
   const item={method:'GET',path:target.pathname+target.search,startedAt:new Date().toISOString()};requests.push(item);
-  try{const response=await apiSession.fetch(url,{...options,cache:'no-store'});item.status=response.status;return response;}
+  try{const start=performance.now(),response=await apiSession.fetch(url,{...options,cache:'no-store'});item.status=response.status;item.headersMs=Math.round(performance.now()-start);item.bytes=(await response.clone().arrayBuffer()).byteLength;item.totalMs=Math.round(performance.now()-start);return response;}
   catch(error){item.failed=true;throw error;}
  }});
  report.networkImplementation='Electron session.fetch / Chromium network stack, with packaged RemoteSession validation';
@@ -78,7 +78,7 @@ async function main(){
  window.webContents.session.setPermissionCheckHandler(()=>false);
  window.webContents.session.on('will-download',event=>event.preventDefault());
  app.on('login',(event,_contents,_details,_auth,callback)=>{event.preventDefault();callback();});
- await window.loadURL(`coop://app/#episode=${episodeId}`);
+ const openedAt=performance.now();await window.loadURL(`coop://app/#episode=${episodeId}`);
  await waitFor(()=>evaluate(()=>Boolean(window.coopTransport)),'Packaged UI initialization timed out.');
  check(await evaluate(()=>typeof window.require==='undefined'&&typeof window.process==='undefined'),'Packaged renderer has no Node access');
  await waitFor(()=>evaluate(()=>document.getElementById('connection-status').dataset.state==='connected'),'Live API identity validation did not reach the green connected state.');
@@ -87,7 +87,15 @@ async function main(){
  check(!Object.hasOwn(connection,'token')&&!Object.hasOwn(connection,'adminToken'),'Renderer connection descriptor excludes credentials');
  await waitFor(()=>evaluate(()=>document.getElementById('create-game').options.length===10),'Live game catalogue did not load all ten games.');
  check(await evaluate(()=>document.getElementById('create-game').options.length===10),'Ten games rendered from the live API');
- await waitFor(()=>evaluate(id=>document.getElementById('episode-title').textContent.includes('Hanabi')&&location.hash.includes(id)&&document.getElementById('artifacts').querySelectorAll('[data-download-artifact]').length>=6&&document.getElementById('model-messages').querySelectorAll('.model-message').length>0,episodeId),'Existing Hanabi rollout, messages or artifacts did not render.');
+ await waitFor(()=>evaluate(id=>!document.getElementById('detail').hidden&&document.getElementById('episode-title').textContent.includes('Hanabi')&&location.hash.includes(id),episodeId),'Existing Hanabi board did not render.');
+ report.firstBoardMs=Math.round(performance.now()-openedAt);
+ await waitFor(()=>evaluate(()=>document.getElementById('player-grid').dataset.messages==='ready'),'Current decision read did not finish');
+ report.firstDecisionMs=Math.round(performance.now()-openedAt);
+ report.firstScreenRequests=requests.map(item=>({...item}));
+ check(!requests.some(item=>/\/artifacts|limit=25|playerId=p[23]/.test(item.path)),'First screen avoids eager attachments and unrelated/duplicate message reads');
+ await evaluate(()=>document.getElementById('open-evidence').click());
+ await waitFor(()=>evaluate(()=>document.getElementById('artifacts').querySelectorAll('[data-download-artifact]').length>=6&&document.getElementById('model-messages').querySelectorAll('.model-message').length>0),'On-demand evidence did not render.');
+ await evaluate(()=>document.getElementById('evidence-dialog').close());
  const ui=await evaluate(()=>({phase:document.getElementById('connection-status').dataset.state,label:document.getElementById('connection-status-label').textContent,reason:document.getElementById('connection-reason').textContent,address:document.getElementById('connection-address').textContent,checkedAt:document.getElementById('connection-checked').textContent,lightRgb:getComputedStyle(document.getElementById('connection-light')).backgroundColor.match(/\d+/g).slice(0,3).map(Number),title:document.getElementById('episode-title').textContent,subtitle:document.getElementById('episode-subtitle').textContent,outcome:document.getElementById('outcome-badge').textContent,timelineMaximum:Number(document.getElementById('timeline').max),gameCount:document.getElementById('create-game').options.length,artifactCount:document.getElementById('artifacts').querySelectorAll('[data-download-artifact]').length,messageCards:document.getElementById('model-messages').querySelectorAll('.model-message').length,credentialInputEmpty:!document.getElementById('admin-token').value}));
  check(ui.phase==='connected'&&ui.lightRgb[1]>ui.lightRgb[0]+30&&ui.lightRgb[1]>ui.lightRgb[2]+30,'Visible status indicator is green after real identity validation');
  check(ui.address.includes(apiUrl)&&ui.label==='已连接','UI identifies the actual verified 34935 API address');
@@ -107,10 +115,10 @@ async function main(){
  const settingsScreenshot=await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});writeFileSync(join(output,'settings.png'),settingsScreenshot.toPNG());
  check(requests.every(item=>item.method==='GET'),'All live API traffic was read-only GET');
  check(!window.isVisible(),'Isolated Electron window remained hidden');
- report.screenshot='artifacts/replay-0.6.0-live-check/connected.png';report.ok=true;
- await cleanup();process.stdout.write(JSON.stringify({ok:true,checks:checks.length,requests:requests.length,report:'artifacts/replay-0.6.0-live-check/report.json',screenshot:report.screenshot})+'\n');app.exit(0);
+ report.screenshot='artifacts/replay-0.7.2-live-check/connected.png';report.ok=true;
+ await cleanup();process.stdout.write(JSON.stringify({ok:true,checks:checks.length,requests:requests.length,report:'artifacts/replay-0.7.2-live-check/report.json',screenshot:report.screenshot})+'\n');app.exit(0);
 }
 app.on('before-quit',()=>{remote?.invalidate();ownerToken='';});
 // Keep the isolated process alive until cleanup and the final report are saved.
 app.on('window-all-closed',()=>{});
-main().catch(async error=>{report.ok=false;report.error=safeError(error);report.failedCheck=error?.name==='AssertionError'?String(error.message).split('\n')[0]:undefined;try{if(window&&!window.isDestroyed())report.uiFailure=await evaluate(()=>({phase:document.getElementById('connection-status')?.dataset.state,reason:document.getElementById('connection-reason')?.textContent,checkedAt:document.getElementById('connection-checked')?.textContent}));}catch{}await cleanup();process.stdout.write(JSON.stringify({ok:false,error:report.error,report:'artifacts/replay-0.6.0-live-check/report.json'})+'\n');app.exit(1);});
+main().catch(async error=>{report.ok=false;report.error=safeError(error);report.failedCheck=error?.name==='AssertionError'?String(error.message).split('\n')[0]:undefined;try{if(window&&!window.isDestroyed())report.uiFailure=await evaluate(()=>({phase:document.getElementById('connection-status')?.dataset.state,reason:document.getElementById('connection-reason')?.textContent,checkedAt:document.getElementById('connection-checked')?.textContent}));}catch{}await cleanup();process.stdout.write(JSON.stringify({ok:false,error:report.error,report:'artifacts/replay-0.7.2-live-check/report.json'})+'\n');app.exit(1);});

@@ -58,7 +58,7 @@ if (process.argv.includes('--local') || process.argv.includes('--smoke-test')) {
       try { return { ok: true, value: await handler(input) }; }
       catch (error) { return { ok: false, error: publicConnectionError(error) }; }
     });
-    window = new BrowserWindow({ width: 1440, height: 960, minWidth: 980, minHeight: 680, show: false, autoHideMenuBar: true,
+    window = new BrowserWindow({ width: 1440, height: 960, minWidth: 980, minHeight: 680, show: false, backgroundColor: '#f3f5f2', autoHideMenuBar: true,
       title: 'Coop Bench · 游戏与轨迹', webPreferences: { preload: join(here, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, ...(smoke ? { backgroundThrottling: false } : {}) } });
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('will-navigate', (event, url) => { if (!trusted(url)) event.preventDefault(); });

@@ -1,5 +1,7 @@
 # Coop Bench · 合作桌游环境
 
+**0.7.2：启动 / 回放加载状态、失败重试、按当前步骤读取消息。** 修复打开花火时预取整局消息并固定等待的问题，首屏先显示牌局；复制玩家配置包含游戏和场景。已有 0.7.1 可从“设置 → 检查更新”升级。[变更、实测与边界](docs/release-0.7.2.md)。
+
 **Windows / macOS 桌面客户端、通用游戏 API、10 款可运行环境、可重放训练轨迹。** 0.7.1 提供 GitHub 检查更新、游戏规则面板、花火提示计数和密码输入诊断，默认使用本地打包界面连接远程 API，不在电脑上启动游戏服务器；`--local` 保留原单机环境。Electron 复用同一套界面，Windows、macOS Intel / Apple Silicon 的原生 CI 与打包后应用验收均已通过；安装器尚未签名公证。[远程客户端设计与使用](docs/desktop-client.md)。从已选定的 13 款中核查规则与组件；Just One、So Clover!、Codenames: Duet 因未取得足够完整的原版组件数据而排除。10 款不等于全部战役和扩展，每款覆盖范围见下表。
 
 仓库：[neutralino-ai/coop-bench](https://github.com/neutralino-ai/coop-bench)。这是可独立克隆的项目，无需相邻的其他源码目录；Windows / macOS 开发步骤见[新电脑开发指南](docs/development.md)。
@@ -26,11 +28,11 @@
 
 顶部状态灯显示灰色未连接、黄色检查中、绿色身份验证成功、红色失败及原因；每 20 秒检查一次，支持手动检查。远程 HTTPS 与本机 loopback HTTP 地址均可配置。主进程持有登录会话；可选系统加密存储会话，不保存账户密码，不记住时仅驻留内存。退出清除当前页面缓存和本机登录状态，并尝试撤销当前服务器会话。[完整说明](docs/desktop-client.md)
 
-每个 Agent 只取得自己的 `baseUrl`、`episodeId`、`seatToken`，可在不同电脑连接同一后端。0.7.1 客户端复制的配置含这三项；组织者还需补上本局 `gameId` 和 `scenarioId`，让 Agent 取得对应规则，具体见 [参赛指南](PLAY.md)。服务器持续保存轨迹，关闭客户端不会停止远程对局。`auditor` 仅审阅，不能创建对局。
+每个 Agent 只取得自己的 `baseUrl`、`episodeId`、`seatToken`，可在不同电脑连接同一后端。0.7.2 起复制配置同时包含 `gameId`、`scenarioId` 和 `playerId`；旧客户端需由组织者补齐，具体见 [参赛指南](PLAY.md)。服务器持续保存轨迹，关闭客户端不会停止远程对局。`auditor` 仅审阅，不能创建对局。
 
 现有北京服务器按备案完成后提供 API 的方案继续使用。桌面客户端不会绕过备案拦截；换成 8080 / 8443 也不能替代备案。[腾讯云备案说明](https://cloud.tencent.com/document/api/243/19630)
 
-**当前版本 0.7.1**：[Windows / Mac 安装包](https://github.com/neutralino-ai/coop-bench/releases/latest)。旧版首次需手动升级；0.7.1 起在“设置 → 检查更新”下载经 SHA-256 校验的安装器。顶部“游戏规则”直接查看规则与实现范围，花火显示“剩余提示 x/8”。保留三人一屏回放。299 项自动测试、37 项 Windows 包内远程检查和 14 项单机检查通过；系统代码签名 / Mac 公证尚未完成。[本次更新与验证](docs/release-0.7.1.md)。发布由三平台 CI 成功后触发，见 [GitHub Actions](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml)。安装包在 Releases 发布，真实数据和凭证不纳入 Git。
+**当前版本 0.7.2**：[Windows / Mac 安装包](https://github.com/neutralino-ai/coop-bench/releases/latest)。0.7.1 起在“设置 → 检查更新”下载经 SHA-256 校验的安装器，更早版本需手动升级。保留游戏规则入口、花火剩余提示和三人一屏回放，增加加载反馈与按需读取。303 项自动测试、41 项 Windows 包内远程检查通过；系统代码签名 / Mac 公证尚未完成。[本次更新与验证](docs/release-0.7.2.md)。发布由三平台 CI 成功后触发，见 [GitHub Actions](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml)。安装包在 Releases 发布，真实数据和凭证不纳入 Git。
 
 
 历史 0.4.1 为 24 项远程检查、14 项本地检查、251/251 自动测试；0.3.0 为历史单机版本。历史记录不替代当前版本验收。

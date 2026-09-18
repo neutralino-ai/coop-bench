@@ -1,3 +1,12 @@
+// The static startup screen remains visible even if a later bundle fails.
+if(typeof document!=='undefined'){
+ const screen=document.getElementById('startup-screen'),label=document.getElementById('startup-label');
+ const fail=()=>{if(screen&&!screen.hidden){label.textContent='界面启动未完成，请重试；若仍失败，请重新启动客户端。';screen.dataset.failed='true';}};
+ const timer=setTimeout(fail,10000);
+ window.addEventListener('error',fail);
+ document.getElementById('startup-retry')?.addEventListener('click',()=>location.reload());
+ window.CoopStartup={ready(){clearTimeout(timer);if(screen)screen.hidden=true;window.removeEventListener('error',fail);}};
+}
 /* The desktop bridge owns human credentials. Renderers receive public connection
  * metadata and response bytes only; the browser fallback stays same-origin. */
 (()=>{
@@ -19,7 +28,7 @@
   if(parsed.origin!=='https://api.invalid'||!parsed.pathname.startsWith('/api/v1/'))throw Error('无效 API 路径。');
   return parsed.pathname+parsed.search;
  }
- async function request(path,{method='GET',body,signal,seatToken,idempotencyKey}={}){
+ async function requestOnce(path,{method='GET',body,signal,seatToken,idempotencyKey}={}){
   path=apiPath(path);method=method.toUpperCase();
   if(!['GET','POST'].includes(method))throw Error('不支持的请求方法。');
   if(body!==undefined&&(body===null||typeof body!=='object'||Array.isArray(body)))throw Error('请求内容必须是 JSON 对象。');
@@ -43,6 +52,24 @@
    const response=await fetch(`${location.origin}${path}`,{method,signal:controller.signal,credentials:'omit',redirect:'error',headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(body!==undefined?{'Content-Type':'application/json'}:{}),...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});
    if(version!==generation)throw abortError();return response;
   }finally{pending.delete(id);signal?.removeEventListener('abort',cancel);}
+ }
+ async function request(path,options={}){
+  const version=generation;
+  for(let retry=0;;retry++){
+   if(version!==generation||options.signal?.aborted)throw abortError();
+   const response=await requestOnce(path,options);
+   if(response.status!==429||(options.method??'GET').toUpperCase()!=='GET'||retry>=2)return response;
+   const seconds=Number(response.headers.get('retry-after'));
+   const ms=seconds>0?Math.min(15000,Math.max(1000,seconds*1000)):3200;
+   await response.body?.cancel();
+   await new Promise((resolve,reject)=>{
+    const id=crypto.randomUUID();let timer;
+    const cleanup=()=>{clearTimeout(timer);pending.delete(id);options.signal?.removeEventListener('abort',cancel);};
+    const cancel=()=>{cleanup();reject(abortError());};
+    timer=setTimeout(()=>{cleanup();resolve();},ms);pending.set(id,cancel);options.signal?.addEventListener('abort',cancel,{once:true});
+    if(version!==generation||options.signal?.aborted)cancel();
+   });
+  }
  }
  function accept(value){info={mode:desktop?'remote':legacyLocal?'local':'browser',apiUrl:value.apiUrl||defaultApi,connected:Boolean(value.connected),identity:value.identity??null,remembered:Boolean(value.remembered),...(value.connectionError?{connectionError:typeof value.connectionError==='string'?value.connectionError:{message:String(value.connectionError.message??'保存的连接恢复失败。'),...(typeof value.connectionError.code==='string'?{code:value.connectionError.code}:{}),...(Number.isInteger(value.connectionError.status)?{status:value.connectionError.status}:{})}}:{})};return publicInfo();}
  async function getConnection(){const version=generation;if(!desktop&&!legacyLocal)return publicInfo();const received=await bridge.getConnection();if(version!==generation)throw abortError();const value=unwrapBridge(received);if(legacyLocal){if(info.connected)return publicInfo();return connect({apiUrl:value.apiUrl,token:value.adminToken,remember:false});}return accept(value);}

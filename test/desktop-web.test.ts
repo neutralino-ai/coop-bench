@@ -7,12 +7,26 @@ import { webcrypto } from 'node:crypto';
 const transportSource=readFileSync(new URL('../web/transport.js',import.meta.url),'utf8');
 const appSource=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
 function deferred(){let resolve:any,reject:any;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
-function transportContext(bridge:any,fetchImpl:any=()=>{throw Error('Renderer must not fetch in desktop mode');}){
- const context=vm.createContext({window:{coopDesktop:bridge},location:{origin:'http://127.0.0.1:8788'},crypto:webcrypto,fetch:fetchImpl,URL,Response,Uint8Array,DOMException,AbortController,AbortSignal,TextEncoder,navigator:{clipboard:{writeText:async()=>{}}}});
+function transportContext(bridge:any,fetchImpl:any=()=>{throw Error('Renderer must not fetch in desktop mode');},timers:any={setTimeout,clearTimeout}){
+ const context=vm.createContext({window:{coopDesktop:bridge},location:{origin:'http://127.0.0.1:8788'},crypto:webcrypto,fetch:fetchImpl,URL,Response,Uint8Array,DOMException,AbortController,AbortSignal,TextEncoder,...timers,navigator:{clipboard:{writeText:async()=>{}}}});
  vm.runInContext(transportSource,context);return context.window.coopTransport;
 }
 const identity={id:'fixture-user',role:'operator'};
 const connection={mode:'remote',apiUrl:'https://example.test/api/v1',connected:true,identity,remembered:false};
+
+test('read-only rate-limit retries are bounded; writes are never automatically retried',async()=>{
+ let calls=0;const delays:number[]=[];
+ const api=transportContext({connect:async()=>connection,request:async()=>({status:++calls<3?429:200,headers:{},bytes:new Uint8Array()}),cancelRequest:async()=>{}},undefined,{setTimeout:(f:any,ms:number)=>{delays.push(ms);return setTimeout(f,0);},clearTimeout});
+ assert.equal((await api.request('/api/v1/games')).status,200);assert.equal(calls,3);assert.deepEqual(delays,[3200,3200]);
+ calls=0;assert.equal((await api.request('/api/v1/episodes',{method:'POST',body:{}})).status,429);assert.equal(calls,1);
+ const blocked=transportContext({connect:async()=>connection,request:async()=>({status:429,headers:{},bytes:new Uint8Array()}),cancelRequest:async()=>{}},undefined,{setTimeout:(f:any)=>setTimeout(f,0),clearTimeout});
+ assert.equal((await blocked.request('/api/v1/games')).status,429);
+});
+test('logout cancels rate-limit waiting without sending another request as the next user',async()=>{
+ const entered=deferred();let calls=0;
+ const api=transportContext({connect:async()=>connection,request:async()=>{calls++;return {status:429,headers:{},bytes:new Uint8Array()};},cancelRequest:async()=>{},disconnect:async()=>{}},undefined,{setTimeout:(f:any)=>{entered.resolve();return setTimeout(f,30000);},clearTimeout});
+ const pending=api.request('/api/v1/games');await entered.promise;await api.disconnect();await assert.rejects(pending,{name:'AbortError'});assert.equal(calls,1);
+});
 
 test('desktop transport keeps credentials inside connect and preserves binary response bytes',async()=>{
  const requests:any[]=[];const api=transportContext({connect:async(value:any)=>{assert.equal(value.token,'fixture-token');return {...connection,adminToken:'must-not-escape'};},request:async(value:any)=>{requests.push(value);return {status:200,headers:{'content-type':'application/octet-stream'},bytes:new Uint8Array([0,255,8,128])};},cancelRequest:async()=>{},getConnection:async()=>connection,disconnect:async()=>{}});
@@ -70,8 +84,8 @@ function uiContext(requestImpl:any,settings:any={}){
 test('audit UI prevents duplicate create, limits credentials to each seat, clears them on logout',async()=>{
  const pending=deferred();let count=0;const {context,get}=uiContext(async(path:string,options:any)=>{count++;assert.equal(path,'/api/v1/episodes');assert.equal(options.body.playerCount,3);return pending.promise;});
  const first=vm.runInContext('createEpisode({preventDefault(){}})',context);await vm.runInContext('createEpisode({preventDefault(){}})',context);assert.equal(count,1);assert.equal(get('create-episode').disabled,true);
- pending.resolve(Response.json({episodeId:'fixture',seats:[{playerId:'p1',token:'one'},{playerId:'p2',token:'two'}]}));await first;assert.equal(get('seat-list').children.length,2);assert.equal(get('seat-configs').hidden,false);
- const config=JSON.parse(get('seat-list').children[0].children[1].children[1].textContent);assert.deepEqual(config,{baseUrl:connection.apiUrl,episodeId:'fixture',seatToken:'one'});
+ pending.resolve(Response.json({episodeId:'fixture',gameId:'hanabi',scenarioId:'base',seats:[{playerId:'p1',token:'one'},{playerId:'p2',token:'two'}]}));await first;assert.equal(get('seat-list').children.length,2);assert.equal(get('seat-configs').hidden,false);
+ const config=JSON.parse(get('seat-list').children[0].children[1].children[1].textContent);assert.deepEqual(config,{baseUrl:connection.apiUrl,episodeId:'fixture',seatToken:'one',gameId:'hanabi',scenarioId:'base',playerId:'p1'});
  await vm.runInContext('disconnect()',context);assert.equal(get('seat-list').children.length,0);assert.equal(get('seat-configs').hidden,true);
 });
 
@@ -79,6 +93,29 @@ test('audit UI rejects auditor creation and ignores a create response after sess
  const pending=deferred();let count=0;const {context,get}=uiContext(async()=>{count++;return pending.promise;});
  vm.runInContext("state.identity.role='auditor'",context);await vm.runInContext('createEpisode({preventDefault(){}})',context);assert.equal(count,0);
  vm.runInContext("state.identity.role='operator'",context);const creation=vm.runInContext('createEpisode({preventDefault(){}})',context);await vm.runInContext('disconnect()',context);pending.resolve(Response.json({episodeId:'fixture',seats:[{playerId:'p1',token:'stale-secret'}]}));await creation;assert.equal(get('seat-list').children.length,0);assert.equal(get('create-panel').hidden,true);
+});
+
+function enableReplaySelection(context:any){
+ vm.runInContext(appSource.slice(appSource.indexOf('async function selectEpisode(id)'),appSource.indexOf('\nfunction renderHeader()')),context);
+ vm.runInContext('renderHeader=renderTimeline=renderFrame=renderAnnotations=renderRules=renderLibrary=()=>{};',context);
+}
+const replayFixture=(id:string)=>({summary:{episodeId:id,gameId:'hanabi'},players:['p1'],frames:[{seq:0},{seq:1,action:{type:'play'}}]});
+test('replay shows loading immediately, cancels superseded fetches and ignores late old results',async()=>{
+ const first=deferred(),second=deferred(),signals:any[]=[];
+ const {context,get}=uiContext(async(path:string,options:any)=>{signals.push(options.signal);return path.endsWith('/one')?first.promise:second.promise;});
+ enableReplaySelection(context);
+ const old=vm.runInContext("selectEpisode('one')",context);assert.equal(get('replay-loading').hidden,false);assert.equal(get('detail').hidden,true);
+ const current=vm.runInContext("selectEpisode('two')",context);assert.equal(signals[0].aborted,true);
+ second.resolve(Response.json(replayFixture('two')));await current;assert.equal(get('detail').hidden,false);assert.equal(get('replay-loading').hidden,true);
+ first.resolve(Response.json(replayFixture('one')));await old;assert.equal(vm.runInContext('state.rollout.summary.episodeId',context),'two');
+});
+test('replay failures leave an explicit retry and logout cancels pending replay without restoring private data',async()=>{
+ let response=Promise.resolve(Response.json({error:{message:'synthetic unavailable'}},{status:503}));
+ const {context,get}=uiContext(async()=>response);enableReplaySelection(context);
+ await vm.runInContext("selectEpisode('one')",context);assert.equal(get('replay-loading').dataset.failed,'true');assert.equal(get('retry-replay').hidden,false);assert.equal(get('detail').hidden,true);
+ const pending=deferred();response=pending.promise;const loading=vm.runInContext("selectEpisode('one')",context);
+ await vm.runInContext('disconnect()',context);pending.resolve(Response.json(replayFixture('one')));await loading;
+ assert.equal(vm.runInContext('state.rollout',context),null);assert.equal(get('replay-loading').hidden,true);assert.equal(get('detail').hidden,true);
 });
 
 test('restoration errors are preserved without secret fields and render a red failure instead of idle/green',async()=>{

@@ -22,7 +22,7 @@
 这里只是格式示例，不是可登录的凭证。`gameId` 和场景必须与组织者创建的本局一致；不能默认所有对局都是花火。
 
 - `baseUrl`、`episodeId`、`seatToken` 用于 HTTP 入席。`gameId` 用于获取规则，`scenarioId` 指明本局场景，`playerId` 仅用于核对。服务器按凭证确定玩家身份，不能用 `playerId` 冒充别人。
-- **0.7.1 桌面客户端复制的配置只有前三项。** 组织者还需提供建局时选择的 `gameId`、`scenarioId`，可补入同一 JSON；拿不到就先询问，不猜游戏或场景。
+- **0.7.2 起桌面客户端复制的配置包含游戏、场景和玩家 ID。** 0.7.1 及更早版本只有前三项，组织者还需提供建局时选择的 `gameId`、`scenarioId`，可补入同一 JSON；拿不到就先询问，不猜游戏或场景。
 - 没有配置时，只可读取公开 `/health` 和 `/games`，然后请求自己的座位配置。不要索取 owner 密码、人工 operator 凭证、其他玩家凭证、种子或完整审计文件。
 - 多个玩家必须使用不同座位、独立对话和私有文件夹。不读取队友的上下文、私有日志、缓存或手牌；不通过其他对话、聊天软件或文件暗中沟通。
 
@@ -122,6 +122,13 @@ node scripts/upload-agent-artifact.mjs --connection artifacts/player-p1/seat.jso
 [src/agent-tools.ts](src/agent-tools.ts) 的 `createPlayerTools` 提供 `read_rules`、`observe`、`send_message`、`act` 四个模型无关工具定义与调用函数，内部使用 [PlayerClient](src/player-client.ts)。配置中的 `token` 来自该玩家的 `seatToken`；每位玩家建立独立实例。它是可供运行器封装的代码，**没有实现 MCP 的 initialize / tools/list / tools/call 协议或公开 `/mcp` 端点**。
 
 当前支持“Agent 读本文后用终端或 HTTP 工具参与”。若要在工具列表里自动出现四个游戏工具，还需接入运行器或另加 MCP 适配层。不要声称只添加 API URL 就已安装 MCP。
+
+### 入门地址和 MCP 的关系
+
+- 操作指南入口：`https://raw.githubusercontent.com/neutralino-ai/coop-bench/main/PLAY.md`。这是 Agent 可读的文档。
+- API 根地址：`https://coop.neutrinophysics.cn:34935/api/v1`；目录是 `GET /games`，花火规则是 `GET /games/hanabi`。仅访问根地址不能自动安装工具或取得座位。
+- MCP 是标准工具发现与调用协议，包括 `tools/list` 的工具说明 / 参数 Schema 和 `tools/call`。可在现有 HTTP API 外增加适配层，无需重写游戏核或存储。见 [MCP 官方工具规范](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)。
+- MCP 也需要本席配置和鉴权；它不会自动获得整个模型会话或未返回的隐藏思考。模型过程采集仍由运行器负责。
 
 ## 5. 轨迹采集是参赛流程的一部分
 
