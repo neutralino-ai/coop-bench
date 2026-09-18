@@ -10,7 +10,7 @@ import { games } from '../src/registry.ts';
 import { createApi, startLocalApp } from '../src/server.ts';
 
 const token='api-only-local-test-coordinator-token';
-const staticPaths=['/','/play','/app.js','/style.css','/play.js','/play.css','/transport.js'];
+const staticPaths=['/','/play','/app.js','/style.css','/replay.css','/replay-model.js','/replay-ui.js','/play.js','/play.css','/transport.js'];
 
 test('API-only disables every web resource and normalized API alias while preserving authenticated APIs',async()=>{
   const authority=new Authority(':memory:',games,'api-only-test');

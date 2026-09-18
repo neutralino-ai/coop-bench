@@ -61,7 +61,7 @@ test('embedded API has three route aliases, rejects hostile origins/hosts, and k
     const noCredential=await json(`${local.apiUrl}/episodes`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({gameId:'take-time',playerCount:2,scenarioId:'official-clock-1-1'})});
     assert.equal(noCredential.status,401);
-    for(const asset of ['/','/app.js','/style.css']){
+    for(const asset of ['/','/app.js','/style.css','/replay.css','/replay-model.js','/replay-ui.js']){
       const response=await fetch(local.baseUrl+asset);assert.equal(response.status,200);
       assert.ok(!(await response.text()).includes(local.adminToken));
     }

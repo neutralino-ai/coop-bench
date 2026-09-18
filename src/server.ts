@@ -58,7 +58,7 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
         response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"});
         response.end(content);return;
       }
-      if(options.serveWeb!==false && method==='GET' && ['/app.js','/style.css','/play.js','/play.css','/transport.js'].includes(url.pathname)){
+      if(options.serveWeb!==false && method==='GET' && ['/app.js','/style.css','/replay.css','/replay-model.js','/replay-ui.js','/play.js','/play.css','/transport.js'].includes(url.pathname)){
         const content=readFileSync(new URL(`../web${url.pathname}`,import.meta.url));
         response.writeHead(200,{'Content-Type':url.pathname.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
         response.end(content);return;

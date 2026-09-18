@@ -28,7 +28,7 @@
 
 现有北京服务器按备案完成后提供 API 的方案继续使用。桌面客户端不会绕过备案拦截；换成 8080 / 8443 也不能替代备案。[腾讯云备案说明](https://cloud.tencent.com/document/api/243/19630)
 
-**Windows 0.5.0**：[本地安装包](release/Coop-Bench-0.5.0-win-x64.exe)，111,507,757 字节，未签名。包内真实应用的 27 项远程检查（含设置密码、退出、密码登录）与 14 项本地检查通过，完整自动测试 **288/288 通过**。Windows、Mac Intel、Mac Apple Silicon 的首次 CI 均已通过，可在[构建产物](https://github.com/neutralino-ai/coop-bench/actions/runs/35302731612)下载对应安装包；需登录 GitHub，产物保留 14 天。安装包和本地验证 artifacts 不纳入 Git，之后仍可从源码重新构建。
+**Windows 0.6.0**：[本地安装包](release/Coop-Bench-0.6.0-win-x64.exe)。新增三人一屏回放，手牌、可见信息、思考与行动并列；技术信息移入完整记录。294 项自动测试、31 项包内远程检查和 14 项单机检查通过，安装器未签名。[本次更新与验证](docs/release-0.6.0.md)。Mac 安装包及各提交 CI 状态见 [GitHub Actions](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml)；安装包和本地验证 artifacts 不纳入 Git。
 
 历史 0.4.1 为 24 项远程检查、14 项本地检查、251/251 自动测试；0.3.0 为历史单机版本。历史记录不替代当前版本验收。
 
@@ -84,7 +84,7 @@ SQLite 默认保存到当前用户的应用数据目录：Windows `%APPDATA%\Coo
 
 | 文件 | 用途 |
 |---|---|
-| [远程桌面客户端](docs/desktop-client.md) | 0.5.0 设置、账户登录、Agent 分发与跨平台构建边界 |
+| [远程桌面客户端](docs/desktop-client.md) | 0.6.0 一屏回放、设置、账户登录、Agent 分发与跨平台构建边界 |
 | [新电脑开发指南](docs/development.md) | 独立克隆、pnpm、Windows / macOS 与 CI |
 | [src/types.ts](src/types.ts) | 已执行的游戏适配器契约 |
 | [src/registry.ts](src/registry.ts) | 10 款注册表，按核实范围创建 |

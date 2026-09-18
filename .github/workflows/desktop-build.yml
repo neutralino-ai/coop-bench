@@ -96,6 +96,10 @@ jobs:
             artifacts/ci-client-smoke/client-smoke-result.json
             artifacts/ci-client-smoke/client-connection-*.png
             artifacts/ci-client-smoke/client-audit.png
+            artifacts/ci-client-smoke/replay-*.png
+            artifacts/ci-client-smoke/replay-layout.json
             artifacts/ci-packaged-smoke/client-smoke-result.json
             artifacts/ci-packaged-smoke/client-connection-*.png
             artifacts/ci-packaged-smoke/client-settings-password.png
+            artifacts/ci-packaged-smoke/replay-*.png
+            artifacts/ci-packaged-smoke/replay-layout.json

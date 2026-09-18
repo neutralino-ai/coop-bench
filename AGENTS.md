@@ -43,14 +43,22 @@ Take Time 引擎及少量维护辅助代码已内置在 `src/vendor/` 和 `scrip
 
 ## 4. 接手时的已知基线（2026-09-18）
 
-- 私有仓库：<https://github.com/neutralino-ai/coop-bench>；版本 `0.5.0`。
+- 私有仓库：<https://github.com/neutralino-ai/coop-bench>；版本 `0.6.0`。
 - Node.js `24.21.0`，pnpm `11.19.0`。使用 `pnpm-lock.yaml` 和 `pnpm install --frozen-lockfile`，不另建 npm 锁文件。
-- Windows 本机：288 项测试、包内远程 27 项和本地兼容 14 项通过。
+- Windows 本机 0.6.0：294 项测试、包内远程 31 项和本地兼容 14 项通过；一屏回放在 1280×800 与 1440×900 验证。详见 [0.6.0 回放更新](docs/release-0.6.0.md)。
 - [首次三平台 CI](https://github.com/neutralino-ai/coop-bench/actions/runs/35302731612) 的 Windows x64、Mac Intel、Mac Apple Silicon 均通过，测试代码提交为 `0b9c6eb8d4f7583cfd8dc43adfa670ef8edeb2dc`。CI 包含打包后远程客户端运行；不等同于用户电脑上的安装向导、Gatekeeper 和实际钥匙串验收。
 - 产物在该运行的 Artifacts 中，保留 14 天；过期后重新构建。当前安装器未签名，Mac 未做 Apple 公证。
 - API 默认 `https://coop.neutrinophysics.cn:34935/api/v1`。注意域名拼写；旧文档中的 443 网页链接是历史入口。根路径 `/` 返回 404 属于 API-only 设计，连接检查使用 `/api/v1/health` 和认证后的 `/api/v1/identity`。
 - 升级快照 build：`0286cbc0bbd21bfe0c8e2797f71dba2474c198cc25ec60c36a293d173b285af0`。旧库 17 表逐行哈希一致，保留 3 局、372 条消息、9 个附件。
 - 当时 owner 尚未设置密码；后续可能已改变，接手时通过账户接口核实，不能重置。当前部署细节见 [0.5.0 记录](docs/release-0.5.0.md)。
+
+## 4.1 回放 UI 的用户要求（0.6.0）
+
+- 默认一屏看到每个玩家的手牌、合法可见信息、决策记录和动作，关键正文保持 15–16px 以上。不要把 ID、哈希、建局表单、整局消息和附件再堆回主屏。
+- `web/replay-model.js` 处理历史数据关联，`web/replay-ui.js` 组织玩家列，`web/replay.css` 控制紧凑布局；现有 `web/app.js` 继续负责认证、原始证据与 API。
+- 手牌是当前所选动作前的同一时点；非行动者的思考/动作是标明步号的最近一次决策。不能把后续信息倒填，也不能把投影说成 Agent 实际读取过的观察。
+- 花火审计牌面与玩家自身提示知识必须明确分开。原始 messages 按座位和 observationId 关联，无法对应时保留在分页原始记录，不猜测配对。
+- 在 Mac 上继续验收新布局及原文弹窗，不能只沿用 0.5.0 的截图或测试结论。
 
 ## 5. 下一位在 Mac 上先做什么
 

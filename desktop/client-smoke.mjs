@@ -23,6 +23,7 @@ export async function startClientFixture(dataDir) {
   const id = created.episodeId, seat = created.seats[0].token;
   await call(`/episodes/${id}/messages`, seat, { sequence: 0, messageId: 'synthetic-ui-message', kind: 'model-input', message: { role: 'user', content: '合成验收消息：仅用于测试客户端，不是模型实局轨迹。' } });
   const observation = await call(`/episodes/${id}/observation`, seat);
+  await call(`/episodes/${id}/messages`, seat, { sequence: 1, messageId: 'synthetic-linked-reasoning', kind: 'model-output', observationId: observation.observationId, reasoningAvailability: 'provided', message: {role:'assistant',reasoning_content:'合成布局测试：这是用于检验长文本展示的虚构内容，没有调用真实模型。'.repeat(25)+'原文结束标记', content:'<img src=x onerror="window.__thinkingXss=1">'} });
   await call(`/episodes/${id}/actions`, seat, { observationId: observation.observationId, decisionToken: observation.decisionToken, action: { type: 'play', index: 0 }, decisionSummary: '合成测试动作，不是模型推理。' }, randomUUID());
   await call(`/episodes/${id}/truncate`, local.adminToken, { reason: 'synthetic-desktop-client-acceptance' });
   await call(`/episodes/${id}/messages/complete`, seat, { completeness: 'partial', reasoningAvailability: 'not-provided', scope: 'Synthetic UI fixture only', unavailable: ['No real model was invoked.'] });
@@ -100,6 +101,26 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await run(() => { for (const detail of document.getElementById('model-messages').querySelectorAll('details')) detail.open = true; });
   await wait(() => run(() => document.getElementById('model-messages').textContent.includes('合成验收消息')), 'Original message text did not expand.');
   checks.push('original in-game message expands without rewriting');
+  await wait(() => run(() => document.getElementById('player-grid').dataset.messages === 'ready'), 'Focused per-seat message reads did not finish.');
+  await run(() => {document.getElementById('timeline').value=1;document.getElementById('timeline').dispatchEvent(new Event('input'));document.getElementById('message').hidden=true;});
+  check(await run(() => document.querySelectorAll('.player-panel').length===3 && document.querySelector('.acting .thinking-excerpt').textContent.includes('合成布局测试') && !window.__thinkingXss),'three synchronized player columns show linked reasoning as safe text');
+  const layout=[];
+  for(const [width,height] of [[1440,900],[1280,800]]){
+    window.setContentSize(width,height);
+    await run(() => new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    const measured=await run(()=>{
+      const inside=(parent,child)=>{const p=parent.getBoundingClientRect(),c=child.getBoundingClientRect();return c.top>=p.top-1&&c.bottom<=p.bottom+1&&c.right<=p.right+1;};
+      return {width:innerWidth,height:innerHeight,pageFits:document.documentElement.scrollHeight<=innerHeight+1&&document.documentElement.scrollWidth<=innerWidth+1,
+        panels:[...document.querySelectorAll('.player-panel')].map(p=>({heights:[...p.children].map(e=>({name:e.className,height:e.getBoundingClientRect().height,bottom:e.getBoundingClientRect().bottom})),panel:p.getBoundingClientRect().toJSON(),actionFits:inside(p,p.querySelector('.player-action'))&&p.querySelector('.action-description').clientHeight>=20,handFits:inside(p,p.querySelector('.audit-hand')),thoughtFont:parseFloat(getComputedStyle(p.querySelector('.thinking-excerpt')).fontSize),thoughtHeight:p.querySelector('.thinking-excerpt').clientHeight})),
+        timelineFits:document.querySelector('.replay-panel').getBoundingClientRect().bottom<=innerHeight+1};
+    });
+    layout.push(measured);await capture(`replay-${width}x${height}.png`);
+    writeFileSync(join(dataDir,'replay-layout.json'),JSON.stringify(layout,null,2));
+    check(measured.pageFits&&measured.timelineFits&&measured.panels.every(p=>p.actionFits&&p.handFits&&p.thoughtFont>=15&&p.thoughtHeight>=24),`player hands, reasoning and actions fit ${width}x${height} without page scrolling`);
+  }
+  await run(()=>document.querySelector('.acting .player-decision .text-button').click());
+  check(await run(()=>document.getElementById('decision-dialog').open&&document.getElementById('decision-dialog').textContent.includes('原文结束标记')&&!document.getElementById('decision-dialog').querySelector('img')),'full decision dialog preserves long original reasoning and does not execute uploaded markup');
+  await run(()=>document.getElementById('decision-dialog').close());
   check(await run(() => Number(document.getElementById('timeline').max) >= 2), 'recorded timeline renders');
   check(await run(() => !window.__smokeXss && !document.getElementById('annotations').querySelector('img')), 'untrusted annotation rendered as text');
   await run(() => document.getElementById('previous').click());
@@ -119,6 +140,7 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   catch (error) { screenshot = { saved: false, error: String(error) }; }
   await capture('client-connection-success.png');
   await run(() => {
+    document.getElementById('open-create').click();
     const game = document.getElementById('create-game'); game.value = 'hanabi'; game.dispatchEvent(new Event('change'));
     document.getElementById('create-players').value = '3'; document.getElementById('create-form').requestSubmit();
   });

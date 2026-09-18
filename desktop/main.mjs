@@ -21,7 +21,7 @@ if (process.argv.includes('--local') || process.argv.includes('--smoke-test')) {
   function validateSender(event) {
     if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || !trusted(event.senderFrame.url)) throw new Error('此操作仅供客户端主窗口使用。');
   }
-  const assets = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/transport.js': 'transport.js', '/style.css': 'style.css' };
+  const assets = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/transport.js': 'transport.js', '/style.css': 'style.css', '/replay.css':'replay.css', '/replay-model.js':'replay-model.js', '/replay-ui.js':'replay-ui.js' };
   const csp = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
   async function main() {
     if (!app.requestSingleInstanceLock()) { app.quit(); return; }
