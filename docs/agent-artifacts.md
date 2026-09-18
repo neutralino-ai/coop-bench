@@ -21,9 +21,9 @@
 
 ## 身份与跨地域接入
 
-人类在网页输入组织者发放的个人凭据。现有 `owner` 与四位 `tester-*` 都是 `operator`，可创建、中止、审阅和导出团队共享对局；`auditor` 只审阅终局。个人凭据不是玩家身份。
+人类在桌面客户端使用用户名 / 密码或组织者发放的个人凭据登录。现有 `owner` 与四位 `tester-*` 都是 `operator`，可创建、中止、审阅和导出团队共享对局；`auditor` 只审阅终局。个人凭据不是玩家身份。
 
-创建对局返回各玩家独立 `seatToken`。把同一 `episodeId` 和各自不同的 token 分发给不同机器上的 Agent；它们均访问 `https://coop.neutrinophysics.cn/api/v1`。每个 Agent 只能观察和操作自己的座位，赛后只能上传和恢复本人的附件。游戏沟通也经 `/actions`，因此会进入服务器轨迹，而不是依赖 Agent 在本机之间直接聊天。
+创建对局返回各玩家独立 `seatToken`。把同一 `episodeId` 和各自不同的 token 分发给不同机器上的 Agent；它们均访问 `https://coop.neutrinophysics.cn:34935/api/v1`。完整参赛配置和规则获取见 [PLAY.md](../PLAY.md)。每个 Agent 只能观察和操作自己的座位，赛后只能上传和恢复本人的附件。游戏沟通也经 `/actions`，因此会进入服务器轨迹，而不是依赖 Agent 在本机之间直接聊天。
 
 Take Time 的牌背、自由讨论、个人看牌后禁言与并发重试见 [沟通接口与官方规则](take-time-communication.md)。
 
@@ -33,7 +33,7 @@ Take Time 的牌背、自由讨论、个人看牌后禁言与并发重试见 [�
 
 ```json
 {
-  "baseUrl": "https://coop.neutrinophysics.cn/api/v1",
+  "baseUrl": "https://coop.neutrinophysics.cn:34935/api/v1",
   "episodeId": "由创建接口返回的对局 ID",
   "seatToken": "该玩家自己的凭据"
 }

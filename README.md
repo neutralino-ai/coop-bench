@@ -4,6 +4,8 @@
 
 仓库：[neutralino-ai/coop-bench](https://github.com/neutralino-ai/coop-bench)。这是可独立克隆的项目，无需相邻的其他源码目录；Windows / macOS 开发步骤见[新电脑开发指南](docs/development.md)。
 
+**让同事的 Agent 参赛：直接读 [PLAY.md](PLAY.md)。** 包含规则获取、独立座位配置、观察 / 合法沟通 / 行动、幂等重试及真实记录上传。当前是 HTTPS JSON API 和工具封装，尚非标准 MCP 服务；玩家无需安装桌面客户端或自建服务器。组织者建局后分别私下发放每席配置。
+
 **客户端主界面是人类 Rollout 审计台**：可选择游戏、关卡和人数创建对局，为各个 Agent 分别复制座位配置。Agent 通过 API 玩，服务器自动把讨论、动作、精确决策输入、各玩家视图和终局写入 SQLite；人类通过时间线、棋盘、玩家视角和审阅笔记检查记录。见 [Rollout 存储与审计前端](docs/rollout-audit.md)。
 
 **比赛中的模型 messages**：运行器逐次记录实际模型请求、响应、reasoning、工具调用和结果，用各自 seat token 上传私有消息流；人类按玩家审阅，队友不可读取。真实 reasoning 文本、摘要、token 计数和不可读的加密字段分别标注。早期 Take Time 三子智能体演示只有工具日志；新花火演示已保存实际可见输入、回复和工具记录，未取得的模型内部推理明确标为缺失。见 [消息采集接口](docs/agent-messages.md)。
@@ -24,7 +26,7 @@
 
 顶部状态灯显示灰色未连接、黄色检查中、绿色身份验证成功、红色失败及原因；每 20 秒检查一次，支持手动检查。远程 HTTPS 与本机 loopback HTTP 地址均可配置。主进程持有登录会话；可选系统加密存储会话，不保存账户密码，不记住时仅驻留内存。退出清除当前页面缓存和本机登录状态，并尝试撤销当前服务器会话。[完整说明](docs/desktop-client.md)
 
-每个 Agent 只取得自己的 `baseUrl`、`episodeId`、`seatToken`，可在不同电脑连接同一后端。服务器持续保存轨迹，关闭客户端不会停止远程对局。`auditor` 仅审阅，不能创建对局。
+每个 Agent 只取得自己的 `baseUrl`、`episodeId`、`seatToken`，可在不同电脑连接同一后端。0.7.1 客户端复制的配置含这三项；组织者还需补上本局 `gameId` 和 `scenarioId`，让 Agent 取得对应规则，具体见 [参赛指南](PLAY.md)。服务器持续保存轨迹，关闭客户端不会停止远程对局。`auditor` 仅审阅，不能创建对局。
 
 现有北京服务器按备案完成后提供 API 的方案继续使用。桌面客户端不会绕过备案拦截；换成 8080 / 8443 也不能替代备案。[腾讯云备案说明](https://cloud.tencent.com/document/api/243/19630)
 
