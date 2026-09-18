@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createServer } from 'node:http';
 
 export async function startClientFixture(dataDir) {
   const { startLocalApp } = await import('../runtime/coop-bench/src/server.mjs');
@@ -40,10 +41,20 @@ export async function startClientFixture(dataDir) {
   const updateBytes=Buffer.from('Synthetic updater fixture; never execute.'),updateDigest=createHash('sha256').update(updateBytes).digest('hex');
   const updateSuffix=process.platform==='darwin'?`mac-${process.arch}.dmg`:'win-x64.exe',updateName=`Coop-Bench-99.0.0-${updateSuffix}`;
   let updateOpened=false;
-  const updateFetch=async url=>url==='https://api.github.com/repos/neutralino-ai/coop-bench/releases/latest'
-    ? Response.json({tag_name:'v99.0.0',draft:false,prerelease:false,html_url:'https://github.com/neutralino-ai/coop-bench/releases/tag/v99.0.0',assets:[{name:updateName,size:updateBytes.length,digest:`sha256:${updateDigest}`,browser_download_url:`https://github.com/neutralino-ai/coop-bench/releases/download/v99.0.0/${updateName}`}]})
-    : new Response(updateBytes);
-  return { ...local, id, bytes, artifact, call, updateFetch, openUpdate:async path=>{assert.deepEqual(readFileSync(path),updateBytes);updateOpened=true;return '';},updateOpened:()=>updateOpened };
+  const updateServer=createServer((req,res)=>{
+    if(req.url==='/release'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({tag_name:'v99.0.0',draft:false,prerelease:false,html_url:'https://github.com/neutralino-ai/coop-bench/releases/tag/v99.0.0',assets:[{name:updateName,size:updateBytes.length,digest:`sha256:${updateDigest}`,browser_download_url:`https://github.com/neutralino-ai/coop-bench/releases/download/v99.0.0/${updateName}`}]}));}
+    else if(req.url==='/redirect'){res.writeHead(302,{Location:'https://release-assets.githubusercontent.com/synthetic-installer'});res.end();}
+    else if(req.url==='/content')res.end(updateBytes);
+    else {res.writeHead(404);res.end();}
+  });
+  await new Promise((resolve,reject)=>{updateServer.once('error',reject);updateServer.listen(0,'127.0.0.1',resolve);});
+  const updateBase=`http://127.0.0.1:${updateServer.address().port}`;
+  const wrapUpdateFetch=fetcher=>(url,options)=>{
+    const host=new URL(url).hostname,path=host==='api.github.com'?'/release':host==='github.com'?'/redirect':host==='release-assets.githubusercontent.com'?'/content':null;
+    assert.ok(path,'Unexpected updater host');return fetcher(updateBase+path,options);
+  };
+  let closed=false;
+  return { ...local, close:async()=>{if(closed)return;closed=true;updateServer.closeAllConnections();await new Promise(resolve=>updateServer.close(resolve));await local.close();},id,bytes,artifact,call,wrapUpdateFetch,openUpdate:async path=>{assert.deepEqual(readFileSync(path),updateBytes);updateOpened=true;return '';},updateOpened:()=>updateOpened };
 }
 
 export async function runClientSmoke({ window, fixture, remote, dataDir, getCopied }) {
@@ -181,7 +192,7 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await wait(()=>run(()=>document.getElementById('update-status').textContent.includes('SHA-256 校验通过')),'Update download UI failed.');
   await capture('client-update-ready.png');await run(()=>document.getElementById('install-update').click());
   await wait(()=>Promise.resolve(fixture.updateOpened()),'Verified installer was not handed to the synthetic opener.');
-  checks.push('settings checks GitHub-shaped release metadata, downloads exact bytes and opens only verified synthetic installer');
+  checks.push('settings uses the real update network stack across an HTTP 302, verifies bytes and opens only the synthetic installer');
   const syntheticPassword = '  合作bench Ａa9! password  ';
   await run(password => {
     document.getElementById('new-password').value = password;

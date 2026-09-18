@@ -1,6 +1,6 @@
 # Coop Bench · 合作桌游环境
 
-**Windows / macOS 桌面客户端、通用游戏 API、10 款可运行环境、可重放训练轨迹。** 0.7.0 新增 GitHub 检查更新、游戏规则面板、花火提示计数和密码输入诊断，默认使用本地打包界面连接远程 API，不在电脑上启动游戏服务器；`--local` 保留原单机环境。Electron 复用同一套界面，Windows、macOS Intel / Apple Silicon 的原生 CI 与打包后应用验收均已通过；安装器尚未签名公证。[远程客户端设计与使用](docs/desktop-client.md)。从已选定的 13 款中核查规则与组件；Just One、So Clover!、Codenames: Duet 因未取得足够完整的原版组件数据而排除。10 款不等于全部战役和扩展，每款覆盖范围见下表。
+**Windows / macOS 桌面客户端、通用游戏 API、10 款可运行环境、可重放训练轨迹。** 0.7.1 提供 GitHub 检查更新、游戏规则面板、花火提示计数和密码输入诊断，默认使用本地打包界面连接远程 API，不在电脑上启动游戏服务器；`--local` 保留原单机环境。Electron 复用同一套界面，Windows、macOS Intel / Apple Silicon 的原生 CI 与打包后应用验收均已通过；安装器尚未签名公证。[远程客户端设计与使用](docs/desktop-client.md)。从已选定的 13 款中核查规则与组件；Just One、So Clover!、Codenames: Duet 因未取得足够完整的原版组件数据而排除。10 款不等于全部战役和扩展，每款覆盖范围见下表。
 
 仓库：[neutralino-ai/coop-bench](https://github.com/neutralino-ai/coop-bench)。这是可独立克隆的项目，无需相邻的其他源码目录；Windows / macOS 开发步骤见[新电脑开发指南](docs/development.md)。
 
@@ -28,7 +28,7 @@
 
 现有北京服务器按备案完成后提供 API 的方案继续使用。桌面客户端不会绕过备案拦截；换成 8080 / 8443 也不能替代备案。[腾讯云备案说明](https://cloud.tencent.com/document/api/243/19630)
 
-**当前版本 0.7.0**：[Windows / Mac 安装包](https://github.com/neutralino-ai/coop-bench/releases/latest)。旧版首次需手动升级；0.7.0 起在“设置 → 检查更新”下载经 SHA-256 校验的安装器。顶部“游戏规则”直接查看规则与实现范围，花火显示“剩余提示 x/8”。保留三人一屏回放。298 项自动测试、37 项 Windows 包内远程检查和 14 项单机检查通过；系统代码签名 / Mac 公证尚未完成。[本次更新与验证](docs/release-0.7.0.md)。发布由三平台 CI 成功后触发，见 [GitHub Actions](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml)。安装包在 Releases 发布，真实数据和凭证不纳入 Git。
+**当前版本 0.7.1**：[Windows / Mac 安装包](https://github.com/neutralino-ai/coop-bench/releases/latest)。旧版首次需手动升级；0.7.1 起在“设置 → 检查更新”下载经 SHA-256 校验的安装器。顶部“游戏规则”直接查看规则与实现范围，花火显示“剩余提示 x/8”。保留三人一屏回放。299 项自动测试、37 项 Windows 包内远程检查和 14 项单机检查通过；系统代码签名 / Mac 公证尚未完成。[本次更新与验证](docs/release-0.7.1.md)。发布由三平台 CI 成功后触发，见 [GitHub Actions](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml)。安装包在 Releases 发布，真实数据和凭证不纳入 Git。
 
 
 历史 0.4.1 为 24 项远程检查、14 项本地检查、251/251 自动测试；0.3.0 为历史单机版本。历史记录不替代当前版本验收。
@@ -85,7 +85,7 @@ SQLite 默认保存到当前用户的应用数据目录：Windows `%APPDATA%\Coo
 
 | 文件 | 用途 |
 |---|---|
-| [远程桌面客户端](docs/desktop-client.md) | 0.7.0 更新、规则、提示计数、一屏回放与跨平台构建边界 |
+| [远程桌面客户端](docs/desktop-client.md) | 0.7.1 更新、规则、提示计数、一屏回放与跨平台构建边界 |
 | [新电脑开发指南](docs/development.md) | 独立克隆、pnpm、Windows / macOS 与 CI |
 | [src/types.ts](src/types.ts) | 已执行的游戏适配器契约 |
 | [src/registry.ts](src/registry.ts) | 10 款注册表，按核实范围创建 |

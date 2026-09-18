@@ -33,9 +33,11 @@ if (process.argv.includes('--local') || process.argv.includes('--smoke-test')) {
       const { startClientFixture } = await import('./client-smoke.mjs');
       fixture = await startClientFixture(dataDir);
     }
-    const updateSession = session.fromPartition('coop-updates');
+    // Node fetch exposes manual redirect responses. Electron session.fetch can
+    // reject them as "Redirect was cancelled", so keep updates on this stack.
+    const updateFetch = (url, options) => fetch(url, options);
     updater = new UpdateClient({ currentVersion: app.getVersion(), directory: join(dataDir, 'updates'),
-      fetcher: smoke ? fixture.updateFetch : (url, options) => updateSession.fetch(url, options),
+      fetcher: smoke ? fixture.wrapUpdateFetch(updateFetch) : updateFetch,
       opener: smoke ? fixture.openUpdate : path => shell.openPath(path) });
     protocol.handle('coop', request => {
       const url = new URL(request.url), file = assets[url.pathname];
