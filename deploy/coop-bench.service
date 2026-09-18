@@ -1,0 +1,52 @@
+[Unit]
+Description=Coop Bench agent API and rollout audit
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=coop-bench
+Group=coop-bench
+WorkingDirectory=/opt/coop-bench/current/app
+EnvironmentFile=/etc/coop-bench/coop-bench.env
+ExecStart=/opt/coop-bench-node/bin/node --max-old-space-size=384 /opt/coop-bench/current/app/src/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+StateDirectory=coop-bench
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/coop-bench
+# V8 uses JIT executable memory; do not enable MemoryDenyWriteExecute blindly.
+MemoryHigh=512M
+MemoryMax=768M
+CPUQuota=100%
+TasksMax=64
+LimitNOFILE=2048
+LogNamespace=coop-bench
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=coop-bench
+
+[Install]
+WantedBy=multi-user.target

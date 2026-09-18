@@ -1,0 +1,30 @@
+{
+  "retrievedAt": "2026-09-16",
+  "purpose": "Local rule verification evidence; publisher text and artwork are not automatically licensed for redistribution or model-training corpora.",
+  "files": [
+    {
+      "file": "hanabi-cocktail-2019.pdf",
+      "url": "https://www.cocktailgames.com/wp-content/uploads/2016/03/Hanabi_regles_0519_BD.pdf",
+      "sha256": "d4443e826de8053983c76ce8257a3e7453b9ac7d088387b3b573773c72545c58",
+      "scope": "Cocktail Games 2019 French five-color base rules, eight pages. Empty hints allowed. Expert Bouquet final excluded."
+    },
+    {
+      "file": "the-gang.pdf",
+      "url": "https://www.thamesandkosmos.com/manuals/full/683887_TheGang_Manual-Web_051624.pdf",
+      "sha256": "7c991f0c477f951485ab60eb90082291093583af6946a3214d5de85860de09ba",
+      "scope": "20-page Kosmos English rulebook 683887-02-140224, basic game pages 1–13. Advanced rules read but not implemented."
+    },
+    {
+      "file": "the-game.pdf",
+      "url": "https://www.nsv.de/wp-content/uploads/2024/04/TheGame_GB.pdf",
+      "sha256": "f023f554111b5c0f62ec997d8acdb33bec4dc09a2703f97a4f9c40eb499e653d",
+      "scope": "Two-page NSV English original base rules. Expert minimum-three and smaller-hand variants excluded."
+    },
+    {
+      "file": "the-mind.pdf",
+      "url": "https://www.nsv.de/wp-content/uploads/2024/04/TheMind_GB.pdf",
+      "sha256": "c16ccb8ac13c34dd003628e70f68bca747a97dc9227600f47b436cf40d88b0ba",
+      "scope": "Five-page NSV English base rulebook. Standard face-up campaign implemented; post-victory blind challenge excluded."
+    }
+  ]
+}

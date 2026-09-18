@@ -1,0 +1,30 @@
+{
+  "name": "cooperative-boardgame-bench",
+  "version": "0.5.0",
+  "packageManager": "pnpm@11.19.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.mjs",
+  "author": "Coop Bench contributors",
+  "license": "UNLICENSED",
+  "description": "Official-scope cooperative board-game environments, stateful SQLite API, isolated player tools and replayable trajectories.",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
+    "start": "node src/server.ts",
+    "start:headless": "node src/server.ts",
+    "build": "node scripts/build.mjs",
+    "desktop": "node scripts/build.mjs && electron .",
+    "desktop:local": "node scripts/build.mjs && electron . --local",
+    "dist:win": "node scripts/build.mjs && electron-builder --config build/electron-builder.json --win nsis --x64",
+    "dist:mac": "node scripts/build.mjs && electron-builder --config build/electron-builder.json --mac dmg zip --x64 --arm64",
+    "test": "node --test test/*.test.ts experiments/*.test.ts",
+    "smoke": "node src/smoke.ts",
+    "test:protocol": "node --test experiments/state-capsule.test.ts"
+  },
+  "devDependencies": {
+    "electron": "44.4.1",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2"
+  }
+}

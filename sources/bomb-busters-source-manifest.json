@@ -1,0 +1,19 @@
+{
+  "gameId": "bomb-busters",
+  "verifiedAt": "2026-09-16",
+  "implementedScenarios": ["official-mission-1"],
+  "components": {"blueValues": [1, 2, 3, 4, 5, 6], "copiesPerValue": 4, "totalWires": 24, "infoTokensPerValue": 2, "personalDoubleDetectorsPerPlayer": 1, "commonEquipment": [], "redWires": [], "yellowWires": []},
+  "sources": [
+    {"url": "https://www.cocktailgames.com/wp-content/uploads/2023/10/BombBusters_rules_EN.pdf", "file": "bomb-busters-rules.pdf", "sha256": "b683f991b63a722a974bdc3f12636da2fa3dd5b0b7a338e5e7299dd99cf36295", "publisherHosted": true, "evidence": "English v1.0 (2024), setup and Mission 1 front pictured p2; separate stands p3; initial info p4; actions p5-6; personal detector and communication p7."},
+    {"url": "https://www.cocktailgames.com/nos-jeux/bomb-busters-faq/", "publisherHosted": true, "evidence": "Intentional wrong guesses legal; two detector targets share one stand but need not be adjacent; Info token shortage fallback."},
+    {"url": "https://i.gzn.jp/img/2025/07/20/bomb-busters/25.jpg", "file": "bomb-busters-mission1-front-photo.jpg", "sha256": "bf213b051234098319a3349fb357b25cfd0ecc4856672e9a23dba514e08e3e7c", "publisherHosted": false, "actualOfficialComponent": true, "evidence": "Japanese Mission 1 front, actual component photograph from publisher-supplied review copy. 24 wires 1-6, no common Equipment, normal personal detectors and initial clues."},
+    {"url": "https://i.gzn.jp/img/2025/07/20/bomb-busters/27.jpg", "file": "bomb-busters-mission1-back-photo.jpg", "sha256": "4ed55c493051ef76a20224d786890973b60f8d6f2bdb55e067a85d2559706176", "publisherHosted": false, "actualOfficialComponent": true, "evidence": "Complete readable Japanese Mission 1 reverse: standard dual and solo cutting; no additional hidden scenario rule. Visually verified, not inferred from the generic manual."},
+    {"url": "https://gigazine.net/news/20250720-bomb-busters/", "publisherHosted": false, "evidence": "Provenance of actual component photographs: reviewer identifies copy supplied by Japanese publisher Engames."},
+    {"url": "https://www.cocktailgames.com/wp-content/uploads/2023/10/Bombbusters.zip", "publisherHosted": true, "file": "bomb-busters-assets.zip", "derivedEvidenceFile": "bomb-busters-dial-detail.png", "derivedEvidenceSha256": "45123baf3d785bcf876be886f92bbb3de198ca768b1b2044c2ce93fb005ebc54", "evidence": "Crop from Bombbusters_partie_en_cours_HD.jpg confirms player-count start spaces then one unlabelled space then skull. Mistake limits 2/3/4/5 respectively."}
+  ],
+  "excluded": [
+    {"scope": "Missions 2-66", "reason": "No complete verified component and mission package implemented."},
+    {"scope": "Promos 67-70", "reason": "Official task PDFs are public, but still require a full common Equipment deck; overlapping promotional images do not establish all 12 effects."}
+  ],
+  "rights": "Downloaded files are local research evidence. Runtime uses independently written rules code and numeric component facts, not third-party images, rulebook text or source code. Availability for reading does not imply redistribution rights."
+}

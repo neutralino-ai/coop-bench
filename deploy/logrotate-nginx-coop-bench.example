@@ -1,0 +1,16 @@
+# Install only if the existing nginx logrotate configuration does not already
+# match these files; duplicate paths across stanzas make logrotate fail.
+/var/log/nginx/coop-bench.*.log {
+    daily
+    maxsize 10M
+    rotate 3
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        /usr/sbin/nginx -s reopen
+    endscript
+}

@@ -1,0 +1,889 @@
+{
+  "schemaVersion": "0.3",
+  "queriedAt": "2026-09-16",
+  "supersedes": "ranked-games-v1.json",
+  "scope": "Non-RPG cooperative puzzles and communication, using Take Time and The Crew Mission Deep Sea as reference points",
+  "selection": {
+    "activeCount": 10,
+    "newCandidates": 12,
+    "existingReferenceCount": 1,
+    "policy": "Filter by shared team objective and non-RPG puzzle/communication fit first, then prioritize BGG Overall rank. Lower-ranked close mechanisms are explicitly retained as supplements.",
+    "criteria": [
+      "Shared win/loss or shared score",
+      "No adversarial teams, traitors, or individual victory goals",
+      "Prioritize hidden information, restricted communication, distributed actions",
+      "Exclude campaign/progression/dungeon-combat focus from the primary pool",
+      "Preserve score-based and real-time official semantics"
+    ],
+    "candidateCount": 13,
+    "implementedGameCount": 10,
+    "excludedForMissingComponents": 3
+  },
+  "ranking": {
+    "provider": "BoardGameGeek",
+    "metric": "Overall rank",
+    "retrieval": "Recent search-indexed original BGG pages; different crawl dates, not live API",
+    "caveat": "Games are sorted by observed rank, not implementation priority. Lower-ranked games are not described as top-ranked."
+  },
+  "games": [
+    {
+      "id": "sky-team",
+      "name": "Sky Team",
+      "bggOverallRankSnapshot": 32,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/373106/sky-team",
+        "reportedCrawlRecency": "5 days",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "2",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "hidden-dice-coordination",
+      "selectionGroup": "priority",
+      "researchFile": "../docs/non-rpg-research-a.md",
+      "officialSource": "https://www.scorpionmasque.com/en/sky-team",
+      "sourceAudit": "Verified for these scopes only: YUL Montréal-Trudeau — base teaching flight. See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-bounded-official-scope",
+      "canCreateEpisode": true,
+      "runtimeGameId": "sky-team",
+      "implementedPlayerCounts": [
+        2
+      ],
+      "implementedScenarios": [
+        {
+          "id": "yul",
+          "name": "YUL Montréal-Trudeau — base teaching flight",
+          "provenance": "official-mission",
+          "description": "The complete seven-round base scenario shown in the official Landing Procedure.",
+          "sourceUrl": "https://www.scorpionmasque.com/sites/scorpionmasque.com/files/st_rules01_en_06jun2023.pdf"
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "Landing Procedure (2023-06-06)",
+          "url": "https://www.scorpionmasque.com/sites/scorpionmasque.com/files/st_rules01_en_06jun2023.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        },
+        {
+          "title": "Procédure d’atterrissage (2023-11-08)",
+          "url": "https://www.scorpionmasque.com/sites/scorpionmasque.com/files/st_rules01_fr_08nov2023.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-scenario",
+        "implemented": [
+          "YUL exact setup",
+          "seven rounds",
+          "private dice",
+          "per-round strategy discussion",
+          "all base control-panel spaces",
+          "coffee",
+          "shared rerolls",
+          "official terminal checks"
+        ],
+        "omitted": [
+          "other airports",
+          "Flight Log modules",
+          "Turbulence expansion"
+        ],
+        "verifier": "objective-only",
+        "notes": [
+          "Free-text discussion timing is enforced; the prohibition on discussing dice or arranging coded signals requires transcript review. Result verification is mechanical and does not certify semantic communication compliance.",
+          "Shared rerolls use simultaneous private choices; no reroll selections or opponent dice are exposed.",
+          "The initial scenario has traffic [0,0,1,2,1,3,2], rerolls at 6000/2000 feet, and alternating first players.",
+          "No rulebook artwork or component images are served by this environment."
+        ]
+      }
+    },
+    {
+      "id": "the-crew-mission-deep-sea",
+      "name": "The Crew: Mission Deep Sea",
+      "bggOverallRankSnapshot": 45,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/324856/the-crew-mission-deep-sea/stats",
+        "reportedCrawlRecency": "today",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "3–5; 2-player variant",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "hidden-hand-trick-taking",
+      "selectionGroup": "priority",
+      "researchFile": "../docs/non-rpg-research-a.md",
+      "officialSource": "https://www.thamesandkosmos.co.uk/wp-content/uploads/2021/02/691869_Crew_Deep-Sea_Manual.pdf",
+      "sourceAudit": "Verified for these scopes only: Promo 1: Captain for a Day (2 tricks); Promo 1: official follow-up (3 tricks). See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-bounded-official-scope",
+      "canCreateEpisode": true,
+      "runtimeGameId": "crew-deep-sea",
+      "implementedPlayerCounts": [
+        3,
+        4,
+        5
+      ],
+      "implementedScenarios": [
+        {
+          "id": "official-promo-1",
+          "name": "Promo 1: Captain for a Day (2 tricks)",
+          "provenance": "official-mission",
+          "sourceUrl": "https://cms.kosmos.de/Downloads/Die%20Crew/Crew_2_Promo_Cards_DE.pdf",
+          "description": "Submarine 1 holder leads; win exactly two tricks containing no 7, 8 or 9."
+        },
+        {
+          "id": "official-promo-1-three-tricks",
+          "name": "Promo 1: official follow-up (3 tricks)",
+          "provenance": "official-mission",
+          "sourceUrl": "https://cms.kosmos.de/Downloads/Die%20Crew/Crew_2_Promo_Cards_DE.pdf",
+          "description": "The same official Promo with its printed follow-up target of three tricks."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "Kosmos English Deep Sea rules",
+          "url": "https://www.thamesandkosmos.co.uk/wp-content/uploads/2021/02/691869_Crew_Deep-Sea_Manual.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        },
+        {
+          "title": "Kosmos Promo missions (2021), page 2",
+          "url": "https://cms.kosmos.de/Downloads/Die%20Crew/Crew_2_Promo_Cards_DE.pdf",
+          "kind": "official-mission",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-scenario",
+        "verifier": "exact",
+        "implemented": [
+          "Complete 40-card playing deck",
+          "3/4/5-player standard deal",
+          "Follow suit and trump resolution",
+          "Between-trick signaling",
+          "Optional distress card exchange",
+          "Official Promo 1 and its printed three-trick follow-up"
+        ],
+        "omitted": [
+          "96-card main task deck, main campaign and Promo 2",
+          "2-player virtual crew variant",
+          "Optional 3-player reduced-deck challenge",
+          "Cross-attempt campaign bookkeeping"
+        ],
+        "notes": [
+          "One environment episode is one attempt. Distress use adds one to this attempt’s logbook cost; a campaign manager must preserve distress activation over retries.",
+          "Only the latest completed trick can be inspected in a fresh observation. Agents may remember their earlier observations.",
+          "No unrestricted chat is offered after dealing. General pre-deal discussion belongs in the external lobby.",
+          "Distress votes and unanimous agreement are transport controls. Card selections stay private until all submissions are locked."
+        ]
+      }
+    },
+    {
+      "id": "bomb-busters",
+      "name": "Bomb Busters",
+      "bggOverallRankSnapshot": 87,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/413246/bomb-busters/ratings?rated=1",
+        "reportedCrawlRecency": "last week",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "2–5",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "hidden-number-deduction",
+      "selectionGroup": "priority",
+      "researchFile": "../docs/non-rpg-research-a.md",
+      "officialSource": "https://www.cocktailgames.com/wp-content/uploads/2023/10/BombBusters_rules_EN.pdf",
+      "sourceAudit": "Verified for these scopes only: Mission 1 — Training Day 1. See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-bounded-official-scope",
+      "canCreateEpisode": true,
+      "runtimeGameId": "bomb-busters",
+      "implementedPlayerCounts": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "implementedScenarios": [
+        {
+          "id": "official-mission-1",
+          "name": "Mission 1 — Training Day 1",
+          "provenance": "official-mission",
+          "sourceUrl": "https://i.gzn.jp/img/2025/07/20/bomb-busters/27.jpg",
+          "description": "24 blue wires: 1–6 four times each. No common Equipment cards; personal Double Detectors remain available."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "Publisher English rules, v1.0 (2024)",
+          "url": "https://www.cocktailgames.com/wp-content/uploads/2023/10/BombBusters_rules_EN.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        },
+        {
+          "title": "Publisher official FAQ: deliberate errors, detector and token shortages",
+          "url": "https://www.cocktailgames.com/nos-jeux/bomb-busters-faq/",
+          "kind": "publisher",
+          "verifiedAt": "2026-09-16"
+        },
+        {
+          "title": "Photograph of actual Japanese Mission 1 reverse, GIGAZINE publisher-supplied review copy; not a publisher-hosted download",
+          "url": "https://i.gzn.jp/img/2025/07/20/bomb-busters/27.jpg",
+          "kind": "official-mission",
+          "verifiedAt": "2026-09-16"
+        },
+        {
+          "title": "Photograph of actual Mission 1 setup card; matches setup pictured on official English rulebook page 2",
+          "url": "https://i.gzn.jp/img/2025/07/20/bomb-busters/25.jpg",
+          "kind": "official-mission",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-scenario",
+        "implemented": [
+          "Mission 1 complete 24-wire set",
+          "2–5 players and separate stands",
+          "initial info placement",
+          "dual and solo cutting",
+          "once-per-player Double Detector and responder choice",
+          "two Info tokens per value with official shortage fallback",
+          "skip empty players",
+          "exact win/loss"
+        ],
+        "omitted": [
+          "Missions 2–66",
+          "Promos 67–72",
+          "red and yellow wires",
+          "common Equipment card deck"
+        ],
+        "verifier": "objective-only",
+        "notes": [
+          "Only Mission 1 is admitted. It explicitly excludes common Equipment cards; no mandatory component was omitted from this scenario.",
+          "Mission reverse verified from an actual-card review photograph, not inferred from generic rules.",
+          "Free-text chat legality requires transcript audit; terminal result verification is exact.",
+          "Captain is selected by the private seeded RNG. Uneven deals allocate the extra wire to earlier listed stands, within the rulebook instruction to deal as evenly as possible.",
+          "Cut wires retain their public positions. Token shortages emit one public announcement without fabricating an extra permanent token."
+        ]
+      }
+    },
+    {
+      "id": "the-crew-quest-for-planet-nine",
+      "name": "The Crew: The Quest for Planet Nine",
+      "bggOverallRankSnapshot": 96,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/284083/the-crew-the-quest-for-planet-nine",
+        "reportedCrawlRecency": "yesterday",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "3–5; 2-player variant",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "hidden-hand-trick-taking",
+      "selectionGroup": "priority",
+      "researchFile": "../docs/non-rpg-research-b.md",
+      "officialSource": "https://www.thamesandkosmos.com/manuals/full/691868_Crew_Manual.pdf",
+      "sourceAudit": "Verified for these scopes only: Mission 1; Mission 2; Mission 3. See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-bounded-official-scope",
+      "canCreateEpisode": true,
+      "runtimeGameId": "crew-planet-nine",
+      "implementedPlayerCounts": [
+        3,
+        4,
+        5
+      ],
+      "implementedScenarios": [
+        {
+          "id": "official-mission-1",
+          "name": "Mission 1",
+          "provenance": "official-mission",
+          "sourceUrl": "https://iello.fr/wp-content/uploads/2020/05/The-Crew_Log-Book.pdf",
+          "description": "One randomly drawn task, taken by the commander."
+        },
+        {
+          "id": "official-mission-2",
+          "name": "Mission 2",
+          "provenance": "official-mission",
+          "sourceUrl": "https://iello.fr/wp-content/uploads/2020/05/The-Crew_Log-Book.pdf",
+          "description": "Two randomly drawn tasks, selected clockwise from the commander."
+        },
+        {
+          "id": "official-mission-3",
+          "name": "Mission 3",
+          "provenance": "official-mission",
+          "sourceUrl": "https://iello.fr/wp-content/uploads/2020/05/The-Crew_Log-Book.pdf",
+          "description": "Two tasks carrying order tokens 1 and 2."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "Kosmos English Planet Nine rules",
+          "url": "https://www.thamesandkosmos.com/manuals/full/691868_Crew_Manual.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        },
+        {
+          "title": "IELLO official French logbook excerpt, page 4",
+          "url": "https://iello.fr/wp-content/uploads/2020/05/The-Crew_Log-Book.pdf",
+          "kind": "official-mission",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-scenario",
+        "verifier": "exact",
+        "implemented": [
+          "Complete 40-card playing deck",
+          "3/4/5-player standard deal",
+          "Follow suit and trump resolution",
+          "Between-trick signaling",
+          "Optional distress card exchange",
+          "Official Missions 1, 2 and 3; complete 36-card task deck"
+        ],
+        "omitted": [
+          "Missions 4–50 and other extra missions",
+          "2-player virtual crew variant",
+          "Optional 3-player reduced-deck challenge",
+          "Cross-attempt campaign bookkeeping"
+        ],
+        "notes": [
+          "One environment episode is one attempt. Distress use adds one to this attempt’s logbook cost; a campaign manager must preserve distress activation over retries.",
+          "Only the latest completed trick can be inspected in a fresh observation. Agents may remember their earlier observations.",
+          "No unrestricted chat is offered after dealing. General pre-deal discussion belongs in the external lobby.",
+          "Distress votes and unanimous agreement are transport controls. Card selections stay private until all submissions are locked."
+        ]
+      }
+    },
+    {
+      "id": "just-one",
+      "name": "Just One",
+      "bggOverallRankSnapshot": 159,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/254640/just-one",
+        "reportedCrawlRecency": "3 days",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "3–7",
+      "teamOutcome": "shared-score",
+      "mechanism": "natural-language-independent-clues",
+      "selectionGroup": "language",
+      "researchFile": "../docs/non-rpg-research-c.md",
+      "officialSource": "https://cdn.svc.asmodee.net/production-rprod/storage/games/justone/NEW/jo-en02-rules-mkt-1749635213L3H57.pdf",
+      "sourceAudit": "Rules verified. Complete official word-card data or an independently playable official demo set was not acquired; no invented substitute deck.",
+      "implementationStatus": "excluded-missing-components",
+      "canCreateEpisode": false,
+      "exclusionReason": "Rules verified. Complete official word-card data or an independently playable official demo set was not acquired; no invented substitute deck."
+    },
+    {
+      "id": "so-clover",
+      "name": "So Clover!",
+      "bggOverallRankSnapshot": 264,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/329839/so-clover/forums/288",
+        "reportedCrawlRecency": "last week",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "3–6",
+      "teamOutcome": "shared-score",
+      "mechanism": "natural-language-layout-reconstruction",
+      "selectionGroup": "language",
+      "researchFile": "../docs/non-rpg-research-c.md",
+      "officialSource": "https://cdn.svc.asmodee.net/production-rprod/storage/downloads/games/so-clover/sc-en01-rules-16197761427wP8d.pdf",
+      "sourceAudit": "Rules verified. Complete four-edge word-card grouping/orientation data or a complete multiplayer official demo set was not acquired.",
+      "implementationStatus": "excluded-missing-components",
+      "canCreateEpisode": false,
+      "exclusionReason": "Rules verified. Complete four-edge word-card grouping/orientation data or a complete multiplayer official demo set was not acquired."
+    },
+    {
+      "id": "codenames-duet",
+      "name": "Codenames: Duet",
+      "bggOverallRankSnapshot": 277,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/224037/codenames-duet",
+        "reportedCrawlRecency": "2 days",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "2+",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "asymmetric-language-clues",
+      "selectionGroup": "language",
+      "researchFile": "../docs/non-rpg-research-c.md",
+      "officialSource": "https://filemanager.czechgames.com/storage/files/codenames-duet/rules/codenames-duet-rules-en.pdf",
+      "sourceAudit": "Rules verified. Edition-matched official word cards and paired key data sufficient for a verified complete setup were not acquired; generated keys are not silently substituted.",
+      "implementationStatus": "excluded-missing-components",
+      "canCreateEpisode": false,
+      "exclusionReason": "Rules verified. Edition-matched official word cards and paired key data sufficient for a verified complete setup were not acquired; generated keys are not silently substituted."
+    },
+    {
+      "id": "the-gang",
+      "name": "The Gang",
+      "bggOverallRankSnapshot": 355,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/411567/the-gang/ratings?rated=1",
+        "reportedCrawlRecency": "yesterday",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "3–6",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "private-hand-relative-ranking",
+      "selectionGroup": "priority",
+      "researchFile": "../docs/non-rpg-research-b.md",
+      "officialSource": "https://www.thamesandkosmos.com/manuals/full/683887_TheGang_Manual-Web_051624.pdf",
+      "sourceAudit": "Verified for these scopes only: Basic game. See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-official-core",
+      "canCreateEpisode": true,
+      "runtimeGameId": "the-gang",
+      "implementedPlayerCounts": [
+        3,
+        4,
+        5,
+        6
+      ],
+      "implementedScenarios": [
+        {
+          "id": "base",
+          "name": "Basic game",
+          "provenance": "official-random-setup",
+          "description": "Full three-to-five-heist game with four rounds per heist."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "Kosmos 683887 official rulebook 051624",
+          "url": "https://www.thamesandkosmos.com/manuals/full/683887_TheGang_Manual-Web_051624.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-core",
+        "implemented": [
+          "52-card basic game",
+          "free chip taking and release",
+          "automatic rounds",
+          "best-five showdown including ties",
+          "all heists"
+        ],
+        "omitted": [
+          "advanced specialist/challenge cards",
+          "Deluxe/7–10 player expansion"
+        ],
+        "verifier": "objective-only",
+        "notes": [
+          "HTTP arrival order serializes simultaneous physical chip actions without enforcing turns.",
+          "No extra confirmation phase: official page 6 ends the round as soon as every player has a chip.",
+          "chat allows public-information discussion. Whether text indirectly leaks private-hand knowledge needs an external audit; the exact outcome verifier does not certify speech compliance."
+        ]
+      }
+    },
+    {
+      "id": "take-time",
+      "name": "Take Time",
+      "bggOverallRankSnapshot": 540,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/440540/take-time/ratings?status=own",
+        "reportedCrawlRecency": "2 days",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "2–4",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "silent-number-placement",
+      "selectionGroup": "existing-reference",
+      "researchFile": "../docs/non-rpg-research-a.md",
+      "officialSource": "https://www.libellud.com/en/resources/take-time/",
+      "sourceAudit": "Verified for these scopes only: Chapter 1, Clock 1 (1-1). See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-bounded-official-scope",
+      "canCreateEpisode": true,
+      "existingProject": "../../take-time",
+      "existingCoverage": "official Chapter 1, Clock 1 (1-1)",
+      "coverageNotClaimed": "Other 39 challenges; unified service integration",
+      "runtimeGameId": "take-time",
+      "implementedPlayerCounts": [
+        2,
+        3,
+        4
+      ],
+      "implementedScenarios": [
+        {
+          "id": "official-clock-1-1",
+          "name": "Chapter 1, Clock 1 (1-1)",
+          "provenance": "official-mission",
+          "description": "All six sums nondecreasing; first position exactly one solar card, sixth exactly three cards."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "Official Chinese rules",
+          "url": "https://cdn.svc.asmodee.net/production-libellud/uploads/2025/09/TT_RULES_CNS_WEB.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-scenario",
+        "implemented": [
+          "Clock 1-1, 2–4 players",
+          "Discussion until personally looking",
+          "Optional face-up plays; all-face-down legal",
+          "Two-player reserve draw",
+          "Automatic reveal and judgment"
+        ],
+        "omitted": [
+          "Clocks 1-2 through 10-4",
+          "Automatic campaign progression"
+        ],
+        "verifier": "exact",
+        "notes": [
+          "Reuses the adjacent take-time official engine. New attempts with bonusTokens 0–3 are configured by the trusted coordinator; no in-game player reset."
+        ]
+      }
+    },
+    {
+      "id": "hanabi",
+      "name": "Hanabi",
+      "bggOverallRankSnapshot": 608,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/98778/hanabi/ratings?comment=1",
+        "reportedCrawlRecency": "last week",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "2–5",
+      "teamOutcome": "shared-score-with-failure",
+      "mechanism": "own-hand-hidden-structured-clues",
+      "selectionGroup": "priority",
+      "researchFile": "../docs/non-rpg-research-b.md",
+      "officialSource": "https://www.cocktailgames.com/wp-content/uploads/2016/03/Hanabi_regles_0519_BD.pdf",
+      "sourceAudit": "Verified for these scopes only: Official five-color random deal. See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-official-core",
+      "canCreateEpisode": true,
+      "runtimeGameId": "hanabi",
+      "implementedPlayerCounts": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "implementedScenarios": [
+        {
+          "id": "base",
+          "name": "Official five-color random deal",
+          "provenance": "official-random-setup",
+          "description": "50 cards; empty hints permitted by this French edition."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "Cocktail Games 2019 official rules",
+          "url": "https://www.cocktailgames.com/wp-content/uploads/2016/03/Hanabi_regles_0519_BD.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-core",
+        "implemented": [
+          "2019 five-color base game",
+          "empty hints",
+          "positive and negative hint tracking",
+          "hand reordering",
+          "final round"
+        ],
+        "omitted": [
+          "expansions",
+          "Bouquet final expert variant"
+        ],
+        "verifier": "exact",
+        "notes": [
+          "p1 replaces the nonstrategic most-colorful-clothing starting-player convention.",
+          "success means a perfect 25; lower non-explosive scores are official graded results, not an arbitrary loss threshold. reason distinguishes scored from explosion.",
+          "score is completed firework height; on explosion it is a diagnostic board score, not a claim of official victory.",
+          "No arbitrary chat; strict communication mode. Player-established conventions remain possible through legal hints."
+        ]
+      }
+    },
+    {
+      "id": "magic-maze",
+      "name": "Magic Maze",
+      "bggOverallRankSnapshot": 806,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/209778/magic-maze",
+        "reportedCrawlRecency": "today",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "1–8",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "distributed-action-permissions",
+      "selectionGroup": "timing",
+      "researchFile": "../docs/non-rpg-research-c.md",
+      "officialSource": "https://sitdown-games.com/wp-content/uploads/2018/09/MM_Rules_EN_HR_Sept2018_LD.pdf",
+      "sourceAudit": "Verified for these scopes only: 2017 preview Print & Play discovery scenario. See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-bounded-official-scope",
+      "canCreateEpisode": true,
+      "runtimeGameId": "magic-maze",
+      "implementedPlayerCounts": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "implementedScenarios": [
+        {
+          "id": "pnp-2017-discovery",
+          "name": "2017 preview Print & Play discovery scenario",
+          "provenance": "official-mission",
+          "sourceUrl": "https://ludovox.fr/wp-content/uploads/ressources/MM_Print%26Play.pdf",
+          "description": "All nine included demo maps and 1–8-player action cards; explicitly the publisher work-in-progress preview, not retail Scenario 1."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "Publisher-authored 2017 preview Print & Play (Ludovox-hosted PDF)",
+          "url": "https://ludovox.fr/wp-content/uploads/ressources/MM_Print%26Play.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-scenario",
+        "implemented": [
+          "all 9 publisher PnP tiles",
+          "all 1–8-player action cards",
+          "real-time system clock input",
+          "sand-timer inversion",
+          "discussion windows",
+          "action permission partition",
+          "exploration and rotation",
+          "walls and collisions",
+          "teleportation and escalators",
+          "theft and shared exit",
+          "solo action deck"
+        ],
+        "omitted": [
+          "retail 24-tile edition",
+          "retail scenarios 2–17",
+          "optional later-scenario role passing",
+          "expansions"
+        ],
+        "verifier": "exact",
+        "notes": [
+          "The public PnP is a publisher-authored work-in-progress preview with red/yellow/green/blue heroes; it is not the final retail map.",
+          "Only the trusted server/runner may call advanceTime. Zero-time local simulations are not comparable with official real-time play.",
+          "Free-text speech is restricted by phase. Physical staring is represented by the public Do Something target; physical hand speed is not simulated.",
+          "Publisher permits trying the paper demo; that is not an open software/artwork/ML-corpus license. Numeric topology only is encoded; no artwork is served."
+        ]
+      }
+    },
+    {
+      "id": "the-mind",
+      "name": "The Mind",
+      "bggOverallRankSnapshot": 1134,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/244992/the-mind",
+        "reportedCrawlRecency": "last week",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "2–4",
+      "teamOutcome": "shared-win-loss",
+      "mechanism": "silent-time-coordination",
+      "selectionGroup": "timing",
+      "researchFile": "../docs/non-rpg-research-b.md",
+      "officialSource": "https://pandasaurusgames.com/products/the-mind",
+      "sourceAudit": "Verified for these scopes only: Complete standard level sequence. See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-official-core",
+      "canCreateEpisode": true,
+      "runtimeGameId": "the-mind",
+      "implementedPlayerCounts": [
+        2,
+        3,
+        4
+      ],
+      "implementedScenarios": [
+        {
+          "id": "base",
+          "name": "Complete standard level sequence",
+          "provenance": "official-random-setup",
+          "description": "2/3/4 players complete 12/10/8 levels with lives and throwing stars."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "NSV official English rules, TheMind_GB.pdf",
+          "url": "https://www.nsv.de/wp-content/uploads/2024/04/TheMind_GB.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-core",
+        "implemented": [
+          "free order face-up play",
+          "all standard levels",
+          "stop and unanimous focus",
+          "lives",
+          "unanimous throwing stars",
+          "level rewards"
+        ],
+        "omitted": [
+          "post-victory blind challenge",
+          "physical gestures and facial expressions"
+        ],
+        "verifier": "objective-only",
+        "notes": [
+          "Rule transitions are exact; timing behavior depends on the runner. Do not schedule fixed player turns.",
+          "The server records actual arrival order. This adapter does not impose a seconds-per-number policy or fabricate thinking delays.",
+          "Request latency and polling can affect performance. This runtime is not certified equivalent to physical human timing.",
+          "success verifies level completion; it does not prove agents avoided mental counting or out-of-band signals.",
+          "A pending star vote is withdrawn on a card play or stop; this prevents stale consent being applied to a changed hand state."
+        ]
+      }
+    },
+    {
+      "id": "the-game",
+      "name": "The Game",
+      "bggOverallRankSnapshot": 1345,
+      "rankEvidence": {
+        "url": "https://boardgamegeek.com/boardgame/173090/the-game",
+        "reportedCrawlRecency": "2 days",
+        "queriedAt": "2026-09-16",
+        "live": false
+      },
+      "players": "1–5",
+      "teamOutcome": "clear-deck-goal-and-remaining-score",
+      "mechanism": "restricted-communication-number-planning",
+      "selectionGroup": "mechanism-supplement",
+      "researchFile": "../docs/non-rpg-research-b.md",
+      "officialSource": "https://pandasaurusgames.com/products/the-game-kwanchai-moriya-edition?c=evergreens",
+      "sourceAudit": "Verified for these scopes only: Original random deal. See implementation-admission.md and per-game implementation notes.",
+      "implementationStatus": "implemented-official-core",
+      "canCreateEpisode": true,
+      "runtimeGameId": "the-game",
+      "implementedPlayerCounts": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "implementedScenarios": [
+        {
+          "id": "base",
+          "name": "Original random deal",
+          "provenance": "official-random-setup",
+          "description": "98 number cards, two ascending and two descending piles."
+        }
+      ],
+      "ruleSources": [
+        {
+          "title": "NSV official English rules, TheGame_GB.pdf",
+          "url": "https://www.nsv.de/wp-content/uploads/2024/04/TheGame_GB.pdf",
+          "kind": "official-rulebook",
+          "verifiedAt": "2026-09-16"
+        }
+      ],
+      "implementation": {
+        "fidelity": "official-core",
+        "implemented": [
+          "all base player counts",
+          "starter selection",
+          "single-card placements",
+          "reverse-ten exception",
+          "draw and minimum transitions",
+          "skip empty hands",
+          "public discussion"
+        ],
+        "omitted": [
+          "expert difficulty variants"
+        ],
+        "verifier": "objective-only",
+        "notes": [
+          "chat preserves official permitted conversation. No automatic semantic claim that messages avoid revealing exact private numbers; audit that separately.",
+          "choose_start records the table’s chosen starting player; social consensus is not mechanically enforced.",
+          "score counts played cards (98 minus the official unplayed-card measure). success means all 98 played."
+        ]
+      }
+    }
+  ],
+  "boundedOfficialTaskCandidate": {
+    "gameId": "the-crew-mission-deep-sea",
+    "id": "official-promo-1",
+    "source": "https://cms.kosmos.de/Downloads/Die%20Crew/Crew_2_Promo_Cards_DE.pdf",
+    "intendedInitialPlayerCounts": [
+      3,
+      4,
+      5
+    ],
+    "status": "implemented",
+    "notEquivalentTo": "base mission 1 or full campaign",
+    "runtimeGameId": "crew-deep-sea"
+  },
+  "comparisonOnly": [
+    {
+      "id": "spirit-island",
+      "rankSnapshot": 11,
+      "reason": "Non-RPG and fully cooperative; strategic planning contrast, outside primary communication puzzle focus."
+    },
+    {
+      "id": "pandemic",
+      "rankSnapshot": 174,
+      "reason": "Base game only, fully cooperative; not Legacy. Strategic planning contrast."
+    },
+    {
+      "id": "regicide",
+      "rankSnapshot": 543,
+      "reason": "Base game is cooperative without persistent RPG growth; boss combat kept as boundary candidate, Legacy excluded."
+    },
+    {
+      "id": "switch-and-signal",
+      "rankSnapshot": 2144,
+      "reason": "Non-RPG cooperative transport planning; lower-ranked mechanism supplement."
+    }
+  ],
+  "excludedFromPrimary": [
+    {
+      "names": [
+        "Gloomhaven",
+        "Gloomhaven: Jaws of the Lion",
+        "Frosthaven",
+        "Too Many Bones",
+        "Arkham Horror: The Card Game",
+        "Slay the Spire: The Board Game",
+        "Marvel Champions: The Card Game",
+        "Cthulhu: Death May Die",
+        "Pandemic Legacy"
+      ],
+      "reason": "Campaign/progression/combat focus does not match the revised research target. This is a scope decision, not a claim that these games are not cooperative."
+    },
+    {
+      "names": [
+        "Captain Sonar",
+        "Codenames (standard)"
+      ],
+      "reason": "Teams compete against each other."
+    },
+    {
+      "names": [
+        "Deep Sea Adventure"
+      ],
+      "reason": "Individual treasure competition despite shared oxygen."
+    },
+    {
+      "names": [
+        "Nemesis"
+      ],
+      "reason": "Default play may have conflicting individual objectives."
+    }
+  ],
+  "implementationVerifiedAt": "2026-09-16"
+}

@@ -1,0 +1,222 @@
+{
+  "schemaVersion": "0.1",
+  "queriedAt": "2026-09-16",
+  "ranking": {
+    "provider": "BoardGameGeek",
+    "metric": "Overall rank",
+    "retrieval": "Search-indexed official BGG pages; not a live ranking response",
+    "primarySource": "https://boardgamegeek.com/boardgamemechanic/2023/cooperative-game/linkeditems/boardgamemechanic?mechanicfilter=2023&pageid=1&sort=rank",
+    "crewCrossCheck": "https://boardgamegeek.com/boardgame/324856/the-crew-mission-deep-sea/stats",
+    "caveat": "Per-game and linked-list cache dates differ. Ranks 96, 109 and 277 use per-game evidence recorded in research-top-c.md. This is a research shortlist, not an exhaustive cooperative top 17."
+  },
+  "selection": {
+    "primaryCount": 10,
+    "highRankedSupplementCount": 6,
+    "mechanismReferenceCount": 1,
+    "policy": "Prioritize high BGG Overall rankings; distinguish standard cooperative games from semi-cooperative or mode-dependent games.",
+    "notInPrimary": [
+      {
+        "name": "Nemesis",
+        "rankSnapshot": 25,
+        "reason": "Default semi-cooperative; a separately specified full-cooperative variant would need separate evaluation."
+      },
+      {
+        "name": "Mage Knight Board Game",
+        "rankSnapshot": 39,
+        "reason": "Multiple play modes; evaluate an explicitly cooperative scenario separately."
+      }
+    ]
+  },
+  "games": [
+    {
+      "id": "pandemic-legacy-season-1",
+      "name": "Pandemic Legacy: Season 1",
+      "bggOverallRankSnapshot": 3,
+      "selectionGroup": "primary",
+      "mechanism": "campaign planning",
+      "researchFile": "../docs/research-top-a.md",
+      "sourceAudit": "Official rulebook found; full Legacy contents not verified.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "gloomhaven-2017",
+      "name": "Gloomhaven (2017)",
+      "bggOverallRankSnapshot": 4,
+      "selectionGroup": "primary",
+      "mechanism": "tactical planning",
+      "researchFile": "../docs/research-top-a.md",
+      "sourceAudit": "Current publisher page concerns 2025 second edition; original edition source chain and scenario inputs need verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "spirit-island",
+      "name": "Spirit Island",
+      "bggOverallRankSnapshot": 11,
+      "selectionGroup": "primary",
+      "mechanism": "asymmetric spatial planning",
+      "researchFile": "../docs/research-top-a.md",
+      "sourceAudit": "Official rules entry found; complete component data not verified.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "gloomhaven-jaws-of-the-lion",
+      "name": "Gloomhaven: Jaws of the Lion",
+      "bggOverallRankSnapshot": 12,
+      "selectionGroup": "primary",
+      "mechanism": "progressive tactical scenarios",
+      "researchFile": "../docs/research-top-a.md",
+      "sourceAudit": "Official tutorial structure verified; complete tutorial inputs need verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "slay-the-spire-board-game",
+      "name": "Slay the Spire: The Board Game",
+      "bggOverallRankSnapshot": 15,
+      "selectionGroup": "primary",
+      "mechanism": "deck building and planning",
+      "researchFile": "../docs/research-top-b.md",
+      "sourceAudit": "See source audit; full card and encounter data require separate verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "frosthaven",
+      "name": "Frosthaven",
+      "bggOverallRankSnapshot": 20,
+      "selectionGroup": "primary",
+      "mechanism": "tactics and persistent campaign",
+      "researchFile": "../docs/research-top-a.md",
+      "sourceAudit": "Official FAQ excludes AI training use; full scenario inputs and reuse scope need verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "sky-team",
+      "name": "Sky Team",
+      "bggOverallRankSnapshot": 32,
+      "selectionGroup": "primary",
+      "mechanism": "restricted communication and dice placement",
+      "researchFile": "../docs/research-top-c.md",
+      "sourceAudit": "Official rulebook and flight log found; first scenario needs exact board transcription.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "arkham-horror-card-game",
+      "name": "Arkham Horror: The Card Game",
+      "bggOverallRankSnapshot": 33,
+      "selectionGroup": "primary",
+      "mechanism": "deck construction and campaign",
+      "researchFile": "../docs/research-top-b.md",
+      "sourceAudit": "Official rules and campaign guides found; card data and engine licensing require separate checks.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "too-many-bones",
+      "name": "Too Many Bones",
+      "bggOverallRankSnapshot": 37,
+      "selectionGroup": "primary",
+      "mechanism": "asymmetric dice tactics",
+      "researchFile": "../docs/research-top-b.md",
+      "sourceAudit": "See source audit; full component data require separate verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "the-crew-mission-deep-sea",
+      "name": "The Crew: Mission Deep Sea",
+      "bggOverallRankSnapshot": 45,
+      "selectionGroup": "primary",
+      "mechanism": "hidden information and constrained signaling",
+      "researchFile": "../docs/research-top-b.md",
+      "sourceAudit": "Official rulebook and task sources require separate coverage verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "marvel-champions-card-game",
+      "name": "Marvel Champions: The Card Game",
+      "bggOverallRankSnapshot": 50,
+      "selectionGroup": "supplemental",
+      "mechanism": "asymmetric deck planning",
+      "researchFile": "../docs/research-top-c.md",
+      "sourceAudit": "Official learning rules/reference found; complete hero and villain data need verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "cthulhu-death-may-die",
+      "name": "Cthulhu: Death May Die",
+      "bggOverallRankSnapshot": 54,
+      "selectionGroup": "supplemental",
+      "mechanism": "scenario tactics and risk",
+      "researchFile": "../docs/research-top-b.md",
+      "sourceAudit": "Official rules source audit; episode and component data need separate verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "lord-of-the-rings-fate-of-the-fellowship",
+      "name": "The Lord of the Rings: Fate of the Fellowship",
+      "bggOverallRankSnapshot": 58,
+      "selectionGroup": "supplemental",
+      "mechanism": "cooperative route planning",
+      "researchFile": "../docs/research-top-c.md",
+      "sourceAudit": "Official rules and objective framework found; component transcription remains.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "bomb-busters",
+      "name": "Bomb Busters",
+      "bggOverallRankSnapshot": 86,
+      "alternativeRankSnapshots": [
+        87
+      ],
+      "selectionGroup": "supplemental",
+      "mechanism": "hidden information and deduction",
+      "researchFile": "../docs/research-top-c.md",
+      "sourceAudit": "Recent BGG snapshots disagree between 86 and 87; official mission content coverage needs verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "the-crew-quest-for-planet-nine",
+      "name": "The Crew: The Quest for Planet Nine",
+      "bggOverallRankSnapshot": 96,
+      "selectionGroup": "supplemental",
+      "mechanism": "hidden information and constrained signaling",
+      "researchFile": "../docs/research-top-c.md",
+      "sourceAudit": "Official introductory missions found; do not mistake score sheets for complete mission logbook.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "aeons-end",
+      "name": "Aeon's End",
+      "bggOverallRankSnapshot": 109,
+      "selectionGroup": "supplemental",
+      "mechanism": "cooperative deck building",
+      "researchFile": "../docs/research-top-c.md",
+      "sourceAudit": "Official rulebook found; complete cards and nemesis data need verification.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    },
+    {
+      "id": "codenames-duet",
+      "name": "Codenames: Duet",
+      "bggOverallRankSnapshot": 277,
+      "selectionGroup": "mechanism-reference-only",
+      "mechanism": "natural language clues",
+      "researchFile": "../docs/research-top-c.md",
+      "sourceAudit": "Language cooperation control, not included among high-ranking primary candidates.",
+      "implementationStatus": "research-only",
+      "canCreateEpisode": false
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+import { build } from 'esbuild';
+import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { sourceBuild } from '../src/authority.ts';
+
+// Never recursively copy the workspace, data directory, artifacts or environment.
+const root=realpathSync(fileURLToPath(new URL('../',import.meta.url)));
+const source=sourceBuild(),runtimeManifest=JSON.parse(readFileSync(join(root,'runtime/coop-bench/build-manifest.json'),'utf8'));
+if(runtimeManifest.sourceBuild!==source)throw new Error('Runtime is stale. Run scripts/build.mjs after the final source changes.');
+const webFiles=['index.html','app.js','transport.js','style.css','play.html','play.js','play.css'];
+for(const file of webFiles)if(!readFileSync(join(root,'web',file)).equals(readFileSync(join(root,'runtime/coop-bench/web',file))))throw new Error('Runtime frontend is stale. Run scripts/build.mjs after the final frontend changes.');
+const args=process.argv.slice(2);
+if(args.length!==0&&(args.length!==2||args[0]!=='--out'))throw new Error('Usage: node scripts/package-cloud.mjs [--out NEW_DIRECTORY]');
+const out=resolve(args[1]??join(root,'artifacts',`cloud-release-${source.slice(0,12)}-${Date.now()}`));
+if(existsSync(out))throw new Error('Output directory must be new.');
+mkdirSync(out,{recursive:true});
+const stage=join(out,'release');mkdirSync(stage);
+const copied=[];
+function copy(input,output){
+  const path=join(root,input),actual=realpathSync(path),child=relative(root,actual);
+  if(!child||isAbsolute(child)||child==='..'||child.startsWith(`..${sep}`)||!lstatSync(path).isFile())throw new Error('Bundle input must be a regular file inside this project.');
+  const target=join(stage,output);mkdirSync(dirname(target),{recursive:true});copyFileSync(path,target);copied.push(output);
+}
+copy('runtime/coop-bench/src/server.mjs','app/src/server.mjs');
+copy('runtime/coop-bench/build-manifest.json','app/build-manifest.json');
+for(const file of webFiles)copy(`runtime/coop-bench/web/${file}`,`app/web/${file}`);
+for(const file of ['coop-bench.service','coop-bench-backup.service','coop-bench-backup.timer','coop-bench.env.example','journald-coop-bench.conf','Caddyfile.example','nginx-coop-bench-http.conf.example','nginx-coop-bench.conf.example','logrotate-nginx-coop-bench.example'])copy(`deploy/${file}`,`deploy/${file}`);
+for(const file of ['backup-server.mjs','upload-agent-artifact.mjs','agent-message-recorder.mjs'])copy(`scripts/${file}`,`app/scripts/${file}`);
+copy('docs/cloud-deployment.md','docs/cloud-deployment.md');
+copy('docs/agent-artifacts.md','docs/agent-artifacts.md');
+copy('docs/agent-messages.md','docs/agent-messages.md');
+copy('docs/take-time-communication.md','docs/take-time-communication.md');
+const management='app/scripts/manage-access.mjs';mkdirSync(dirname(join(stage,management)),{recursive:true});
+await build({absWorkingDir:root,entryPoints:['scripts/manage-access.mjs'],bundle:true,platform:'node',format:'esm',target:'node24',outfile:join(stage,management),logLevel:'silent'});
+copied.push(management);
+const files=copied.sort().map(path=>{const bytes=readFileSync(join(stage,path));return {path,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};});
+const manifest={schema:'coop-bench-cloud-release/v1',sourceBuild:source,createdAt:new Date().toISOString(),node:'24.x, security-patched (tested locally: 24.21.0)',entry:'app/src/server.mjs',containsData:false,containsCredentials:false,files};
+writeFileSync(join(stage,'release-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+const archive=join(out,`coop-bench-${source.slice(0,12)}.tar.gz`);
+const packed=spawnSync('tar',['-czf',archive,'-C',stage,...copied,'release-manifest.json'],{encoding:'utf8'});
+if(packed.error||packed.status!==0)throw new Error(`tar packaging failed: ${packed.error?.message??packed.stderr}`);
+const listing=spawnSync('tar',['-tzf',archive],{encoding:'utf8'});
+if(listing.error||listing.status!==0)throw new Error('Could not verify archive file listing.');
+const names=listing.stdout.trim().split(/\r?\n/).sort();
+if(JSON.stringify(names)!==JSON.stringify([...copied,'release-manifest.json'].sort()))throw new Error('Archive contains unexpected entries.');
+const checksum=createHash('sha256').update(readFileSync(archive)).digest('hex');
+writeFileSync(archive+'.sha256',`${checksum}  ${archive.split(/[\\/]/).at(-1)}\n`);
+console.log(JSON.stringify({archive,sha256:checksum,fileCount:names.length,sourceBuild:source,containsData:false,containsCredentials:false},null,2));

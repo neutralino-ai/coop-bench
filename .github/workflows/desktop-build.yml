@@ -1,0 +1,101 @@
+name: Desktop build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-2025
+            artifact: windows-x64
+            build-args: --win nsis --x64
+            executable: release/win-unpacked/Coop Bench.exe
+            arch: x64
+          - name: macOS Intel
+            os: macos-15-intel
+            artifact: macos-x64
+            build-args: --mac dmg zip --x64
+            executable: release/mac/Coop Bench.app/Contents/MacOS/Coop Bench
+            arch: x64
+          - name: macOS Apple Silicon
+            os: macos-15
+            artifact: macos-arm64
+            build-args: --mac dmg zip --arm64
+            executable: release/mac-arm64/Coop Bench.app/Contents/MacOS/Coop Bench
+            arch: arm64
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      # Node must be installed before pnpm on Intel macOS.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: '11.19.0'
+          run_install: false
+          cache: true
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test engines and interfaces
+        run: pnpm test
+      - name: Build self-contained runtime
+        run: pnpm build
+      - name: Exercise desktop with isolated synthetic data
+        timeout-minutes: 3
+        run: pnpm exec electron . --client-smoke-test --data-dir=artifacts/ci-client-smoke
+      - name: Require successful desktop acceptance report
+        run: node -e "const r=require('./artifacts/ci-client-smoke/client-smoke-result.json');if(!r.ok)throw Error('Desktop smoke failed');console.log(r.checks.length+' desktop checks passed')"
+      - name: Package unsigned test installers
+        run: pnpm exec electron-builder --config build/electron-builder.json ${{ matrix.build-args }} --publish never
+      - name: Verify the actual packaged desktop application
+        timeout-minutes: 3
+        run: node desktop/ci-client-smoke.mjs "${{ matrix.executable }}" artifacts/ci-packaged-smoke "${{ matrix.arch }}"
+      - name: Upload installers and build identity
+        uses: actions/upload-artifact@v6
+        with:
+          name: coop-bench-${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            runtime/coop-bench/build-manifest.json
+      # Never upload the fixture database, generated credentials, or userData.
+      - name: Upload synthetic UI acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: synthetic-ui-${{ matrix.artifact }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            artifacts/ci-client-smoke/client-smoke-result.json
+            artifacts/ci-client-smoke/client-connection-*.png
+            artifacts/ci-client-smoke/client-audit.png
+            artifacts/ci-packaged-smoke/client-smoke-result.json
+            artifacts/ci-packaged-smoke/client-connection-*.png
+            artifacts/ci-packaged-smoke/client-settings-password.png

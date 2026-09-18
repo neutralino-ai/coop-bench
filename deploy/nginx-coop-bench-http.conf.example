@@ -1,0 +1,15 @@
+# Initial HTTP-only virtual host for ACME webroot validation.
+# Replace boardgames.example.com with the approved real hostname.
+# Add as a separate site; preserve every existing nginx virtual host.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name boardgames.example.com;
+    if ($host != boardgames.example.com) { return 421; }
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / { return 404; }
+}

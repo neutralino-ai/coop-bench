@@ -1,0 +1,32 @@
+{
+  "schema": "coop-project-source-lineage/v1",
+  "copiedAt": "2026-09-18",
+  "origin": "Original code from the same user workspace; not publisher rulebook copies.",
+  "entries": [
+    {
+      "source": "../take-time/src/engine.ts",
+      "target": "src/vendor/take-time/engine.ts",
+      "mode": "byte-for-byte copy",
+      "sha256": "a913ddf89552a2cecb4505dbd8282fd880300c00d600deeced99332e462644b8"
+    },
+    {
+      "source": "../take-time/src/types.ts",
+      "target": "src/vendor/take-time/types.ts",
+      "mode": "byte-for-byte copy",
+      "sha256": "0ccd79527e143a8f289964eeb07781af0db3cf7c46ec1e6f265314b685902d82"
+    },
+    {
+      "source": "../ipv6-ddns-desktop/src/env-file.mjs",
+      "target": "scripts/vendor/env-file.mjs",
+      "mode": "byte-for-byte copy",
+      "sha256": "08edf104f2133d4cfcbcc35abafa3d1c9d7dc725fc1546818bac95afdbdf83a6"
+    },
+    {
+      "source": "../ipv6-ddns-desktop/src/dnspod.mjs",
+      "target": "scripts/vendor/tc3.mjs",
+      "mode": "unchanged signer function and its five constants; DNS mutation client omitted",
+      "sourceFileSha256": "868721060d533c60ea341a9cbb535717a25492d1cd2038d96df09443c10b1093",
+      "sha256": "6c1f7874f726bc79927399feeb03bfbdf884a453ca3a26ed51a757f6c5ad4057"
+    }
+  ]
+}

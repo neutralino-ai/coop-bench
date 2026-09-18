@@ -1,0 +1,17 @@
+{
+  "game": "Magic Maze",
+  "edition": "publisher pre-release Print & Play, expected retail February 2017",
+  "scenarioId": "pnp-2017-discovery",
+  "verifiedAt": "2026-09-16",
+  "sourceUrl": "https://ludovox.fr/wp-content/uploads/ressources/MM_Print%26Play.pdf",
+  "sha256": "18b6621c682e3311473c9bc92b7765b109d12a63e0c612f1cff2a28fdebed418",
+  "printedPages": {"rules": [2,3,4,5,6,7], "maps": [8,9], "actionCards": [9,10,11]},
+  "players": [1,2,3,4,5,6,7,8],
+  "mapCount": 9,
+  "walkableCells": 101,
+  "hourglasses": 4,
+  "heroColors": ["red","yellow","green","blue"],
+  "timerDurationMs": 180000,
+  "timerFlip": "remainingMs = 180000 - remainingMs",
+  "rights": "Publisher authorizes trying the paper demo; no open software, artwork redistribution, or ML corpus license is stated."
+}

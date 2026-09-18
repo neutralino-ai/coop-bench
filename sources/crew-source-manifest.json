@@ -1,0 +1,17 @@
+{
+  "verifiedAt": "2026-09-16",
+  "rules": [
+    { "game": "crew-planet-nine", "url": "https://www.thamesandkosmos.com/manuals/full/691868_Crew_Manual.pdf", "pages": 22, "read": "publisher PDF text", "coverage": "standard 3-5 player playing deck, tasks, signals, tricks, distress assistance" },
+    { "game": "crew-deep-sea", "url": "https://www.thamesandkosmos.co.uk/wp-content/uploads/2021/02/691869_Crew_Deep-Sea_Manual.pdf", "pages": 24, "read": "publisher PDF text", "coverage": "standard 3-5 player rules, 40-card deck, signals, tricks, distress assistance" }
+  ],
+  "missions": [
+    { "game": "crew-planet-nine", "url": "https://iello.fr/wp-content/uploads/2020/05/The-Crew_Log-Book.pdf", "file": "crew-planet-nine-logbook-fr.pdf", "pages": 4, "visuallyInspectedPage": 4, "render": "crew-planet-nine-missions.png", "scenarios": ["official-mission-1", "official-mission-2", "official-mission-3"], "coverage": "one task; two tasks; two tasks with order 1 and 2" },
+    { "game": "crew-deep-sea", "url": "https://cms.kosmos.de/Downloads/Die%20Crew/Crew_2_Promo_Cards_DE.pdf", "file": "crew-deep-sea-promo-de.pdf", "pages": 2, "visuallyInspectedPage": 2, "render": "crew-deep-sea-promo.png", "scenarios": ["official-promo-1", "official-promo-1-three-tricks"], "coverage": "trump-1 captain, all-trump redeal, exactly 2 tricks excluding 7/8/9; printed 3-trick follow-up" }
+  ],
+  "excluded": [
+    "Deep Sea main campaign and Promo 2: complete task-card data not available in the verified sources",
+    "Planet Nine Missions 4-50: absent from the verified public logbook excerpt",
+    "2-player virtual crewmate and optional 3-player reduced-deck variants: outside supported ruleset scope"
+  ],
+  "rights": "Publicly accessible publisher evidence; no open-content license or permission to train on the source PDFs is asserted. Runtime uses independent numeric mechanics and no card artwork."
+}
