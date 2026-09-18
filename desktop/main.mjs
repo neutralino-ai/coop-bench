@@ -1,8 +1,9 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, safeStorage, session } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, safeStorage, session, shell } from 'electron';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ConnectionStore, RemoteSession, publicConnectionError } from './remote-session.mjs';
+import { UpdateClient } from './update-client.mjs';
 
 // Remote mode opens no local game server or database; --local retains the standalone edition.
 if (process.argv.includes('--local') || process.argv.includes('--smoke-test')) {
@@ -15,7 +16,7 @@ if (process.argv.includes('--local') || process.argv.includes('--smoke-test')) {
   const dataDir = argument ? resolve(argument) : join(app.getPath('appData'), 'Coop Bench Client');
   if (smoke && !argument) throw new Error('Client smoke test requires an isolated --data-dir.');
   mkdirSync(dataDir, { recursive: true }); app.setPath('userData', dataDir); app.setName('Coop Bench');
-  let window, remote, fixture, copiedText;
+  let window, remote, fixture, copiedText, updater;
   const report = value => writeFileSync(join(dataDir, 'client-smoke-result.json'), JSON.stringify(value, null, 2));
   const trusted = url => { try { const u = new URL(url); return u.protocol === 'coop:' && u.host === 'app' && !u.username && !u.password && ['/', '/index.html'].includes(u.pathname); } catch { return false; } };
   function validateSender(event) {
@@ -32,6 +33,10 @@ if (process.argv.includes('--local') || process.argv.includes('--smoke-test')) {
       const { startClientFixture } = await import('./client-smoke.mjs');
       fixture = await startClientFixture(dataDir);
     }
+    const updateSession = session.fromPartition('coop-updates');
+    updater = new UpdateClient({ currentVersion: app.getVersion(), directory: join(dataDir, 'updates'),
+      fetcher: smoke ? fixture.updateFetch : (url, options) => updateSession.fetch(url, options),
+      opener: smoke ? fixture.openUpdate : path => shell.openPath(path) });
     protocol.handle('coop', request => {
       const url = new URL(request.url), file = assets[url.pathname];
       if (request.method !== 'GET' || url.host !== 'app' || url.username || url.password || url.search || !file) return new Response('Not found', { status: 404 });
@@ -40,6 +45,8 @@ if (process.argv.includes('--local') || process.argv.includes('--smoke-test')) {
     });
     for (const [name, handler] of Object.entries({
       'get-connection': () => remote.restore(),
+      'update-info': () => updater.info(), 'update-check': () => updater.check(),
+      'update-download': () => updater.download(), 'update-install': () => updater.install(),
       connect: input => remote.connect(input), login: input => remote.login(input),
       'set-password': input => remote.setPassword(input), 'get-account': () => remote.getAccount(), disconnect: () => remote.logout(),
       request: input => remote.request(input), 'cancel-request': id => { if (typeof id === 'string') remote.cancel(id); },
@@ -77,7 +84,7 @@ if (process.argv.includes('--local') || process.argv.includes('--smoke-test')) {
   }
   app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => remote?.invalidate());
+  app.on('before-quit', () => { remote?.invalidate(); updater?.stop(); });
   main().catch(async error => {
     if (smoke) report({ ok: false, error: String(error), stack: error.stack,
       ui: window ? await window.webContents.executeJavaScript(`Object.fromEntries(['message','episode-title','model-message-status','model-messages','artifacts'].map(id=>[id,document.getElementById(id)?.textContent?.slice(0,1000)]))`).catch(() => null) : null });

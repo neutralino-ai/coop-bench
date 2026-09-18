@@ -1,6 +1,6 @@
 # Coop Bench · 合作桌游环境
 
-**Windows / macOS 桌面客户端、通用游戏 API、10 款可运行环境、可重放训练轨迹。** 0.5.0 新增设置面板、账户密码登录与密码设置，默认使用本地打包界面连接远程 API，不在电脑上启动游戏服务器；`--local` 保留原单机环境。Electron 复用同一套界面，Windows、macOS Intel / Apple Silicon 的原生 CI 与打包后应用验收均已通过；安装器尚未签名公证。[远程客户端设计与使用](docs/desktop-client.md)。从已选定的 13 款中核查规则与组件；Just One、So Clover!、Codenames: Duet 因未取得足够完整的原版组件数据而排除。10 款不等于全部战役和扩展，每款覆盖范围见下表。
+**Windows / macOS 桌面客户端、通用游戏 API、10 款可运行环境、可重放训练轨迹。** 0.7.0 新增 GitHub 检查更新、游戏规则面板、花火提示计数和密码输入诊断，默认使用本地打包界面连接远程 API，不在电脑上启动游戏服务器；`--local` 保留原单机环境。Electron 复用同一套界面，Windows、macOS Intel / Apple Silicon 的原生 CI 与打包后应用验收均已通过；安装器尚未签名公证。[远程客户端设计与使用](docs/desktop-client.md)。从已选定的 13 款中核查规则与组件；Just One、So Clover!、Codenames: Duet 因未取得足够完整的原版组件数据而排除。10 款不等于全部战役和扩展，每款覆盖范围见下表。
 
 仓库：[neutralino-ai/coop-bench](https://github.com/neutralino-ai/coop-bench)。这是可独立克隆的项目，无需相邻的其他源码目录；Windows / macOS 开发步骤见[新电脑开发指南](docs/development.md)。
 
@@ -20,7 +20,7 @@
 
 **当前云端 API：`https://coop.neutrinophysics.cn:34935/api/v1`。** 2026-09-18 已验证个人凭证认证及轨迹读取；0.5.0 源码默认使用此地址。0.4.1 新安装用户需将旧默认地址改为此地址。该端口只提供 API，审计界面在桌面客户端中。[部署与证书状态](docs/cloud-api34935.md)
 
-0.5.0 的默认入口为**用户名 + 密码登录**；尚未设置密码时，先用组织者提供的个人凭证登录，再到右上角「设置」设置密码。设置面板同时管理 API 地址、连接检查、当前账户与「记住登录」。当前云端已部署账户接口，owner 尚未设置密码；没有替用户设置真实密码。其他旧后端仍可使用「个人凭证」登录。[0.5.0 发布与云端验证](docs/release-0.5.0.md)
+0.5.0 的默认入口为**用户名 + 密码登录**；尚未设置密码时，先用组织者提供的个人凭证登录，再到右上角「设置」设置密码。设置面板同时管理 API 地址、连接检查、当前账户与「记住登录」。当前云端已部署账户接口；owner 已在 2026-09-18 自行设置密码，当前状态以账户接口为准。其他旧后端仍可使用「个人凭证」登录。[0.5.0 发布与云端验证](docs/release-0.5.0.md)
 
 顶部状态灯显示灰色未连接、黄色检查中、绿色身份验证成功、红色失败及原因；每 20 秒检查一次，支持手动检查。远程 HTTPS 与本机 loopback HTTP 地址均可配置。主进程持有登录会话；可选系统加密存储会话，不保存账户密码，不记住时仅驻留内存。退出清除当前页面缓存和本机登录状态，并尝试撤销当前服务器会话。[完整说明](docs/desktop-client.md)
 
@@ -28,7 +28,8 @@
 
 现有北京服务器按备案完成后提供 API 的方案继续使用。桌面客户端不会绕过备案拦截；换成 8080 / 8443 也不能替代备案。[腾讯云备案说明](https://cloud.tencent.com/document/api/243/19630)
 
-**Windows 0.6.0**：[本地安装包](release/Coop-Bench-0.6.0-win-x64.exe)。新增三人一屏回放，手牌、可见信息、思考与行动并列；技术信息移入完整记录。294 项自动测试、31 项包内远程检查和 14 项单机检查通过，安装器未签名。[本次更新与验证](docs/release-0.6.0.md)。Mac 安装包及各提交 CI 状态见 [GitHub Actions](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml)；安装包和本地验证 artifacts 不纳入 Git。
+**当前版本 0.7.0**：[Windows / Mac 安装包](https://github.com/neutralino-ai/coop-bench/releases/latest)。旧版首次需手动升级；0.7.0 起在“设置 → 检查更新”下载经 SHA-256 校验的安装器。顶部“游戏规则”直接查看规则与实现范围，花火显示“剩余提示 x/8”。保留三人一屏回放。298 项自动测试、37 项 Windows 包内远程检查和 14 项单机检查通过；系统代码签名 / Mac 公证尚未完成。[本次更新与验证](docs/release-0.7.0.md)。发布由三平台 CI 成功后触发，见 [GitHub Actions](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml)。安装包在 Releases 发布，真实数据和凭证不纳入 Git。
+
 
 历史 0.4.1 为 24 项远程检查、14 项本地检查、251/251 自动测试；0.3.0 为历史单机版本。历史记录不替代当前版本验收。
 
@@ -84,7 +85,7 @@ SQLite 默认保存到当前用户的应用数据目录：Windows `%APPDATA%\Coo
 
 | 文件 | 用途 |
 |---|---|
-| [远程桌面客户端](docs/desktop-client.md) | 0.6.0 一屏回放、设置、账户登录、Agent 分发与跨平台构建边界 |
+| [远程桌面客户端](docs/desktop-client.md) | 0.7.0 更新、规则、提示计数、一屏回放与跨平台构建边界 |
 | [新电脑开发指南](docs/development.md) | 独立克隆、pnpm、Windows / macOS 与 CI |
 | [src/types.ts](src/types.ts) | 已执行的游戏适配器契约 |
 | [src/registry.ts](src/registry.ts) | 10 款注册表，按核实范围创建 |

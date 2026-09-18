@@ -1,4 +1,6 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { UpdateClient } from './update-client.mjs';
+import { publicConnectionError } from './remote-session.mjs';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -183,6 +185,13 @@ async function main() {
       throw new Error('Connection details are available only to this application window.');
     }
   };
+  const updater = new UpdateClient({ currentVersion: app.getVersion(), directory: resolve(customDataDir ?? app.getPath('userData'), 'updates'), opener: path => shell.openPath(path) });
+  app.on('before-quit', () => updater.stop());
+  for (const [name, handler] of Object.entries({ 'update-info': () => updater.info(), 'update-check': () => updater.check(), 'update-download': () => updater.download(), 'update-install': () => updater.install() }))
+    ipcMain.handle(`coop:${name}`, async event => {
+      validateSender(event);
+      try { return await handler(); } catch (error) { return { __coopClientError: publicConnectionError(error) }; }
+    });
   ipcMain.handle('coop:get-connection', event => {
     validateSender(event);
     return { apiUrl: localApp.apiUrl, adminToken: localApp.adminToken, dbPath: localApp.dbPath };

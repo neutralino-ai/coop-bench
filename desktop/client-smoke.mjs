@@ -25,6 +25,10 @@ export async function startClientFixture(dataDir) {
   const observation = await call(`/episodes/${id}/observation`, seat);
   await call(`/episodes/${id}/messages`, seat, { sequence: 1, messageId: 'synthetic-linked-reasoning', kind: 'model-output', observationId: observation.observationId, reasoningAvailability: 'provided', message: {role:'assistant',reasoning_content:'合成布局测试：这是用于检验长文本展示的虚构内容，没有调用真实模型。'.repeat(25)+'原文结束标记', content:'<img src=x onerror="window.__thinkingXss=1">'} });
   await call(`/episodes/${id}/actions`, seat, { observationId: observation.observationId, decisionToken: observation.decisionToken, action: { type: 'play', index: 0 }, decisionSummary: '合成测试动作，不是模型推理。' }, randomUUID());
+  for(const [index,action] of [[1,{type:'hint',target:'p3',kind:'value',value:1}],[2,{type:'discard',index:0}]]){
+    const token=created.seats[index].token,view=await call(`/episodes/${id}/observation`,token);
+    await call(`/episodes/${id}/actions`,token,{observationId:view.observationId,decisionToken:view.decisionToken,action},randomUUID());
+  }
   await call(`/episodes/${id}/truncate`, local.adminToken, { reason: 'synthetic-desktop-client-acceptance' });
   await call(`/episodes/${id}/messages/complete`, seat, { completeness: 'partial', reasoningAvailability: 'not-provided', scope: 'Synthetic UI fixture only', unavailable: ['No real model was invoked.'] });
   const bytes = Buffer.from('合成桌面附件\n{"fixture":true,"modelInvoked":false}\n');
@@ -33,7 +37,13 @@ export async function startClientFixture(dataDir) {
   await call(`/episodes/${id}/artifacts/${artifact.id}/complete`, seat, {});
   await call(`/rollouts/${id}/annotations`, local.adminToken, { kind: 'review', text: '合成 UI 审计 <img src=x onerror="window.__smokeXss=1">' });
   assert.equal((await fetch(local.baseUrl + '/')).status, 404);
-  return { ...local, id, bytes, artifact, call };
+  const updateBytes=Buffer.from('Synthetic updater fixture; never execute.'),updateDigest=createHash('sha256').update(updateBytes).digest('hex');
+  const updateSuffix=process.platform==='darwin'?`mac-${process.arch}.dmg`:'win-x64.exe',updateName=`Coop-Bench-99.0.0-${updateSuffix}`;
+  let updateOpened=false;
+  const updateFetch=async url=>url==='https://api.github.com/repos/neutralino-ai/coop-bench/releases/latest'
+    ? Response.json({tag_name:'v99.0.0',draft:false,prerelease:false,html_url:'https://github.com/neutralino-ai/coop-bench/releases/tag/v99.0.0',assets:[{name:updateName,size:updateBytes.length,digest:`sha256:${updateDigest}`,browser_download_url:`https://github.com/neutralino-ai/coop-bench/releases/download/v99.0.0/${updateName}`}]})
+    : new Response(updateBytes);
+  return { ...local, id, bytes, artifact, call, updateFetch, openUpdate:async path=>{assert.deepEqual(readFileSync(path),updateBytes);updateOpened=true;return '';},updateOpened:()=>updateOpened };
 }
 
 export async function runClientSmoke({ window, fixture, remote, dataDir, getCopied }) {
@@ -102,6 +112,14 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await wait(() => run(() => document.getElementById('model-messages').textContent.includes('合成验收消息')), 'Original message text did not expand.');
   checks.push('original in-game message expands without rewriting');
   await wait(() => run(() => document.getElementById('player-grid').dataset.messages === 'ready'), 'Focused per-seat message reads did not finish.');
+  check(await run(()=>document.getElementById('hint-counter').textContent.includes('剩余提示 8 / 8')&&document.querySelectorAll('#hint-counter .hint-tokens i.available').length===8),'Hanabi shared hint pool displays remaining tokens and maximum');
+  await run(()=>document.getElementById('open-rules').click());
+  check(await run(()=>document.getElementById('rules-dialog').open&&document.getElementById('rules-dialog').textContent.includes('0 枚时不能提示')&&document.getElementById('rules-dialog').textContent.includes('最多 8 枚')),'game rules are directly available with hint costs and recovery limits');
+  await capture('client-game-rules.png');await run(()=>document.getElementById('rules-dialog').close());
+  await run(()=>{const timeline=document.getElementById('timeline');timeline.value=3;timeline.dispatchEvent(new Event('input'));});
+  check(await run(()=>document.getElementById('hint-counter').textContent.includes('剩余提示 7 / 8')),'historical pre-discard view shows the hint consumed by the previous player');
+  await run(()=>{const timeline=document.getElementById('timeline');timeline.value=timeline.max;timeline.dispatchEvent(new Event('input'));});
+  check(await run(()=>document.getElementById('hint-counter').textContent.includes('剩余提示 8 / 8')),'later view restores one shared hint after discard without changing earlier frames');
   await run(() => {document.getElementById('timeline').value=1;document.getElementById('timeline').dispatchEvent(new Event('input'));document.getElementById('message').hidden=true;});
   check(await run(() => document.querySelectorAll('.player-panel').length===3 && document.querySelector('.acting .thinking-excerpt').textContent.includes('合成布局测试') && !window.__thinkingXss),'three synchronized player columns show linked reasoning as safe text');
   const layout=[];
@@ -157,9 +175,19 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   } else checks.push('native secure storage unavailable on this test host; persistence remains disabled');
   await run(() => document.getElementById('settings-open').click());
   await wait(() => run(() => !document.getElementById('password-form').hidden && !document.getElementById('new-password').disabled), 'Password setup did not become available.');
-  const syntheticPassword = 'Synthetic desktop acceptance 9!';
+  await run(()=>document.getElementById('check-update').click());
+  await wait(()=>run(()=>document.getElementById('update-status').textContent.includes('发现新版本')),'Update check UI failed.');
+  await run(()=>document.getElementById('download-update').click());
+  await wait(()=>run(()=>document.getElementById('update-status').textContent.includes('SHA-256 校验通过')),'Update download UI failed.');
+  await capture('client-update-ready.png');await run(()=>document.getElementById('install-update').click());
+  await wait(()=>Promise.resolve(fixture.updateOpened()),'Verified installer was not handed to the synthetic opener.');
+  checks.push('settings checks GitHub-shaped release metadata, downloads exact bytes and opens only verified synthetic installer');
+  const syntheticPassword = '  合作bench Ａa9! password  ';
   await run(password => {
     document.getElementById('new-password').value = password;
+    document.getElementById('new-password').dispatchEvent(new Event('input'));
+    document.getElementById('show-new-password').click();
+    if(document.getElementById('new-password').type!=='text'||!document.getElementById('hint-new-password').textContent.includes('首尾空格'))throw Error('Password input diagnostics failed.');
     document.getElementById('confirm-password').value = password;
     document.getElementById('password-form').requestSubmit();
   }, syntheticPassword);
@@ -170,6 +198,12 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await capture('client-settings-password.png');
   await run(() => { document.getElementById('settings-close').click(); document.getElementById('disconnect').click(); });
   await wait(() => Promise.resolve(!remote.descriptor().connected), 'Session logout did not finish.');
+  await run((password,apiUrl)=>{
+    document.getElementById('password-mode').click();document.getElementById('api-address').value=apiUrl;
+    document.getElementById('login-user-id').value='owner';document.getElementById('login-password').value=password.trim();document.getElementById('login-form').requestSubmit();
+  },syntheticPassword,fixture.apiUrl);
+  await wait(async()=>['expired','failed'].includes((await status()).phase),'Changed password bytes should not log in.');
+  check(red(await status())&&(await status()).reason.includes('账号或密码不匹配'),'wrong password is distinguished from network failure and does not turn connection green');
   await run((password, apiUrl) => {
     document.getElementById('password-mode').click(); document.getElementById('api-address').value = apiUrl;
     document.getElementById('login-user-id').value = 'owner'; document.getElementById('login-password').value = password;

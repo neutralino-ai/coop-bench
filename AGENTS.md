@@ -43,16 +43,24 @@ Take Time 引擎及少量维护辅助代码已内置在 `src/vendor/` 和 `scrip
 
 ## 4. 接手时的已知基线（2026-09-18）
 
-- 私有仓库：<https://github.com/neutralino-ai/coop-bench>；版本 `0.6.0`。
+- 公开仓库：<https://github.com/neutralino-ai/coop-bench>；版本 `0.7.0`。
 - Node.js `24.21.0`，pnpm `11.19.0`。使用 `pnpm-lock.yaml` 和 `pnpm install --frozen-lockfile`，不另建 npm 锁文件。
-- Windows 本机 0.6.0：294 项测试、包内远程 31 项和本地兼容 14 项通过；一屏回放在 1280×800 与 1440×900 验证。详见 [0.6.0 回放更新](docs/release-0.6.0.md)。
+- Windows 本机 0.7.0：298 项测试、包内远程 37 项和本地兼容 14 项通过；一屏回放在 1280×800 与 1440×900 验证。详见 [0.7.0 更新](docs/release-0.7.0.md)。
 - [首次三平台 CI](https://github.com/neutralino-ai/coop-bench/actions/runs/35302731612) 的 Windows x64、Mac Intel、Mac Apple Silicon 均通过，测试代码提交为 `0b9c6eb8d4f7583cfd8dc43adfa670ef8edeb2dc`。CI 包含打包后远程客户端运行；不等同于用户电脑上的安装向导、Gatekeeper 和实际钥匙串验收。
 - 产物在该运行的 Artifacts 中，保留 14 天；过期后重新构建。当前安装器未签名，Mac 未做 Apple 公证。
 - API 默认 `https://coop.neutrinophysics.cn:34935/api/v1`。注意域名拼写；旧文档中的 443 网页链接是历史入口。根路径 `/` 返回 404 属于 API-only 设计，连接检查使用 `/api/v1/health` 和认证后的 `/api/v1/identity`。
 - 升级快照 build：`0286cbc0bbd21bfe0c8e2797f71dba2474c198cc25ec60c36a293d173b285af0`。旧库 17 表逐行哈希一致，保留 3 局、372 条消息、9 个附件。
 - 当时 owner 尚未设置密码；后续可能已改变，接手时通过账户接口核实，不能重置。当前部署细节见 [0.5.0 记录](docs/release-0.5.0.md)。
 
-## 4.1 回放 UI 的用户要求（0.6.0）
+## 4.1 0.7.0 更新
+
+- 用户已授权将仓库改为公开；代码历史已检查，真实凭证、数据、规则书下载和模型轨迹仍不得提交。
+- 设置增加 GitHub Releases 更新：按当前平台 / 架构选安装包，固定仓库，不使用游戏凭证，校验 SHA-256 后由用户打开安装器。`desktop/update-client.mjs` 是主进程实现。三平台 CI 全部通过后，版本 tag 才会发布 Release。
+- 新增顶部“游戏规则”；花火显示全队剩余提示 / 8 及标记，并随选中的历史时点变化。游戏引擎没有变更。
+- 2026-09-18 密码排查：owner 密码已成功保存，之后登录被认证拒绝；绑定和账户状态正常。尚未证明具体输入差异，不能把 UI 输入提醒说成根因已修复，更不能擅自重置密码。
+- 旧版本没有更新按钮，首次需手动安装 0.7.0。详见 [0.7.0 说明](docs/release-0.7.0.md)。
+
+## 4.2 回放 UI 的用户要求（0.6.0 起）
 
 - 默认一屏看到每个玩家的手牌、合法可见信息、决策记录和动作，关键正文保持 15–16px 以上。不要把 ID、哈希、建局表单、整局消息和附件再堆回主屏。
 - `web/replay-model.js` 处理历史数据关联，`web/replay-ui.js` 组织玩家列，`web/replay.css` 控制紧凑布局；现有 `web/app.js` 继续负责认证、原始证据与 API。
@@ -138,6 +146,6 @@ node desktop/ci-smoke.mjs "$MAC_APP" "$MAC_RUN_DIR/packaged-local" "$MAC_ARCH"
 - 按改动做必要验证：游戏改动测合法动作、信息隔离、计分和重放；认证改动测拒绝路径、会话轮换和并发；桌面改动必须验实际打包程序。纯文档改动检查路径与命令，不必重跑整套游戏测试。
 - 原始测试证据留在被忽略的 `artifacts/`；提交一份脱敏的 `docs/` 测试报告，记录 Mac 型号／架构、系统版本、commit、构建标识、命令、通过／失败／跳过、安装与钥匙串实测结果和剩余问题。
 - 区分 CI 自动通过、真实 Mac 手工通过、合成数据测试和真实云只读验证，不把其中一种当成另一种。
-- 只提交与任务相关的变更，保留用户修改。按用户要求同步私有仓库；最终说明修改了什么、测了什么、仍有什么限制。
+- 只提交与任务相关的变更，保留用户修改。按用户要求同步 GitHub 仓库；最终说明修改了什么、测了什么、仍有什么限制。
 
 更多入口：[游戏插件开发](docs/adding-a-game.md)、[运行 API](docs/runtime-api.md)、[Agent 消息](docs/agent-messages.md)、[附件](docs/agent-artifacts.md)、[安全审计](docs/security-audit.md)。

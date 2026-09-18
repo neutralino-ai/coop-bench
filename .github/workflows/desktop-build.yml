@@ -103,3 +103,40 @@ jobs:
             artifacts/ci-packaged-smoke/client-settings-password.png
             artifacts/ci-packaged-smoke/replay-*.png
             artifacts/ci-packaged-smoke/replay-layout.json
+            artifacts/ci-packaged-smoke/client-game-rules.png
+            artifacts/ci-packaged-smoke/client-update-ready.png
+
+  publish:
+    name: Publish verified installers
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: coop-bench-*
+          path: dist
+          merge-multiple: true
+      - name: Verify version and required native installers
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, existsSync, writeFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const version=JSON.parse(readFileSync('package.json')).version;
+          if(process.env.GITHUB_REF_NAME!=='v'+version)throw Error('Tag/package version mismatch');
+          const names=['win-x64.exe','mac-x64.dmg','mac-arm64.dmg'].map(s=>'Coop-Bench-'+version+'-'+s);
+          for(const n of names)if(!existsSync('dist/release/'+n))throw Error('Missing installer: '+n);
+          writeFileSync('dist/release/SHA256SUMS.txt',names.map(n=>createHash('sha256').update(readFileSync('dist/release/'+n)).digest('hex')+'  '+n).join('\n')+'\n');
+          NODE
+      - name: Publish GitHub Release after all three packaged apps pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/release/*.exe dist/release/*.dmg dist/release/*.zip dist/release/SHA256SUMS.txt --verify-tag --title "Coop Bench ${GITHUB_REF_NAME#v}" --notes-file "docs/release-${GITHUB_REF_NAME#v}.md"

@@ -8,7 +8,7 @@
     const close = node('button','icon-button','×'); close.type='button';close.setAttribute('aria-label','关闭');close.onclick=()=>box.close();heading.append(close);
     const content=node('div','drawer-content');box.append(heading,content);document.body.append(box);return {box,content};
   };
-  const library=dialog('library-dialog','选择对局'), create=dialog('create-dialog','创建对局'), evidence=dialog('evidence-dialog','完整记录与技术证据'), full=dialog('decision-dialog','本次决策的原始记录');
+  const library=dialog('library-dialog','选择对局'), create=dialog('create-dialog','创建对局'), evidence=dialog('evidence-dialog','完整记录与技术证据'), full=dialog('decision-dialog','本次决策的原始记录'), rules=dialog('rules-dialog','游戏规则');
   library.content.append(document.querySelector('.library'));
   create.content.append($('create-panel'));
   const detail=$('detail'), timeline=document.querySelector('.replay-panel');
@@ -18,6 +18,7 @@
   addButton('open-library','对局记录',()=>library.box.showModal());
   addButton('open-create','＋ 新对局',()=>{if(!state.token){$('auth-panel').hidden=false;return;}create.box.showModal();});
   addButton('open-evidence','完整记录',()=>evidence.box.showModal());
+  addButton('open-rules','游戏规则',showRules);
   document.querySelector('.top-actions').prepend(toolbar);
   const focus=node('section','focus-replay');focus.id='focus-replay';
   const shared=node('div','shared-board');shared.id='shared-board';
@@ -30,7 +31,8 @@
 
   function clear() {
     epoch++;episode='';seats={};busy=false;document.body.dataset.audit='false';
-    for(const box of [library.box,create.box,evidence.box,full.box])if(box.open)box.close();
+    for(const box of [library.box,create.box,evidence.box,full.box,rules.box])if(box.open)box.close();
+    rules.content.replaceChildren();
     grid.replaceChildren();shared.replaceChildren();chat.replaceChildren();full.content.replaceChildren();more.hidden=true;
   }
   async function load() {
@@ -105,7 +107,12 @@
     shared.append(node('span','shared-label','公共棋盘'));
     if(view.fireworks){
       const fireworks=node('div','firework-row');for(const [c,v] of Object.entries(view.fireworks))fireworks.append(node('span',`firework ${['white','red','blue','yellow','green'].includes(c)?c:''}`,`${R.color(c)} ${v}`));shared.append(fireworks);
-      shared.append(node('strong','',`${Object.values(view.fireworks).reduce((a,b)=>a+Number(b),0)} / 25`),node('span','',`提示 ${view.hints} · 失误 ${view.errors} · 牌库 ${view.deckCount}`));
+      const hints=node('div',`hint-counter${view.hints===0?' exhausted':''}`);hints.id='hint-counter';
+      hints.append(node('strong','',`剩余提示 ${view.hints} / 8`));
+      const tokens=node('span','hint-tokens');tokens.setAttribute('aria-hidden','true');
+      for(let i=0;i<8;i++)tokens.append(node('i',i<view.hints?'available':''));hints.append(tokens);
+      hints.title='提示消耗 1 枚；弃牌或成功打出 5 恢复 1 枚，最多 8 枚。0 枚不能提示，8 枚不能弃牌。';
+      shared.append(node('strong','',`${Object.values(view.fireworks).reduce((a,b)=>a+Number(b),0)} / 25`),hints,node('span','board-counts',`失误 ${view.errors} / 3 · 牌库 ${view.deckCount}`));
     }else if(state.rollout.summary.gameId==='take-time'){
       const slots=node('div','clock-overview');for(let n=1;n<=6;n++){const cards=(view.placements??[]).filter(p=>p.position===n);slots.append(node('span','',`${n}号位：${cards.length?cards.map(c=>c.value??'?').join(' + '):'空'}`));}shared.append(slots,node('span','',phaseNames[view.phase]??view.phase??''));
     }else{
@@ -113,6 +120,37 @@
       for(const k of keys.filter(k=>view[k]!==undefined).slice(0,5))shared.append(node('span','',`${labels[k]??k}：${compact(view[k])}`));
     }
     shared.append(button('展开棋盘',()=>{evidence.box.showModal();document.querySelector('.board-panel').scrollIntoView({block:'start'});}));
+  }
+  function showRules() {
+    rules.content.replaceChildren();
+    const choices=node('select','rules-game-select');choices.id='rules-game-select';choices.setAttribute('aria-label','选择游戏规则');
+    const games=[...state.games];const saved=state.rollout?.metadata;
+    if(saved&&!games.some(g=>g.id===state.rollout.summary.gameId))games.unshift({...saved,id:state.rollout.summary.gameId});
+    if(!games.length){rules.content.append(node('p','','连接服务器后可查看已支持游戏的规则。'));rules.box.showModal();return;}
+    for(const game of games){const option=node('option','',game.name??game.id);option.value=game.id;choices.append(option);}
+    choices.value=state.rollout?.summary.gameId??$('create-game').value??games[0].id;
+    const body=node('div','readable-rules');rules.content.append(choices,body);
+    const render=()=>{
+      const game=choices.value===state.rollout?.summary.gameId&&saved?saved:games.find(g=>g.id===choices.value);if(!game)return;
+      body.replaceChildren(node('h3','',game.name??choices.value));
+      if(choices.value===state.rollout?.summary.gameId)body.append(node('p','muted','当前对局 · '+(state.rollout.summary.scenarioId??'')));
+      const instructions=choices.value==='hanabi'?[
+        '目标：合作将五种颜色各从 1 依次打到 5；各堆顶数字相加为得分，满分 25。',
+        '看得见队友的牌，看不见自己的牌。2–3 人每人 5 张，4–5 人每人 4 张。自己的牌只保留收到的提示信息。',
+        '轮到你时只做一件事：提示、打出一张牌，或弃掉一张牌。出牌 / 弃牌后有牌就补一张。',
+        '提示标记全队共用：开始 8 枚，每次提示消耗 1 枚，0 枚时不能提示。弃牌或成功打出一张 5 恢复 1 枚，最多 8 枚；8 枚时不能弃牌。',
+        '提示只能指定一位队友的一种颜色或一个数字，必须指出全部匹配的牌。本实现采用 2019 法文版，允许没有匹配牌的空提示。禁止额外聊天和重排手牌。',
+        '错误出牌计 1 次失误，累计 3 次立即失败。牌库最后一张被抽走后，每人再行动一次，包括抽最后一张的人；提前完成 25 分则直接结束。'
+      ]:game.rulesSummary??[];
+      const list=node('ol');for(const text of instructions)list.append(node('li','',text));body.append(list);
+      const implementation=game.implementation;
+      if(implementation){const details=node('details','raw-details');details.append(node('summary','','实现范围与未覆盖内容'),structure(implementation));body.append(details);}
+      if(game.scenarios?.length){const details=node('details','raw-details');details.append(node('summary','','可用场景 / 关卡'));for(const scenario of game.scenarios)details.append(node('p','',`${scenario.name}：${scenario.description??''}`));body.append(details);}
+      body.append(node('h3','','规则来源'));
+      for(const source of game.sources??[]){let url;try{url=new URL(source.url);if(url.protocol!=='https:'||url.username||url.password)continue;}catch{continue;}
+        const row=node('p','rule-source',source.title??url.hostname);row.append(button('复制规则链接',()=>void transport.copyText(url.href).then(()=>message('已复制规则链接，可在浏览器查看原文。')).catch(error=>message(error.message,true))));body.append(row);
+      }
+    };choices.onchange=render;render();rules.box.showModal();
   }
   function renderPlayer(p,snap) {
     const actor=snap.frame?.playerId===p.player;

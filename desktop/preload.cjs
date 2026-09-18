@@ -9,6 +9,10 @@ async function invoke(channel, input) {
   return result.value;
 }
 contextBridge.exposeInMainWorld('coopDesktop', Object.freeze({
+  updateInfo: () => invoke('coop:update-info'),
+  checkUpdate: () => invoke('coop:update-check'),
+  downloadUpdate: () => invoke('coop:update-download'),
+  installUpdate: () => invoke('coop:update-install'),
   getConnection: () => invoke('coop:get-connection'),
   connect: input => invoke('coop:connect', input),
   login: input => invoke('coop:login', input),

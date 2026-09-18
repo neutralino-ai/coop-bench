@@ -85,10 +85,10 @@ async function beginLogin(perform,description,safeErrors=false){
 }
 async function connect(token){return beginLogin(options=>transport.connect({...options,token}),'正在连接 API 并验证个人凭证…');}
 async function loginWithPassword(userId,password){return beginLogin(options=>transport.login({...options,userId,password}),'正在连接 API 并验证账号密码…',true);}
-function clearSensitiveFields(){for(const id of ['login-password','admin-token','current-password','new-password','confirm-password'])$(id).value='';}
+function clearSensitiveFields(){for(const id of ['login-password','admin-token','current-password','new-password','confirm-password']){$(id).value='';$(id).type='password';if(id!=='admin-token'){$('show-'+id).textContent='显示密码';$('show-'+id).setAttribute('aria-pressed','false');$('hint-'+id).hidden=true;}}}
 function setLoginMode(mode){state.authMode=mode==='token'?'token':'password';clearSensitiveFields();const password=state.authMode==='password';$('password-login-fields').hidden=!password;$('credential-login-fields').hidden=password;for(const id of ['login-user-id','login-password']){$(id).disabled=!password;$(id).required=password;}$('admin-token').disabled=password;$('admin-token').required=!password;for(const [id,selected]of [['password-mode',password],['credential-mode',!password]]){$(id).className=`auth-mode-button${selected?' selected':''}`;$(id).setAttribute('aria-pressed',String(selected));}}
 function accountErrorText(error){
- const messages={AUTH_REJECTED:'账号或密码不正确，或登录会话已失效。',PERMISSION_DENIED:'当前账号无权执行此操作。',AUTH_CONFLICT:'密码已被其他会话修改，请重新登录后再试。',INVALID_REQUEST:'输入不符合要求。密码须为 12–128 个字符，最多 512 字节。',RATE_LIMITED:'操作过于频繁，请稍后重试。',AUTH_UNAVAILABLE:'此服务器尚未启用账号密码功能，可先使用高级个人凭证登录。',INCOMPATIBLE_API:'此服务器尚未提供所需的账号接口，请联系组织者更新后端。',PROXY_AUTH_REQUIRED:'入口代理要求额外认证，尚未验证账号密码。请联系组织者检查入口配置。',API_UNAVAILABLE:'服务器暂不可用，请稍后检查连接。',INVALID_API_RESPONSE:'没有收到有效账号 API 响应，请检查服务器地址。',DNS_ERROR:'域名解析失败，尚未验证密码。',TLS_ERROR:'HTTPS 证书或握手失败，尚未验证密码。',CONNECTION_REFUSED:'服务器拒绝连接，请检查地址和端口，尚未验证密码。',NETWORK_UNREACHABLE:'无法连接服务器，尚未验证密码。',TIMEOUT:'请求超时，请检查网络后重试。',CANCELLED:'连接已更换，本次操作已取消。'};
+ const messages={AUTH_REJECTED:'服务器已收到请求，但账号或密码不匹配，或会话已失效。请确认账号、服务器地址，并用“显示密码”核对大小写、输入法及首尾空格。',PERMISSION_DENIED:'当前账号无权执行此操作。',AUTH_CONFLICT:'密码已被其他会话修改，请重新登录后再试。',INVALID_REQUEST:'输入不符合要求。密码须为 12–128 个字符，最多 512 字节。',RATE_LIMITED:'操作过于频繁，请稍后重试。',AUTH_UNAVAILABLE:'此服务器尚未启用账号密码功能，可先使用高级个人凭证登录。',INCOMPATIBLE_API:'此服务器尚未提供所需的账号接口，请联系组织者更新后端。',PROXY_AUTH_REQUIRED:'入口代理要求额外认证，尚未验证账号密码。请联系组织者检查入口配置。',API_UNAVAILABLE:'服务器暂不可用，请稍后检查连接。',INVALID_API_RESPONSE:'没有收到有效账号 API 响应，请检查服务器地址。',DNS_ERROR:'域名解析失败，尚未验证密码。',TLS_ERROR:'HTTPS 证书或握手失败，尚未验证密码。',CONNECTION_REFUSED:'服务器拒绝连接，请检查地址和端口，尚未验证密码。',NETWORK_UNREACHABLE:'无法连接服务器，尚未验证密码。',TIMEOUT:'请求超时，请检查网络后重试。',CANCELLED:'连接已更换，本次操作已取消。'};
  if(messages[error?.code])return messages[error.code];if(error?.name==='TimeoutError')return messages.TIMEOUT;if(error?.status===401)return messages.AUTH_REJECTED;if(error?.status===403)return messages.PERMISSION_DENIED;if(error?.status===404)return messages.AUTH_UNAVAILABLE;if(error?.status===409)return messages.AUTH_CONFLICT;if(error?.status===429)return messages.RATE_LIMITED;if(error?.status>=500)return messages.API_UNAVAILABLE;return '账号操作未完成，请检查连接状态后重试。';
 }
 function settingsMessage(text,error=false){$('settings-message').hidden=!text;$('settings-message').className=`notice${error?' error':''}`;setText('settings-message',text);}
@@ -96,14 +96,14 @@ function renderSettingsAccount(){
  const account=state.account,loggedIn=Boolean(state.token&&state.identity);setText('settings-account-identity',loggedIn?`${state.identity.id} · ${state.identity.role}`:'请先登录，再设置或修改密码。');
  $('password-form').hidden=!loggedIn||!account;setText('settings-account-status',!loggedIn?'尚未登录':!account?'待读取':account.passwordConfigured?'已设置密码':'未设置密码');
  setText('settings-account-note',!loggedIn?'首次设置密码：关闭设置，选择“高级：个人凭证”并登录。':!account?'打开设置时会读取此服务器的账号状态。':`${account.authentication==='password-session'?'当前使用密码登录会话':'当前使用个人凭证'}${account.sessionExpiresAt?' · 会话到期 '+date(account.sessionExpiresAt,true):''}。${state.remembered?'此设备已记住当前会话。':'当前会话未记住到本机。'}`);
- const configured=Boolean(account?.passwordConfigured);$('current-password-label').hidden=!configured;$('current-password').hidden=!configured;$('current-password').required=configured;$('current-password').disabled=!configured||state.passwordBusy;for(const id of ['new-password','confirm-password','save-password'])$(id).disabled=state.passwordBusy;setText('save-password',state.passwordBusy?'正在保存…':configured?'修改密码':'设置密码');
+ const configured=Boolean(account?.passwordConfigured);$('current-password-label').hidden=!configured;$('current-password').hidden=!configured;$('show-current-password').hidden=!configured;$('hint-current-password').hidden=true;$('current-password').required=configured;$('current-password').disabled=!configured||state.passwordBusy;for(const id of ['new-password','confirm-password','save-password'])$(id).disabled=state.passwordBusy;setText('save-password',state.passwordBusy?'正在保存…':configured?'修改密码':'设置密码');
 }
 async function loadAccount(){
  if(!state.token||!state.identity){renderSettingsAccount();return;}const session=state.session,serial=++state.accountRequest;setText('settings-account-status','读取中');
  try{const account=await transport.getAccount();if(session!==state.session||serial!==state.accountRequest)return;if(typeof account?.userId!=='string'||typeof account.passwordConfigured!=='boolean')throw Object.assign(Error('Invalid account response'),{code:'INVALID_API_RESPONSE'});state.account=account;renderSettingsAccount();}
  catch(error){if(session!==state.session||serial!==state.accountRequest)return;state.account=null;renderSettingsAccount();setText('settings-account-status','暂不可用');settingsMessage(accountErrorText(error),true);if(error?.status===401&&error?.code!=='PROXY_AUTH_REQUIRED')await markConnectionFailure(error,{status:401,session});else if(['API_UNAVAILABLE','INVALID_API_RESPONSE','DNS_ERROR','TLS_ERROR','CONNECTION_REFUSED','NETWORK_UNREACHABLE','TIMEOUT'].includes(error?.code))await markConnectionFailure(Object.assign(Error(accountErrorText(error)),{code:error.code}),{session,status:error.status??0});}
 }
-function openSettings(){clearSensitiveFields();settingsMessage('');$('settings-api-address').value=apiUrl;$('settings-api-address').readOnly=!transport.desktop;$('settings-remember').checked=$('remember-credential').checked;$('settings-remember-label').hidden=!transport.desktop;$('settings-remember-help').textContent=transport.desktop?'此选项用于下次登录或保存密码时。只保存系统加密的会话凭证，不保存密码。':'浏览器仅在当前页面内存中保存登录会话，不保存密码。';renderSettingsAccount();renderConnectionStatus();if(!$('settings-dialog').open)$('settings-dialog').showModal();void loadAccount();}
+function openSettings(){void refreshUpdateInfo();clearSensitiveFields();settingsMessage('');$('settings-api-address').value=apiUrl;$('settings-api-address').readOnly=!transport.desktop;$('settings-remember').checked=$('remember-credential').checked;$('settings-remember-label').hidden=!transport.desktop;$('settings-remember-help').textContent=transport.desktop?'此选项用于下次登录或保存密码时。只保存系统加密的会话凭证，不保存密码。':'浏览器仅在当前页面内存中保存登录会话，不保存密码。';renderSettingsAccount();renderConnectionStatus();if(!$('settings-dialog').open)$('settings-dialog').showModal();void loadAccount();}
 function clearSettings(){clearSensitiveFields();state.accountRequest++;settingsMessage('');}
 function closeSettings(){clearSettings();if($('settings-dialog').open)$('settings-dialog').close();}
 async function savePassword(event){
@@ -351,3 +351,36 @@ setInterval(async()=>{if(!state.token||state.passwordBusy||!$('auto-refresh').ch
 window.addEventListener('beforeunload',()=>{clearSensitiveFields();stopPlayback();clearArtifacts();clearModelMessages();});
 
 
+
+// Passwords remain exact strings: do not silently trim, lowercase, or normalize.
+for(const id of ['login-password','current-password','new-password','confirm-password']){
+ const field=$(id),toggle=$('show-'+id),hint=$('hint-'+id);
+ toggle.onclick=()=>{const show=field.type==='password';field.type=show?'text':'password';toggle.textContent=show?'隐藏密码':'显示密码';toggle.setAttribute('aria-pressed',String(show));};
+ const warn=event=>{const notes=[];if(event.getModifierState?.('CapsLock'))notes.push('大写锁定已开启');if(field.value&&field.value!==field.value.trim())notes.push('包含首尾空格（它们也是密码的一部分）');if(/[\uFF01-\uFF5E]/u.test(field.value))notes.push('包含全角字符，请确认输入法');hint.textContent=notes.join('；');hint.hidden=!notes.length;};
+ field.addEventListener('input',warn);field.addEventListener('keyup',warn);field.addEventListener('keydown',warn);
+}
+let updateBusy=false,updateState=null,updateEpoch=0;
+function renderUpdate(info){
+ updateState=info;
+ setText('app-version',`v${info.currentVersion} · ${info.platform==='darwin'?'Mac':'Windows'} ${info.arch}`);
+ const phase=info.state,latest=info.latestVersion??'';
+ const messages={idle:'从 GitHub 发布版本检查更新。',checking:'正在访问 GitHub…',latest:`当前已是最新版本（v${info.currentVersion}）。`,available:`发现新版本 v${latest}，可下载当前系统的安装包。`,downloading:`正在下载 v${latest}… ${Math.floor((info.downloaded??0)/1024/1024)} / ${Math.ceil((info.total??0)/1024/1024)} MB`,ready:`v${latest} 已下载，SHA-256 校验通过。`,opening:'正在打开安装程序…',opened:'安装程序已打开，请按系统提示完成安装后重新启动应用。',error:'更新未完成，可重新检查后重试。'};
+ setText('update-status',messages[phase]??'请检查更新');
+ $('check-update').disabled=updateBusy; $('download-update').disabled=updateBusy; $('install-update').disabled=updateBusy;
+ $('download-update').hidden=phase!=='available';$('install-update').hidden=phase!=='ready';
+ $('update-progress').hidden=phase!=='downloading';$('update-progress').max=info.total||1;$('update-progress').value=info.downloaded||0;
+}
+async function refreshUpdateInfo(){
+ if(!transport.updateInfo){$('check-update').disabled=true;setText('update-status','请在桌面客户端中检查更新。');return;}
+ const epoch=updateEpoch;try{const info=await transport.updateInfo();if(epoch===updateEpoch)renderUpdate(info);}catch{if(epoch===updateEpoch)setText('update-status','暂时无法读取应用版本。');}
+}
+async function runUpdate(method){
+ if(updateBusy||!transport[method])return;updateBusy=true;updateEpoch++;
+ if(updateState)renderUpdate({...updateState,state:{checkUpdate:'checking',downloadUpdate:'downloading',installUpdate:'opening'}[method]});
+ const poll=method==='downloadUpdate'?setInterval(()=>void refreshUpdateInfo(),750):null;
+ let error;
+ try{updateState=await transport[method]();}catch(e){error=e;}
+ finally{if(poll!==null)clearInterval(poll);updateBusy=false;updateEpoch++;}
+ if(error){if(updateState)renderUpdate({...updateState,state:'error'});setText('update-status',error.message||'更新失败，请检查网络后重试。');}else renderUpdate(updateState);
+}
+$('check-update').onclick=()=>runUpdate('checkUpdate');$('download-update').onclick=()=>runUpdate('downloadUpdate');$('install-update').onclick=()=>runUpdate('installUpdate');

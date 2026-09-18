@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const asar = require('../node_modules/.pnpm/@electron+asar@3.4.1/node_modules/@electron/asar/lib/asar.js');
 const root = new URL('../', import.meta.url), path = name => fileURLToPath(new URL(name, root));
 const archive = path('release/win-unpacked/resources/app.asar');
-const allowed = new Set(['package.json', ...['main.mjs', 'preload.cjs', 'local-main.mjs', 'local-preload.cjs', 'remote-session.mjs', 'client-smoke.mjs', 'ci-smoke.mjs', 'ci-client-smoke.mjs'].map(name => 'desktop/' + name),
+const allowed = new Set(['package.json', ...['main.mjs', 'preload.cjs', 'local-main.mjs', 'local-preload.cjs', 'remote-session.mjs', 'update-client.mjs', 'client-smoke.mjs', 'ci-smoke.mjs', 'ci-client-smoke.mjs'].map(name => 'desktop/' + name),
   'runtime/coop-bench/src/server.mjs', 'runtime/coop-bench/build-manifest.json', ...['index.html', 'app.js', 'replay-model.js', 'replay-ui.js', 'replay.css', 'transport.js', 'style.css', 'play.html', 'play.js', 'play.css'].map(name => 'runtime/coop-bench/web/' + name)]);
 const entry = name => name.replaceAll('/', sep);
 const files = asar.listPackage(archive).map(name => name.replaceAll('\\', '/').replace(/^\//, '')).filter(name => asar.statFile(archive, entry(name)).size !== undefined).sort();
