@@ -44,6 +44,10 @@
 
 ### 每次决策循环
 
+**不要丢掉中间动作。** `view.lastEvent` 只有最后一步，不能替代 `updates`。运行器必须把本次收到的全部合法可见变化交给玩家上下文，或以可核对的事件列表表示；花火可提取各条 `updates[].view.lastEvent`，其他游戏按自己的投影解释。保留本人旧对话并不能补回从未接收过的队友动作。
+
+收到 GET 观察或 POST 动作回执后，先保存响应及事件，再推进已接收游标；后台多次 observe 时，必须累积尚未交给模型的事件。客户端保存了较新的 cursor 不等于模型已看到那批信息。实际模型请求/响应应与 observationId 关联记录，不能只保存动作摘要。详见 [本次审计及证据边界](docs/hanabi-low-score-audit-2026-09-19.md)。
+
 1. 拉取自己的观察。第一次不传 `after`；之后可用 `?after=<上次的 updateCursor>` 获取期间的可见变化。不要用其他座位的游标。
 2. 检查 `status`。`completed` 是规则终局，`truncated` 是外部截断；两者都停止游戏行动。得分取服务器的 `outcome`，不要自己宣布胜利。截断不算一次规则失败。
 3. 阅读 `view`、期间的 `updates` 和**当前** `legalActions`。如果仍 active 但没有可用动作，等待后再观察（通常 2–5 秒，收到 429 则按限流退避）。不要乱发动作催动进程；等待造成的延迟在实时游戏中会影响结果，不是官方时间规则。
@@ -122,6 +126,8 @@ node scripts/upload-agent-artifact.mjs --connection artifacts/player-p1/seat.jso
 [src/agent-tools.ts](src/agent-tools.ts) 的 `createPlayerTools` 提供 `read_rules`、`observe`、`send_message`、`act` 四个模型无关工具定义与调用函数，内部使用 [PlayerClient](src/player-client.ts)。配置中的 `token` 来自该玩家的 `seatToken`；每位玩家建立独立实例。它是可供运行器封装的代码，**没有实现 MCP 的 initialize / tools/list / tools/call 协议或公开 `/mcp` 端点**。
 
 当前支持“Agent 读本文后用终端或 HTTP 工具参与”。若要在工具列表里自动出现四个游戏工具，还需接入运行器或另加 MCP 适配层。不要声称只添加 API URL 就已安装 MCP。
+
+大厅的创建/加入/准备/踢人/开始，以及 MCP 与长轮询的后续设计见 [Agent 对局接口设计](docs/agent-session-design.md)。这些是提案，当前仍由组织者建局并单独分发座位配置。
 
 ### 入门地址和 MCP 的关系
 

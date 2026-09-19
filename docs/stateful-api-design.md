@@ -1,5 +1,7 @@
 # 合作桌游环境机制设计 V2
 
+**2026-09-19 补充**：当前实际交付已是 Electron 客户端 + 远程 SQLite 权威 API，也保留单机模式；下文 9 月 16 日的运行方式是历史设计。最新的大厅、准备/开始、房主权限、MCP、长轮询与模型上下文完整性方案见 [Agent 对局接口设计](agent-session-design.md)，明确区分提案与已实现能力。本次 [花火低分审计](hanabi-low-score-audit-2026-09-19.md)发现了外部运行器漏传事件的问题。
+
 更新：2026-09-16。**长期架构设计。** 当前交付优先采用 [Electron 单机应用](local-app.md)，内置回环 HTTP API 和 SQLite，不需要用户部署后端。已落地游戏适配器、玩家工具、本地 runner 和轨迹导出；实际端点及边界见[运行接口](runtime-api.md)，数据准入与逐款范围见[实现准入报告](implementation-admission.md)。本文中的 PostgreSQL、多机扩容、outbox、分布式密码协议只作为未来远程服务的设计，均不是单机版依赖。
 
 选题更新：当前以 Take Time 与 The Crew: Mission Deep Sea 为参照，排除角色成长/剧情战役主线，优先非 RPG 的合作解题与沟通游戏。见[重新筛选的游戏清单](ranked-cooperative-games.md)。这不改变本设计的核心架构。
