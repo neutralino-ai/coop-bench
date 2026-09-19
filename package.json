@@ -1,6 +1,6 @@
 {
   "name": "cooperative-boardgame-bench",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "packageManager": "pnpm@11.19.0",
   "private": true,
   "type": "module",
@@ -16,6 +16,10 @@
     "build": "node scripts/build.mjs",
     "desktop": "node scripts/build.mjs && electron .",
     "desktop:local": "node scripts/build.mjs && electron . --local",
+    "desktop:player": "node scripts/build.mjs && electron desktop/player-main.mjs",
+    "agent": "node scripts/player.mjs",
+    "dist:player:win": "node scripts/build.mjs && electron-builder --config build/player-electron-builder.json --win nsis --x64",
+    "dist:player:mac": "node scripts/build.mjs && electron-builder --config build/player-electron-builder.json --mac dmg zip --x64 --arm64",
     "dist:win": "node scripts/build.mjs && electron-builder --config build/electron-builder.json --win nsis --x64",
     "dist:mac": "node scripts/build.mjs && electron-builder --config build/electron-builder.json --mac dmg zip --x64 --arm64",
     "test": "node --test test/*.test.ts experiments/*.test.ts",

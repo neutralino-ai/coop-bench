@@ -19,6 +19,7 @@ export const theGame: GameAdapter<TheGameState> = {
   setup(o) { check([1, 2, 3, 4, 5].includes(o.playerCount) && o.scenarioId === 'base', 'Unsupported setup.'); exactKeys(o.config ?? {}, []); const ids = players(o.playerCount); const handSize = ids.length === 1 ? 8 : ids.length === 2 ? 7 : 6; const deck = shuffle(Array.from({ length: 98 }, (_, i) => i + 2), makeRng(o.seed)); const hands = Object.fromEntries(ids.map(p => [p, deck.splice(0, handSize)])); return { players: ids, current: null, deck, hands, piles: [1, 1, 100, 100], handSize, laidThisTurn: 0, played: 0, done: false, chat: [], lastEvent: null }; },
   observe(s, p) { member(s, p); return clone({ players: s.players, current: s.current, hand: s.hands[p], handCounts: Object.fromEntries(s.players.map(q => [q, s.hands[q].length])), deckCount: s.deck.length, piles: s.piles, laidThisTurn: s.laidThisTurn, minimum: minimum(s), played: s.played, done: s.done, chat: s.chat, lastEvent: s.lastEvent }); },
   activePlayers(s) { return s.done ? [] : [...s.players]; },
+  decisionWindow(s) { return {key:`${s.current}:${s.played-s.laidThisTurn}`,players:s.current?[s.current]:s.players,mode:s.current?'all':'any'}; },
   legalActions(s, p) {
     member(s, p); if (s.done) return [];
     const out = [legal('chat', 'No concrete private card numbers; other discussion is permitted.', { text: { type: 'string', minLength: 1, maxLength: 500 } }, undefined, [{ type: 'chat', text: 'Please leave the first pile for me.' }])];

@@ -57,6 +57,10 @@ export const takeTime: GameAdapter<State> = {
     return observation;
   },
   activePlayers(state) { return engine(state).getPublicState().activePlayerIds; },
+  decisionWindow(state) {
+    const active=this.activePlayers(state), placements=state.actions.filter(a=>a.action.type==='place').length;
+    return {key:placements?`placement:${placements}`:state.actions.filter(a=>a.action.type==='look_hand').length===state.options.playerCount?'placement:0':'deliberation',players:active,mode:'all'};
+  },
   legalActions(state, playerId) {
     const obs = this.observe(state,playerId);
     if (obs.legalActions.includes('look_hand')) return [

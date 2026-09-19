@@ -114,6 +114,7 @@ export const bombBusters: GameAdapter<BombState> = {
   },
   activePlayers(s) { if (s.result) return []; const actor = s.phase === 'detector-response' ? s.pending!.target : s.current; return [actor, ...s.players.filter(id => id !== actor)]; },
   legalActions: actions,
+  decisionWindow(s) { return {key:`${s.phase}:${s.current}:${s.cuts}:${s.mistakes}`,players:[s.phase==='detector-response'?s.pending!.target:s.current],mode:'all'}; },
   step(state, p, a) {
     member(state, p); check(!state.result, 'Mission ended.'); const s = clone(state);
     if (a.type === 'chat') { actionKeys(a, 'chat', ['text']); check(textValue(a.text, 500), 'Invalid message.'); s.chat.push({ playerId: p, text: a.text }); return s; }

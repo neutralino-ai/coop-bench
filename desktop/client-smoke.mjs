@@ -150,11 +150,12 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await run(()=>document.getElementById('open-rules').click());
   check(await run(()=>document.getElementById('rules-dialog').open&&document.getElementById('rules-dialog').textContent.includes('0 枚时不能提示')&&document.getElementById('rules-dialog').textContent.includes('最多 8 枚')),'game rules are directly available with hint costs and recovery limits');
   await capture('client-game-rules.png');await run(()=>document.getElementById('rules-dialog').close());
-  await run(()=>{const timeline=document.getElementById('timeline');timeline.value=3;timeline.dispatchEvent(new Event('input'));});
+  const frames=(await fixture.call(`/rollouts/${fixture.id}`)).frames;
+  await run(index=>{const timeline=document.getElementById('timeline');timeline.value=index;timeline.dispatchEvent(new Event('input'));},frames.findIndex(f=>f.kind==='accepted'&&f.action?.type==='discard'));
   check(await run(()=>document.getElementById('hint-counter').textContent.includes('剩余提示 7 / 8')),'historical pre-discard view shows the hint consumed by the previous player');
   await run(()=>{const timeline=document.getElementById('timeline');timeline.value=timeline.max;timeline.dispatchEvent(new Event('input'));});
   check(await run(()=>document.getElementById('hint-counter').textContent.includes('剩余提示 8 / 8')),'later view restores one shared hint after discard without changing earlier frames');
-  await run(() => {document.getElementById('timeline').value=1;document.getElementById('timeline').dispatchEvent(new Event('input'));document.getElementById('message').hidden=true;});
+  await run(index => {document.getElementById('timeline').value=index;document.getElementById('timeline').dispatchEvent(new Event('input'));document.getElementById('message').hidden=true;},frames.findIndex(f=>f.kind==='accepted'&&f.action?.type==='play'));
   check(await run(() => document.querySelectorAll('.player-panel').length===3 && document.querySelector('.acting .thinking-excerpt').textContent.includes('合成布局测试') && !window.__thinkingXss),'three synchronized player columns show linked reasoning as safe text');
   const layout=[];
   for(const [width,height] of [[1440,900],[1280,800]]){
@@ -205,6 +206,13 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await wait(() => Promise.resolve(getCopied()?.includes('seatToken')), 'Copy seat config failed.');
   const copied = JSON.parse(getCopied()); check(copied.baseUrl === fixture.apiUrl && copied.episodeId !== fixture.id && typeof copied.seatToken === 'string' && copied.gameId==='hanabi' && copied.scenarioId==='base' && copied.playerId==='p1', 'seat config copies current API, episode, game, scenario and own player');
   await fixture.call(`/episodes/${copied.episodeId}/truncate`, fixture.adminToken, { reason: 'synthetic UI-created episode cleanup' });
+  await run(()=>{document.getElementById('open-create').click();document.getElementById('create-room').click();});
+  await wait(()=>run(()=>!document.getElementById('room-panel').hidden&&document.getElementById('room-panel').textContent.includes('复制邀请链接')),'Invitation room did not render.');
+  await run(()=>[...document.getElementById('room-panel').querySelectorAll('button')].find(b=>b.textContent.includes('邀请')).click());
+  await wait(()=>Promise.resolve(getCopied()?.startsWith('coopbench://join#')),'Invitation was not copied.');
+  const invitationParams=new URLSearchParams(new URL(getCopied()).hash.slice(1));
+  const createdRoom=await fixture.call(`/rooms/${invitationParams.get('room')}/admin`);
+  check(createdRoom.status==='waiting'&&createdRoom.episodeId===null&&!('seats' in createdRoom),'operator creates a pre-deal room and copies an invitation without player credentials');
   if (remote.store.encryption.isEncryptionAvailable()) {
     await remote.connect({ apiUrl: fixture.apiUrl, token: fixture.adminToken, remember: true });
     const saved = readFileSync(join(dataDir, 'remote-connection.json'), 'utf8');

@@ -33,6 +33,7 @@ export const hanabi: GameAdapter<HanabiState> = {
       hands: Object.fromEntries(s.players.map(q => [q, s.hands[q].map((x, index) => ({ index, id: x.card.id, possibleColors: x.colors, possibleValues: x.values, ...(q === p ? {} : { color: x.card.color, value: x.card.value }) }))])) });
   },
   activePlayers(s) { return s.done ? [] : [s.current]; },
+  decisionWindow(s) { return {key:s.current,players:[s.current],mode:'all'}; },
   legalActions(s, p) {
     member(s, p); if (s.done || s.current !== p) return [];
     const out: ReturnType<typeof legal>[] = [];

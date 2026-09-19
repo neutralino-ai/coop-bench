@@ -140,6 +140,10 @@ export const skyTeam: GameAdapter<SkyTeamState> = {
     validPlayer(playerId);
     return clone({ gameId: s.gameId, scenarioId: s.scenarioId, phase: s.phase, playerId, role: playerId === 'p1' ? 'pilot' : 'co-pilot', round: s.round, altitude: s.altitude, position: s.position, airportPosition: 6, traffic: s.traffic, axis: s.axis, gear: s.gear, flaps: s.flaps, brakes: s.brakes, coffee: s.coffee, rerollTokens: s.rerollTokens, turn: s.turn, ready: s.ready, myDice: s.dice[playerId], remainingDice: Object.fromEntries(IDS.map(id => [id, s.dice[id].length])), placed: s.placed, spaces: SPACES, aerodynamicMarkers: { blue: 4.5 + s.gear.filter(Boolean).length, orange: 8.5 + s.flaps.filter(Boolean).length }, brakeMarker: [1.5, 2.5, 4.5, 6.5][s.brakes.filter(Boolean).length], myRerollSelectionSubmitted: s.rerollChoices ? s.rerollChoices[playerId] !== null : false, messages: s.messages, events: s.events, outcome: s.result ? { success: s.result.success, score: s.result.score, maxScore: 1, reason: s.result.reason } : null, communication: { canSendMessage: s.phase === 'discussion', restriction: 'Discuss strategic goals only; do not discuss dice, hypothetical values, or coded dice instructions. Silent after rolling.' } });
   },
+  decisionWindow(s) {
+    return {key:`${s.round}:${s.phase}:${s.turn}:${Object.keys(s.placed).length}`,mode:'all',
+      players:s.phase==='discussion'?IDS.filter(id=>!s.ready[id]):s.phase==='reroll'?IDS.filter(id=>s.rerollChoices![id]===null):[s.turn]};
+  },
   activePlayers(s) {
     if (s.phase === 'finished') return [];
     if (s.phase === 'discussion') return IDS.slice();

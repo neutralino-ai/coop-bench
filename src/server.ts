@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { Authority, type AuthorityLimits } from './authority.ts';
+import { RoomStore } from './room-store.ts';
 import { check, exactKeys, RuleError } from './common.ts';
 import { games } from './registry.ts';
 import { defaultDataDir, coordinatorToken, acquireInstance, writePrivateJson } from './local-settings.ts';
@@ -31,6 +32,7 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
   check(adminToken.length>=24,'Coordinator token must be at least 24 characters.','INVALID_CONFIG');
   check(adminToken.length<=256 && /^[A-Za-z0-9._~+\/-]+=*$/.test(adminToken),'Coordinator token must use Bearer-compatible characters (base64 or base64url).','INVALID_CONFIG');
   const access=options.access??new AccessControl(),budget=new RequestBudget(options.ratePolicy);
+  const rooms=new RoomStore(authority),streams=new Map<string,Set<ServerResponse>>();
   const app=createServer({maxHeaderSize:8192,headersTimeout:10000,requestTimeout:15000,connectionsCheckingInterval:1000},async(request,response)=>{
     let principal:AccessPrincipal|undefined,transport:string|undefined,endpoint='unmatched',errorCode:string|undefined;
     response.setHeader('Referrer-Policy','no-referrer');
@@ -96,6 +98,25 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
           check(row,'Unknown episode.','NOT_FOUND');check(row.status!=='active','Auditors can open ended episodes only.','FORBIDDEN');
         }
       };
+      if(path[0]==='rooms') {
+        endpoint='room';const token=bearer(request),id=path[1],op=path[2];
+        if(path.length===1&&method==='GET'){authorize('episode:create');reply(response,200,rooms.list());return;}
+        if(path.length===1&&method==='POST'){const who=authorize('episode:create');reply(response,201,rooms.create(who.id,await body(request)));return;}
+        if(path.length===2&&method==='GET'){reply(response,200,rooms.observe(id,token));return;}
+        if(path.length===3&&op==='admin'&&method==='GET'){authorize('episode:create');reply(response,200,rooms.admin(id));return;}
+        if(path.length===3&&method==='POST'){
+          const data=await body(request);
+          if(op==='join'){reply(response,200,rooms.join(id,token,data));return;}
+          if(op==='ready'){reply(response,200,rooms.ready(id,token,data));return;}
+          const admin=op.startsWith('admin-');if(admin)authorize('episode:create');
+          const operation=admin?op.slice(6):op,memberToken=admin?undefined:token;
+          if(operation==='start'){exactKeys(data,[]);reply(response,200,rooms.start(id,memberToken));return;}
+          if(operation==='invite'){exactKeys(data,[]);reply(response,200,rooms.invite(id,memberToken));return;}
+          if(operation==='kick'){exactKeys(data,['playerId']);reply(response,200,rooms.remove(id,data.playerId,memberToken));return;}
+          if(operation==='leave'&&!admin){exactKeys(data,[]);reply(response,200,rooms.remove(id,rooms.observe(id,token).playerId,token,true));return;}
+        }
+        throw new RuleError('NOT_FOUND','Unknown room endpoint.');
+      }
       if(method==='GET'&&url.pathname==='/identity'){
         endpoint='identity';const who=authorize('rollout:read');reply(response,200,{id:who.id,role:who.role,transport,retention:authority.retention()});return;
       }
@@ -163,10 +184,40 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
       }
       if(method==='POST' && url.pathname==='/episodes'){
         endpoint='episode:create';authorize('episode:create');budget.credential(bearer(request),true);const data=await body(request);exactKeys(data,['gameId','playerCount','scenarioId','config']);
-        reply(response,201,authority.create(data.gameId,{playerCount:data.playerCount,scenarioId:data.scenarioId,...(Object.hasOwn(data,'config')?{config:data.config}:{})}));return;
+        const created=authority.atomic(()=>{const c=authority.create(data.gameId,{playerCount:data.playerCount,scenarioId:data.scenarioId,...(Object.hasOwn(data,'config')?{config:data.config}:{})});
+          if(authority.adapters.get(data.gameId)?.decisionWindow)authority.enableSessionBudget(c.episodeId);return c;});
+        reply(response,201,created);return;
       }
       if(path[0]==='episodes' && path.length===3){
         const id=path[1],operation=path[2];
+        if(method==='GET'&&operation==='events'){
+          endpoint='seat:events';const token=bearer(request);
+          for(const key of url.searchParams.keys())check(key==='after'&&url.searchParams.getAll(key).length===1,'Invalid event cursor.','INVALID_REQUEST');
+          let cursor=Number(url.searchParams.get('after')??request.headers['last-event-id']??0);
+          const first=authority.observe(id,token,cursor),key=`${id}:${first.playerId}`,connections=streams.get(key)??new Set<ServerResponse>();
+          check(connections.size<2,'At most two streams per seat.','RESOURCE_LIMIT');
+          connections.add(response);streams.set(key,connections);
+          response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store','X-Accel-Buffering':'no'});
+          response.socket?.setTimeout(0);response.flushHeaders();
+          let blockedAt=0;
+          response.on('drain',()=>{blockedAt=0;});
+          const send=(obs:typeof first)=>{
+            cursor=obs.updateCursor??cursor;
+            const ok=response.write(`id: ${cursor}\nevent: observation\ndata: ${JSON.stringify({observation:obs,serverTime:authority.clock()})}\n\n`);
+            if(!ok)blockedAt=authority.clock();
+            if(obs.status!=='active')response.end();
+          };
+          let pulses=0;
+          const timer=setInterval(()=>{
+            try{
+              if(blockedAt){if(authority.clock()-blockedAt>5000)response.destroy();return;}
+              if(authority.seatCursor(id,token)>cursor)send(authority.observe(id,token,cursor));
+              else if(++pulses%20===0&&!response.write(`: heartbeat ${authority.clock()}\n\n`))response.destroy();
+            }catch{response.destroy();}
+          },250);timer.unref();
+          response.once('close',()=>{clearInterval(timer);connections.delete(response);if(!connections.size)streams.delete(key);});
+          send(first);return;
+        }
         if(method==='GET' && operation==='observation'){endpoint='seat:observe';reply(response,200,authority.observe(id,bearer(request),Number(url.searchParams.get('after')??0)));return;}
         if(method==='POST' && operation==='actions'){
           endpoint='seat:act';const data=await body(request), key=request.headers['idempotency-key'];
@@ -195,6 +246,10 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
     }
   });
   app.maxConnections=64;app.maxRequestsPerSocket=100;app.keepAliveTimeout=5000;app.setTimeout(10000,socket=>socket.destroy());
+  const watchdog=setInterval(()=>{
+    try{authority.advanceSessions();}catch{options.audit?.({at:new Date().toISOString(),method:'OTHER',endpoint:'session-watchdog',status:500,code:'WATCHDOG_FAILED'});}
+  },1000);watchdog.unref();
+  app.once('close',()=>{clearInterval(watchdog);for(const group of streams.values())for(const response of group)response.destroy();streams.clear();});
   return app;
 }
 

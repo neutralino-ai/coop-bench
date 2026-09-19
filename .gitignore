@@ -4,6 +4,11 @@ node_modules/
 .pnpm-store/
 runtime/
 release/
+release-player/
+player-data/
+membership.json
+*.encrypted
+messages.jsonl
 dist/
 data/
 artifacts/

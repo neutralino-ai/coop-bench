@@ -163,6 +163,7 @@ export const magicMaze: GameAdapter<MagicMazeState> = {
   },
   decisionContext(s, playerId) { const observation = this.observe(s, playerId); delete observation.remainingMs; delete observation.elapsedMs; return observation; },
   activePlayers: s => s.phase === 'finished' ? [] : [...s.players],
+  decisionWindow(s) { return s.phase==='briefing'?{key:'briefing',players:s.players.filter(p=>!s.ready[p]),mode:'all'}:null; },
   legalActions(s, playerId) {
     validatePlayer(s, playerId); if (s.phase === 'finished') return [];
     const result: LegalAction[] = [];

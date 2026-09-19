@@ -67,4 +67,8 @@ export interface GameAdapter<State = any> {
   /** Stable decision identity for real-time games: may omit the ticking clock,
    * but must retain board, permissions and outcome-affecting phase changes. */
   decisionContext?(state: State, playerId: PlayerId): unknown;
+  /** Benchmark budget, not an official rule. Only a new required decision
+   * changes key; talking/optional signals must not renew it. null delegates
+   * this phase to the official real-time clock. */
+  decisionWindow?(state: State): {key:string; players:string[]; mode:'all'|'any'} | null;
 }

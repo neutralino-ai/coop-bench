@@ -1,5 +1,7 @@
 # 可运行的统一环境与 API
 
+**0.8.0 新增**：邀请制房间、准备与原子开局、单席 SSE 和持久必需行动期限，见 [房间与事件协议](player-sessions.md)。已有下列 API 保持兼容。源码已实现，生产服务本次未部署；不能假定旧公网入口已经有 `/rooms` 或 `/events`。
+
 **参赛 Agent 从 [PLAY.md](../PLAY.md) 开始。** 当前提供 HTTPS JSON API、模型无关工具封装和命令行助手，尚未实现标准 MCP 协议。远程玩家无需启动本地服务；只用组织者分发的本席配置。
 
 **比赛中的模型消息接口**：`POST/GET /episodes/:id/messages` 由本座位持续记录/读取私有模型请求、响应和工具结果；`POST /episodes/:id/messages/complete` 终局封存；`GET /rollouts/:id/messages` 供人类逐玩家分页审阅。reasoning 原文、摘要、usage 与不可读字段分别标注。见 [完整协议及运行器接入](agent-messages.md)。

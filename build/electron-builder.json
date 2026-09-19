@@ -9,6 +9,7 @@
     "desktop/*.mjs",
     "desktop/*.cjs",
     "runtime/coop-bench/src/server.mjs",
+    "runtime/coop-bench/client/player.mjs",
     "runtime/coop-bench/web/**/*",
     "runtime/coop-bench/build-manifest.json",
     "package.json",
@@ -20,7 +21,7 @@
   ],
   "extraMetadata": {
     "name": "cooperative-boardgame-bench",
-    "version": "0.7.2",
+    "version": "0.8.0",
     "main": "desktop/main.mjs"
   },
   "artifactName": "Coop-Bench-${version}-${os}-${arch}.${ext}",

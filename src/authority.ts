@@ -43,6 +43,7 @@ export interface Envelope {
   status: 'active'|'completed'|'truncated';
   view: JsonObject; legalActions: ReturnType<GameAdapter['legalActions']>;
   outcome: Omit<Outcome,'details'>|null;
+  control?: {windowId:string|null;deadlineAt:number|null;episodeDeadlineAt:number;required:boolean;mode:'all'|'any'|'official-clock';endReason:string|null};
   /** Per-seat sequence only. Pull again with this cursor; no global event index. */
   updateCursor?: number;
   updates?: {seq:number;preparedAt:string;view:JsonObject;status:Envelope['status']}[];
@@ -77,6 +78,7 @@ export class Authority {
   readonly artifacts: ArtifactStore;
   readonly messages: MessageStore;
   readonly limits:Readonly<AuthorityLimits>;
+  private transactionDepth=0;
   constructor(path:string, adapters:GameAdapter[], build=sourceBuild(), clock:()=>number=Date.now, limits:Partial<AuthorityLimits>={}) {
     this.limits=Object.freeze({...DEFAULT_AUTHORITY_LIMITS,...limits});
     for(const value of Object.values(this.limits))check(Number.isSafeInteger(value)&&value>0,'Resource limits must be positive safe integers.','INVALID_CONFIG');
@@ -93,6 +95,7 @@ export class Authority {
       CREATE TABLE IF NOT EXISTS observation_cache(episode_id TEXT NOT NULL,player_id TEXT NOT NULL,fingerprint TEXT NOT NULL,observation_id TEXT NOT NULL REFERENCES observations(id),PRIMARY KEY(episode_id,player_id,fingerprint));
       CREATE TABLE IF NOT EXISTS commands(episode_id TEXT NOT NULL,player_id TEXT NOT NULL,request_id TEXT NOT NULL,request_hash TEXT NOT NULL,http_status INTEGER NOT NULL,response TEXT NOT NULL,PRIMARY KEY(episode_id,player_id,request_id));
       CREATE TABLE IF NOT EXISTS events(episode_id TEXT NOT NULL,seq INTEGER NOT NULL,received_at TEXT NOT NULL,player_id TEXT,kind TEXT NOT NULL,payload TEXT NOT NULL,state_hash TEXT NOT NULL,PRIMARY KEY(episode_id,seq));
+      CREATE TABLE IF NOT EXISTS session_budgets(episode_id TEXT PRIMARY KEY REFERENCES episodes(id),episode_deadline INTEGER NOT NULL,window_key TEXT,window_id TEXT,deadline INTEGER,required_players TEXT NOT NULL,mode TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS observations_episode ON observations(episode_id,player_id);`);
     this.rollouts=new RolloutStore(this.db,this.build,this.limits);
     this.installStorageAccounting();
@@ -134,17 +137,21 @@ export class Authority {
   private storageBytes(id:string):number {return Number(this.db.prepare('SELECT bytes FROM episode_storage WHERE episode_id=?').get(id)?.bytes??0);}
   private totalStorageBytes():number {return Number(this.db.prepare('SELECT COALESCE(SUM(bytes),0) AS bytes FROM episode_storage').get()!.bytes);}
   private transaction<T>(fn:()=>T,episodeId?:string,allowTerminalOverflow=false):T {
-    this.db.exec('BEGIN IMMEDIATE');
+    const depth=this.transactionDepth++,savepoint=`nested_${depth}`;
+    this.db.exec(depth?`SAVEPOINT ${savepoint}`:'BEGIN IMMEDIATE');
     try {
       const before=episodeId?this.storageBytes(episodeId):0,totalBefore=this.totalStorageBytes(),result=fn();
       if(episodeId&&!allowTerminalOverflow) {
         check(this.storageBytes(episodeId)<=Math.max(before,this.limits.maxStoredBytesPerEpisode),'Episode storage budget reached; the coordinator can truncate this attempt.','RESOURCE_LIMIT');
         check(this.totalStorageBytes()<=Math.max(totalBefore,this.limits.maxStoredBytesTotal),'Server storage budget reached. Existing history is retained; raise the configured budget to accept new writes.','RESOURCE_LIMIT');
       }
-      this.db.exec('COMMIT'); return result;
+      this.db.exec(depth?`RELEASE ${savepoint}`:'COMMIT'); return result;
     }
-    catch(error){ this.db.exec('ROLLBACK'); throw error; }
+    catch(error){ this.db.exec(depth?`ROLLBACK TO ${savepoint}; RELEASE ${savepoint}`:'ROLLBACK'); throw error; }
+    finally {this.transactionDepth--;}
   }
+  /** Composition boundary for room start: episode + seat binding commit together. */
+  atomic<T>(fn:()=>T):T {return this.transaction(fn);}
   private row(id:string):Row {
     const row=this.historicalRow(id);
     check(row.build===this.build,'Episode engine build differs; migrate or use the pinned build.','BUILD_MISMATCH');
@@ -166,7 +173,10 @@ export class Authority {
     const game=this.adapter(row), state=JSON.parse(row.state), outcome=game.outcome(state);
     const safe=outcome ? {kind:outcome.kind ?? (outcome.success?'win':'loss'),success:outcome.success,score:outcome.score,
       ...(outcome.maxScore!==undefined?{maxScore:outcome.maxScore}:{}),reason:outcome.reason} : null;
+    const budget=this.db.prepare('SELECT * FROM session_budgets WHERE episode_id=?').get(row.id);
     return {episodeId:row.id,playerId,status:row.status,view:game.observe(state,playerId),
+      ...(budget?{control:{windowId:budget.window_id as string|null,deadlineAt:budget.deadline as number|null,episodeDeadlineAt:Number(budget.episode_deadline),
+        required:row.status==='active'&&JSON.parse(budget.required_players as string).includes(playerId),mode:budget.mode as 'all'|'any'|'official-clock',endReason:row.end_reason}}:{}),
       legalActions:row.status==='active'?game.legalActions(state,playerId):[],outcome:safe};
   }
   /** Called inside the event transaction, never from audit reads. A prepared view
@@ -205,19 +215,24 @@ export class Authority {
   /** Lazy materialization of an authoritative wall clock. Even after a restart,
    * elapsed downtime counts. No client can submit its own elapsed duration. */
   private tick(row:Row):void {
-    const game=this.adapter(row); if(!game.advanceTime || row.status!=='active')return;
+    const game=this.adapter(row); if(row.status!=='active')return;
+    if(!game.advanceTime){this.expire(row);return;}
     const clock=this.db.prepare('SELECT last_ms FROM clocks WHERE episode_id=?').get(row.id)!;
-    const current=Math.max(this.clock(),Number(clock.last_ms)), elapsedMs=current-Number(clock.last_ms);
-    check(Number.isSafeInteger(elapsedMs),'Invalid system clock.','INTERNAL');if(elapsedMs===0)return;
+    const budget=this.db.prepare('SELECT * FROM session_budgets WHERE episode_id=?').get(row.id);
+    const cap=budget?Math.min(Number(budget.episode_deadline),budget.deadline===null?Infinity:Number(budget.deadline)):Infinity;
+    const current=Math.max(Math.min(this.clock(),cap),Number(clock.last_ms)), elapsedMs=current-Number(clock.last_ms);
+    check(Number.isSafeInteger(elapsedMs),'Invalid system clock.','INTERNAL');if(elapsedMs===0){this.expire(row);return;}
     const previous=JSON.parse(row.state), state=game.advanceTime(previous,elapsedMs);
     this.db.prepare('UPDATE clocks SET last_ms=? WHERE episode_id=?').run(current,row.id);
-    if(digest(previous)===digest(state))return;
+    if(digest(previous)===digest(state)){this.expire(row);return;}
     row.state=JSON.stringify(state);row.status=game.outcome(state)?'completed':'active';row.revision++;
     this.db.prepare('UPDATE episodes SET state=?,status=?,revision=? WHERE id=?').run(row.state,row.status,row.revision,row.id);
+    this.syncWindow(row);
     this.refreshViews(row);
     const at=now(),payload={elapsedMs},stateHash=digest(state);
     this.db.prepare('INSERT INTO events VALUES(?,?,?,?,?,?,?)').run(row.id,row.revision,at,null,'elapsed',JSON.stringify(payload),stateHash);
     this.recordFrame(row,{at,kind:'elapsed',stateHash,payload});
+    this.expire(row);
   }
   private issue(row:Row,playerId:string,after=0):Envelope {
     const view=this.db.prepare('SELECT decision_token FROM views WHERE episode_id=? AND player_id=?').get(row.id,playerId)!;
@@ -293,6 +308,7 @@ export class Authority {
         check(canonical(state)===canonical(JSON.parse(JSON.stringify(state))),'Non-JSON state.','INTERNAL');
         row.state=JSON.stringify(state); row.status=game.outcome(state)?'completed':'active'; stateHash=digest(state);
         this.db.prepare('UPDATE episodes SET state=?,status=? WHERE id=?').run(row.state,row.status,id);
+        this.syncWindow(row);
         this.refreshViews(row,playerId);
         body={accepted:true,observation:this.issue(row,playerId,JSON.parse(observed.payload as string).updateCursor??0)};
         this.db.exec('RELEASE action_attempt');
@@ -317,20 +333,70 @@ export class Authority {
     },id);
   }
   /** Coordinator budget cancellation is truncation, never an official loss. */
+  enableSessionBudget(id:string):void {
+    this.transaction(()=>{
+      const row=this.row(id);
+      check(this.adapter(row).decisionWindow,'Adapter has no required-window policy.','INVALID_CONFIG');
+      if(this.db.prepare('SELECT 1 FROM session_budgets WHERE episode_id=?').get(id))return;
+      this.db.prepare('INSERT OR IGNORE INTO session_budgets VALUES(?,?,NULL,NULL,NULL,?,?)').run(id,this.clock()+60*60*1000,'[]','official-clock');
+      this.syncWindow(row);this.refreshViews(row);
+      row.revision++;this.db.prepare('UPDATE episodes SET revision=? WHERE id=?').run(row.revision,id);
+      const at=now(),payload={policy:'required-window-v1',decisionMs:60000,episodeMs:3600000,openedAt:this.clock()},stateHash=digest(JSON.parse(row.state));
+      this.db.prepare('INSERT INTO events VALUES(?,?,?,?,?,?,?)').run(id,row.revision,at,null,'session_started',JSON.stringify(payload),stateHash);
+      this.recordFrame(row,{at,kind:'session_started',stateHash,payload});
+    },id);
+  }
+  private syncWindow(row:Row):void {
+    const budget=this.db.prepare('SELECT * FROM session_budgets WHERE episode_id=?').get(row.id);if(!budget)return;
+    const window=row.status==='active'?this.adapter(row).decisionWindow?.(JSON.parse(row.state)):null;
+    if(!window){this.db.prepare("UPDATE session_budgets SET window_key=NULL,window_id=NULL,deadline=NULL,required_players='[]',mode='official-clock' WHERE episode_id=?").run(row.id);return;}
+    check(typeof window.key==='string'&&window.players.every(p=>players(JSON.parse(row.options).playerCount).includes(p)),'Invalid adapter window.','INTERNAL');
+    const fresh=budget.window_key!==window.key;
+    this.db.prepare('UPDATE session_budgets SET window_key=?,window_id=?,deadline=?,required_players=?,mode=? WHERE episode_id=?')
+      .run(window.key,fresh?randomUUID():budget.window_id,fresh?this.clock()+60000:budget.deadline,JSON.stringify(window.players),window.mode,row.id);
+  }
+  private expire(row:Row):boolean {
+    if(row.status!=='active')return false;
+    const budget=this.db.prepare('SELECT * FROM session_budgets WHERE episode_id=?').get(row.id);if(!budget)return false;
+    const decisionDue=budget.deadline!==null&&this.clock()>=Number(budget.deadline);
+    if(!decisionDue&&this.clock()<Number(budget.episode_deadline))return false;
+    this.endAttempt(row,decisionDue&&Number(budget.deadline)<=Number(budget.episode_deadline)?'decision_timeout':'episode_timeout',
+      {windowId:budget.window_id,deadlineAt:budget.deadline,requiredPlayers:JSON.parse(budget.required_players as string)});
+    return true;
+  }
+  private endAttempt(row:Row,reason:string,details:JsonObject={}):void {
+    row.status='truncated';row.revision++;row.end_reason=reason;
+    this.db.prepare('UPDATE episodes SET status=?,revision=?,end_reason=? WHERE id=?').run(row.status,row.revision,reason,row.id);
+    this.refreshViews(row);
+    const at=now(),payload={reason,...details},stateHash=digest(JSON.parse(row.state));
+    this.db.prepare('INSERT INTO events VALUES(?,?,?,?,?,?,?)').run(row.id,row.revision,at,null,'truncated',JSON.stringify(payload),stateHash);
+    this.recordFrame(row,{at,kind:'truncated',stateHash,payload});
+  }
+  /** Independent of requests/SSE. Deadlines survive process restarts. */
+  advanceSessions():void {
+    const rows=this.db.prepare("SELECT e.id FROM episodes e JOIN session_budgets b ON b.episode_id=e.id WHERE e.status='active' AND e.build=?").all(this.build);
+    let failure:unknown;
+    for(const {id} of rows)try{this.transaction(()=>{const row=this.row(id as string);this.tick(row);},id as string,true);}
+    catch(error){
+      if(error instanceof RuleError&&error.code==='RESOURCE_LIMIT')this.transaction(()=>this.endAttempt(this.row(id as string),'resource_limit'),id as string,true);
+      else failure=error;
+    }
+    if(failure)throw failure;
+  }
+  /** Authenticated cheap cursor check; does not create an observation. */
+  seatCursor(id:string,token:string):number {
+    const p=this.seat(id,token);this.row(id);
+    return Number(this.db.prepare('SELECT COALESCE(MAX(seq),0) AS seq FROM visible_updates WHERE episode_id=? AND player_id=?').get(id,p)!.seq);
+  }
   truncate(id:string,reason:string):void {
     check(typeof reason==='string' && reason.length>0 && reason.length<=200,'Truncation needs a short reason.','INVALID_REQUEST');
     this.transaction(()=>{
       const row=this.row(id);
       // A single terminal marker must remain possible after exhausting a budget.
       if(row.revision<this.limits.maxEventsPerEpisode-1)this.tick(row);
-      if(row.status==='completed')return;
+      if(row.status==='completed'||row.status==='truncated')return;
       check(row.status==='active','Episode already ended.','EPISODE_ENDED');
-      row.status='truncated'; row.revision++;
-      this.db.prepare('UPDATE episodes SET status=?,revision=?,end_reason=? WHERE id=?').run(row.status,row.revision,reason,id);
-      this.refreshViews(row);
-      const at=now(),payload={reason},stateHash=digest(JSON.parse(row.state));
-      this.db.prepare('INSERT INTO events VALUES(?,?,?,?,?,?,?)').run(id,row.revision,at,null,'truncated',JSON.stringify(payload),stateHash);
-      this.recordFrame(row,{at,kind:'truncated',stateHash,payload});
+      this.endAttempt(row,reason);
     },id,true);
   }
   /** Privileged, only after the episode ends. Never return this to a player tool. */

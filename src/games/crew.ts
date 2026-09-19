@@ -284,5 +284,8 @@ function observe(state: CrewState, playerId: string) {
   });
 }
 
-export const crewDeepSea: GameAdapter<CrewState> = { metadata: metadata('deep-sea'), setup: options => setup('deep-sea', options), observe, activePlayers, legalActions, step, outcome: state => state.result === null ? null : clone(state.result) };
-export const crewPlanetNine: GameAdapter<CrewState> = { metadata: metadata('planet-nine'), setup: options => setup('planet-nine', options), observe, activePlayers, legalActions, step, outcome: state => state.result === null ? null : clone(state.result) };
+function decisionWindow(s:CrewState):{key:string;players:string[];mode:'all'} {
+  return {key:`${s.phase}:${s.currentPlayer}:${s.trick.length}`,mode:'all',players:s.phase==='distress-decision'?s.players:s.phase==='distress-exchange'?s.players.filter(p=>s.distress.selected[p]===null):[s.currentPlayer]};
+}
+export const crewDeepSea: GameAdapter<CrewState> = { metadata: metadata('deep-sea'), setup: options => setup('deep-sea', options), observe, activePlayers, decisionWindow, legalActions, step, outcome: state => state.result === null ? null : clone(state.result) };
+export const crewPlanetNine: GameAdapter<CrewState> = { metadata: metadata('planet-nine'), setup: options => setup('planet-nine', options), observe, activePlayers, decisionWindow, legalActions, step, outcome: state => state.result === null ? null : clone(state.result) };

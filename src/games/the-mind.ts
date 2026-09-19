@@ -23,6 +23,7 @@ export const theMind: GameAdapter<MindState> = {
   setup(o) { check([2, 3, 4].includes(o.playerCount) && o.scenarioId === 'base', 'Unsupported setup.'); exactKeys(o.config ?? {}, []); const s: MindState = { players: players(o.playerCount), rng: makeRng(o.seed), hands: {}, level: 1, maxLevel: o.playerCount === 2 ? 12 : o.playerCount === 3 ? 10 : 8, lives: o.playerCount, stars: 1, phase: 'focus', ready: [], starVotes: [], played: [], removed: [], completed: 0, lastEvent: null }; deal(s); return s; },
   observe(s, p) { member(s, p); return clone({ players: s.players, hand: s.hands[p], handCounts: Object.fromEntries(s.players.map(q => [q, s.hands[q].length])), level: s.level, maxLevel: s.maxLevel, lives: s.lives, stars: s.stars, phase: s.phase, ready: s.ready, starVotes: s.starVotes, played: s.played, removed: s.removed, completed: s.completed, lastEvent: s.lastEvent }); },
   activePlayers(s) { return s.phase === 'ended' ? [] : [...s.players]; },
+  decisionWindow(s) { return {key:`${s.level}:${s.phase}:${s.played.length}:${s.removed.length}`,players:s.phase==='focus'?s.players.filter(p=>!s.ready.includes(p)):s.players.filter(p=>s.hands[p].length>0),mode:s.phase==='focus'?'all':'any'}; },
   legalActions(s, p) {
     member(s, p); if (s.phase === 'ended') return [];
     const out = s.phase === 'focus' ? (s.ready.includes(p) ? [] : [legal('ready', 'Place your hand down to focus; all ready resumes play.', {}, undefined, [{ type: 'ready' }])]) : [legal('stop', 'Stop and refocus the team.', {}, undefined, [{ type: 'stop' }])];

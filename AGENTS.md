@@ -21,7 +21,7 @@
 - 玩家只能取得规则允许的信息。人工审计权限、全局状态、队友私有消息、座位凭证不能进入玩家输入。
 - 不用跨 Agent 私聊补充规则禁止的交流。讨论是否允许、发生在发牌前还是发牌后、可见哪些牌背信息，均由游戏规则决定，不统一改成“轮流说话”。
 - Take Time 曾出现对官方沟通阶段、牌背太阳/月亮信息和明暗置规则的误解。修改前读 [官方沟通说明](docs/take-time-communication.md) 和 [失败复核](docs/communication-and-failure-audit.md)，不能套用最初的研究变体。
-- 已知缺口：通用发牌前大厅尚未完成，Crew 的相关流程仍需补足；部分游戏的语言语义限制仍需独立审计。完整 SFT 数据筛选和 RL 训练器尚未接入。
+- 0.8.0 已实现通用发牌前邀请房间；它不补造各游戏未核实的官方讨论步骤。Crew 的相关流程仍需补足；部分游戏的语言语义限制仍需独立审计。完整 SFT 数据筛选和 RL 训练器尚未接入。
 - 机械 smoke 的赢局不是 LLM 能力证据，合成 UI 测试不是智能体实局。Hanabi 历史三智能体演示为 23/25；其可见消息已审计，但没有可获得的隐藏 thinking，也不构成操作系统级防作弊证明。
 - 旧 episode 的 build 不能改写。遇到 `BUILD_MISMATCH` 使用对应归档 runtime；不能移除校验来“修复”历史回放。
 
@@ -35,6 +35,7 @@
 | `src/access-control.ts`、`src/human-auth.ts` | 人工角色、密码、短期会话；与玩家座位权限分离 |
 | `src/agent-tools.ts`、`src/player-client.ts`、`scripts/agent-message-recorder.mjs` | Agent 接口和原始消息采集 |
 | `desktop/main.mjs`、`remote-session.mjs`、`preload.cjs` | Electron 主进程、受限网络桥接、系统加密存储 |
+| `src/room-store.ts`、`client/`、`desktop/player-main.mjs` | 邀请房间、本席 SSE/POST 运行器、独立参赛应用 |
 | `web/` | 人工审计 UI、设置、连接状态、密码操作 |
 | `desktop/local-main.mjs`、`src/local-runner.ts` | 可选单机模式及本地策略运行 |
 | `test/`、`experiments/` | 自动验证；实验设计不等于生产实现 |
@@ -55,6 +56,10 @@ Take Time 引擎及少量维护辅助代码已内置在 `src/vendor/` 和 `scrip
 - 当时 owner 尚未设置密码；后续可能已改变，接手时通过账户接口核实，不能重置。当前部署细节见 [0.5.0 记录](docs/release-0.5.0.md)。
 
 ## 4.1 0.7.1 更新
+
+**2026-09-19 / 0.8.0 新增**：当前源码增加邀请房间、原子开局、本席 SSE、服务端 60 秒必需行动窗口、独立 Coop Bench Player、无界面最小模型与 JSONL 外部 Agent 运行器。详见 [会话与客户端说明](docs/player-sessions.md)及 [0.8.0 验收记录](docs/release-0.8.0.md)。本次没有升级腾讯云；下面“尚未实现”是先前设计快照，当前以新说明为准。多 worker、MCP 和长轮询仍未实现。新 UI 在旧生产服务上无法使用房间 API，不要误判成密码错误。
+
+Mac 接手需要同时构建管理端与参赛端，并运行 `desktop/ci-player-smoke.mjs` 验收真正包内的 Player；现有管理端命令和 Keychain/Gatekeeper 实机要求继续适用。不同席位必须使用独立运行器目录，不能读取彼此 SQLite 或 messages.jsonl。
 
 **2026-09-19 接口研究与只读审计**：见 [Agent 对局接口设计](docs/agent-session-design.md)和[花火低分复核](docs/hanabi-low-score-audit-2026-09-19.md)。大厅、MCP、长轮询均为提案，尚未实现。DeepSeek 一局的 23 次请求保留了本人对话，但遗漏 API 的 updates；当前 view 与合法动作逐次一致。另两局缺模型 messages，其中一局标记确定性控制策略，不能统称 LLM 能力失败。PLAY.md 已强调累计尚未送入模型的事件与实际请求记录。
 
