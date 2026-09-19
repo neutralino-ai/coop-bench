@@ -9,7 +9,7 @@
 - 新局固定 60 秒必需行动窗口、60 分钟整局运行预算，后台扫描不依赖任何玩家在线。非法请求、聊天、重连和日志上传不续时。适配器区分轮流、多人准备、团队推进和官方计时阶段；具体政策见 [会话说明](player-sessions.md#固定期限)。
 - **Coop Bench Player** 是独立的 Windows / Mac 参赛应用，有人工和最小模型 API 模式；花火提示池、失误、牌堆、私有提示知识与动作表单可直接查看。其他游戏使用通用字段与合法动作 Schema。
 - 无界面 `scripts/player.mjs` 支持模型 API 或外部 Agent JSONL。模型接口保留实际请求、响应、工具调用/结果及实际返回的 reasoning，认证头不入日志，轨迹先落本地待发队列后上传。外部框架内部 thinking 不能凭空获取，完成声明保守标 partial。
-- Nginx 类比明确为多局共享 worker 的事件驱动设计。当前实现仍是单进程 SQLite；多 worker 的数据库 ownership epoch、租约和故障接管在设计文档中，尚未实现或压测。
+- 当前实现仍是单进程 Node.js + SQLite。后续用户已确认“每局一个独立 worker，负责该局全部玩家”，替代原先的多局共享 worker 提案；见 [设计第 11 节](agent-session-design.md#11-对局处理单元worker-与扩容)。此架构改造尚未实现或压测，不属于本版已交付功能。
 
 ## 验证范围
 

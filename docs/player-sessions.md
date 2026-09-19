@@ -120,4 +120,4 @@ SSE 类型为 `observation`，数据为 `{observation,serverTime}`；`id` 是该
 
 ## 扩容边界
 
-当前仍是一个权威进程与 SQLite，一个同步事务处理一次有界动作，多局共享服务。没有“一局一个 OS worker”，没有实现分布式租约/接管。正式扩容遵循 [对局处理单元与 worker 设计](agent-session-design.md#11-对局处理单元worker-与扩容)：同局串行、跨局分配、持久回执与事件、SSE 独立交付、ownership epoch 防旧 worker 写入。先测 CPU、数据库锁等待及连接数；SQLite WAL 不等于多个并行写入者。
+当前仍是一个权威进程与 SQLite，一个同步事务处理一次有界动作，多局共享服务。**用户确认的目标为每局一个独立 Node 子进程，负责该局全部玩家，尚未实现。** Nginx 反向代理到主进程，由主进程通过 IPC 调度专属 worker，并集中持久化和交付 SSE；本地模式可直接访问 Node 服务。详见 [对局处理单元与 worker 设计](agent-session-design.md#11-对局处理单元worker-与扩容)。改造须保留持久回执、原始截止时间和信息隔离；游戏结束释放进程，审计记录和赛后附件补传继续可用。

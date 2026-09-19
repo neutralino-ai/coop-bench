@@ -61,6 +61,8 @@ Take Time 引擎及少量维护辅助代码已内置在 `src/vendor/` 和 `scrip
 
 Mac 接手需要同时构建管理端与参赛端，并运行 `desktop/ci-player-smoke.mjs` 验收真正包内的 Player；现有管理端命令和 Keychain/Gatekeeper 实机要求继续适用。不同席位必须使用独立运行器目录，不能读取彼此 SQLite 或 messages.jsonl。
 
+**2026-09-19 worker 设计更正**：用户明确选择每局一个独立 Node 子进程，负责该局所有玩家。目标为 Nginx 反向代理 + Node 主进程 + 每局专属 worker；当前代码仍是单进程 `node:http` / `node:sqlite`。见 [设计第 11 节](docs/agent-session-design.md#11-对局处理单元worker-与扩容)，不要再沿用“多局共享 worker”的旧提案，也不要将文档设计说成已实现或已部署。
+
 **2026-09-19 接口研究与只读审计**：见 [Agent 对局接口设计](docs/agent-session-design.md)和[花火低分复核](docs/hanabi-low-score-audit-2026-09-19.md)。大厅、MCP、长轮询均为提案，尚未实现。DeepSeek 一局的 23 次请求保留了本人对话，但遗漏 API 的 updates；当前 view 与合法动作逐次一致。另两局缺模型 messages，其中一局标记确定性控制策略，不能统称 LLM 能力失败。PLAY.md 已强调累计尚未送入模型的事件与实际请求记录。
 
 **后续设计约束**：用户明确要求服务端必需行动窗口强制 **60 秒**。最新提案采用最小邀请制房间、客户端内默认 Agent（用户配置模型 API）、SSE 下行事件 + HTTP POST 动作、长轮询兼容；运行器基础设施与策略配置分开记录。见接口设计第 9–10 节。以上仍未部署，不能把网络 socket timeout 说成已有行动超时。
