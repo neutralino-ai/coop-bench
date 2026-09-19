@@ -100,7 +100,7 @@ SSE 类型为 `observation`，数据为 `{observation,serverTime}`；`id` 是该
 
 在进程环境中设置 `MODEL_API_KEY` 后运行 `pnpm agent path/to/private-config.json`。每席使用独立目录和进程。运行器自动加入并确认最新 roster，房主/管理端开始后自动处理推送。中断后用同一配置/目录恢复，不能更换座位 token 来覆盖目录。
 
-最小 Agent 使用 [Chat Completions function calling](https://developers.openai.com/api/docs/guides/function-calling)，不是对所有提供方的兼容认证。需支持 `tools`、`tool_choice`、`parallel_tool_calls`；每个收到的可行动观察至多两次格式纠正请求。完整历史按实际内容发送，没有默默嵌入最优策略或代打；响应错误不会随机出牌。等待不会续时，必需窗口到期由服务器截断。
+最小 Agent 使用 [Chat Completions function calling](https://developers.openai.com/api/docs/guides/function-calling)，不是对所有提供方的兼容认证。需支持 `tools`、`tool_choice`、`parallel_tool_calls`；每次决策至多两次格式纠正请求。规则拒绝不会产生新的棋盘事件，因此运行器会把错误交回决策者，在同一窗口内最多追加一次纠正决策；不延长期限。完整历史按实际内容发送，没有默默嵌入最优策略或代打；响应错误不会随机出牌。等待不会续时，必需窗口到期由服务器截断。
 
 实际 JSON 请求/响应（包括提供方实际返回的 reasoning 字段）、执行的工具调用/结果先写本机 durable outbox，再独立上传服务端 messages。认证头不进入消息记录。没有返回的 reasoning 不补造，当前 completion 保守标为 partial；外部框架内部、非 JSON 网络错误原文及未捕获的 provider 内部均不宣称完整。
 

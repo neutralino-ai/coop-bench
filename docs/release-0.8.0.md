@@ -17,11 +17,11 @@ Windows x64，Node 24.21.0，Electron 44.4.1。游戏服务 build：`1f19827b58d
 
 | 验证 | 结果 / 证据 |
 |---|---|
-| `node --test test/*.test.ts experiments/*.test.ts` | 311 项通过，0 失败；本机证据 `artifacts/session-test-results.txt` |
+| `node --test test/*.test.ts experiments/*.test.ts` | 312 项通过，0 失败；本机证据 `artifacts/session-test-results.txt` |
 | 新会话测试 | 准备版本、重复开局、空凭证权限拒绝、踢人后撤销邀请、开局失败事务回滚、无玩家连接时超时、重启保持期限、非法动作不续时、过期后的旧回执、SSE 单席隔离 |
-| 运行器端到端测试 | 两席独立运行器 + 本机模拟模型 API 完成花火；模拟服务器提交后丢失响应；没有重复出牌；真实测试请求保留 updates、无 seat token / decisionToken / API key；返回的合成 reasoning 与完成声明均保存 |
-| 管理端实际包内验收 | 42 项通过，包括原登录、规则、提示池、一屏审计、密码、更新、消息/附件及新增邀请房间；`artifacts/admin-packaged-verified/client-smoke-result.json` |
-| 参赛端实际包内验收 | 10 项通过：邀请、准备/房主开始、本席可见性、提示池/期限、规则、人工动作、终局 SSE、轨迹、拒绝 audit IPC；`artifacts/player-packaged-verified/player-smoke-result.json` |
+| 运行器端到端测试 | 两席独立运行器 + 本机模拟模型 API 完成花火；分别模拟成功回执与拒绝回执丢失；没有重复出牌；规则错误交回 Agent 作有界纠正；真实测试请求保留未交付 updates、无 seat token / decisionToken / API key；返回的合成 reasoning 与完成声明均保存 |
+| 管理端实际包内验收 | 42 项通过，包括原登录、规则、提示池、一屏审计、密码、更新、消息/附件及新增邀请房间；`artifacts/admin-packaged-repair/client-smoke-result.json` |
+| 参赛端实际包内验收 | 10 项通过：邀请、准备/房主开始、本席可见性、提示池/期限、规则、人工动作、终局 SSE、轨迹、拒绝 audit IPC；`artifacts/player-packaged-repair/player-smoke-result.json` |
 | Windows 安装器 | 管理端 `release/Coop-Bench-0.8.0-win-x64.exe`；参赛端 `release-player/Coop-Bench-Player-0.8.0-win-x64.exe`。验收运行的是打包后的 EXE，未代用户执行安装向导 |
 | Mac | 构建配置及两客户端的原生 CI 已更新；本次没有本机 Mac/Gatekeeper/Keychain 手工实测。对应提交 CI 结果另行确认，不沿用旧版通过记录 |
 
@@ -30,8 +30,8 @@ Windows x64，Node 24.21.0，Electron 44.4.1。游戏服务 build：`1f19827b58d
 本机交付安装器 SHA-256（CI 重新构建的产物需使用其各自摘要）：
 
 ```text
-046dd18c387ebb72b85cb4407cea43970394b0b89b9234e00f3ad7bc692d4e51  Coop-Bench-0.8.0-win-x64.exe
-7157f50033c996aa482265bffb28b1fcb2aa2818009146e3328a435a7cbdf5f3  Coop-Bench-Player-0.8.0-win-x64.exe
+b259c383ae5dc1563b88bda0668593d71946d4f1235ef7c14e6c2c45c4192469  Coop-Bench-0.8.0-win-x64.exe
+217bfaf6cdfdc98c1a02bf3272e54f41548e2843e93f1c728bb93de706b6e47e  Coop-Bench-Player-0.8.0-win-x64.exe
 ```
 
 ## 限制与后续接入

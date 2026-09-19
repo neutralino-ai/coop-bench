@@ -135,6 +135,7 @@ export class PlayerRuntime extends EventEmitter {
       if(error.status&&error.status<500&&error.status!==429){
         await this.#capture('recordToolResult',error.data,{observationId:pending.command.observationId,requestId:pending.key});this.put('pendingAction',null);
         this.put('lastActionResult',error.data);
+        if([400,409].includes(error.status))this.emit('action-rejected',error);
       }
       throw error;
     }
@@ -170,13 +171,29 @@ export class PlayerRuntime extends EventEmitter {
           const result={accepted:false,error:{code:'STALE_OBSERVATION',message:'Visible state changed before local submission; no command was sent.'}};
           this.put('lastActionResult',result);await this.#capture('recordToolResult',result,{observationId:obs.observationId});
         }
+        // A rule rejection is a tool result, not a reason to wait forever for
+        // a board update which may never happen. Allow one corrective decision
+        // in this required window, without changing its server deadline.
+        if([400,409].includes(error.status)&&!this.get('pendingAction')&&this.observation?.status==='active'){
+          const windowId=obs.control?.windowId??obs.observationId,used=this.get('rejectedWindow');
+          if(used!==windowId){this.put('rejectedWindow',windowId);
+            try{this.#accept(await this.#request(`/episodes/${this.room.episodeId}/observation?after=${this.observation.updateCursor??0}`));lastDecision='';}catch{}
+          }
+        }
         this.emit('agent-warning',error.code??'AGENT_DECISION_FAILED');
       }
       finally{this.#modelBusy=false;if(this.observation?.status==='active')this.#state(this.observation.control?.required?'your-turn':'waiting');else this.#state('ended');
         if(this.observation&&this.observation.observationId!==lastDecision&&!this.#stop.signal.aborted)queueMicrotask(listener);}
     };
     const listener=()=>{if(!this.#modelBusy)this.#decisionTask=wake();};
-    this.on('observation',listener);return ()=>this.off('observation',listener);
+    const retryRejected=async()=>{
+      if(this.#modelBusy||this.#stop.signal.aborted||this.observation?.status!=='active')return;
+      const windowId=this.observation.control?.windowId??this.observation.observationId;
+      if(this.get('rejectedWindow')===windowId)return;this.put('rejectedWindow',windowId);
+      try{this.#accept(await this.#request(`/episodes/${this.room.episodeId}/observation?after=${this.observation.updateCursor??0}`));lastDecision='';listener();}catch{}
+    };
+    this.on('observation',listener);this.on('action-rejected',retryRejected);
+    return ()=>{this.off('observation',listener);this.off('action-rejected',retryRejected);};
   }
   close() {return this.#closing??=(async()=>{this.#stop.abort();clearInterval(this.#retry);await this.#decisionTask?.catch(()=>{});await this.#running?.catch(()=>{});await this.#recorder?.close();this.#db.close();})();}
 }
