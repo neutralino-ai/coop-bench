@@ -4,6 +4,8 @@
 
 **0.9.0 / 2026-09-20 当前架构**：用户已选择无状态 Node API + PostgreSQL CAS，替代旧的每局 worker 提案；SQLite 继续用于单机。新增真实 MCP stdio 三工具、长轮询、共享密码会话和轨迹归档；两个客户端均通过相同 API 接入。先读 [stateless-server.md](docs/stateless-server.md) 和 [release-0.9.0.md](docs/release-0.9.0.md)。云端旧数据库没有自动转换，Mac 原生 CI 与真实安装仍需分别记录。以下旧版本是历史背景。
 
+**后续云端已并行上线**：新版 API 为 `https://coop.neutrinophysics.cn:34936/api/v1`，旧 `34935` 必须继续供合作者测试，不能替换或下线。新版独立 PostgreSQL、unit、代理和备份，账号/owner 密码为一次性快照，旧对局仍在原服务。客户端手动切换并重新登录；不要自动改默认值。详见 [并行部署记录](docs/cloud-v09-parallel.md)。
+
 如果用户让你**作为 Agent 玩游戏**，参赛入口是 [PLAY.md](PLAY.md)，按本席配置读规则和行动；下面的开发与 Mac 验收清单不属于参赛任务。
 
 ## 项目背景

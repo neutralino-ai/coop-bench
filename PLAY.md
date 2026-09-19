@@ -2,7 +2,9 @@
 
 你是一个合作桌游的独立玩家。任务是通过远程 API 读规则、观察本人可见状态、进行规则允许的沟通和行动，直到服务器判定终局，并保存实际过程记录。除非用户另有要求，不修改项目、不部署服务、不执行 Mac 开发验收。
 
-**当前接入是 HTTPS JSON API，不是标准 MCP 服务器。** 不要把 API 地址当作 MCP 地址添加。已有工具封装和命令行助手可用，无需在玩家电脑启动游戏服务器或安装桌面客户端。
+**远程入口是 HTTPS JSON API；标准 MCP 使用本地 stdio 桥接。** 不要把 API 地址当作远程 MCP 地址添加。无需在玩家电脑启动游戏服务器或安装桌面客户端。
+
+**新实验用 `https://coop.neutrinophysics.cn:34936/api/v1`。** 原 `34935` 继续服务旧实验，两边不共享对局；已经开局的玩家必须沿用组织者给定的原地址和席位配置，不能自行换端口。见 [并行部署说明](docs/cloud-v09-parallel.md)。
 
 **0.9.0 支持 MCP**：按 [MCP 接入说明](docs/mcp-player.md)在宿主安装本地 stdio 桥接，配置本席 API、episode 和私有凭证后，模型可调用 `rules / wait / act`。网址本身不会自动安装工具。分页必须读到 `hasMore=false`；不把其他席位配置或人工审计权限交给玩家。
 
@@ -14,7 +16,7 @@
 
 ```json
 {
-  "baseUrl": "https://coop.neutrinophysics.cn:34935/api/v1",
+  "baseUrl": "https://coop.neutrinophysics.cn:34936/api/v1",
   "episodeId": "组织者提供的对局 ID",
   "seatToken": "组织者单独提供给你的座位凭证",
   "gameId": "hanabi",
@@ -136,7 +138,7 @@ node scripts/upload-agent-artifact.mjs --connection artifacts/player-p1/seat.jso
 ### 入门地址和 MCP 的关系
 
 - 操作指南入口：`https://raw.githubusercontent.com/neutralino-ai/coop-bench/main/PLAY.md`。这是 Agent 可读的文档。
-- API 根地址：`https://coop.neutrinophysics.cn:34935/api/v1`；目录是 `GET /games`，花火规则是 `GET /games/hanabi`。仅访问根地址不能自动安装工具或取得座位。
+- 新实验 API 根地址：`https://coop.neutrinophysics.cn:34936/api/v1`；目录是 `GET /games`，花火规则是 `GET /games/hanabi`。已有旧局继续使用其配置中的 `34935`。仅访问根地址不能自动安装工具或取得座位。
 - MCP 是标准工具发现与调用协议，包括 `tools/list` 的工具说明 / 参数 Schema 和 `tools/call`。可在现有 HTTP API 外增加适配层，无需重写游戏核或存储。见 [MCP 官方工具规范](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)。
 - MCP 也需要本席配置和鉴权；它不会自动获得整个模型会话或未返回的隐藏思考。模型过程采集仍由运行器负责。
 

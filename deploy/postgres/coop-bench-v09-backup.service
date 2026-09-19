@@ -1,0 +1,20 @@
+[Unit]
+Description=Full consistent PostgreSQL backup of Coop Bench 0.9
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+ExecStart=/bin/sh /opt/coop-bench-v09/current/deploy/postgres/backup-postgres.sh
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/backups/coop-bench-v09
+Nice=15
+IOSchedulingClass=idle
+CPUQuota=25%
+MemoryMax=512M
+TimeoutStartSec=2h

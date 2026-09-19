@@ -6,6 +6,8 @@
 
 **0.9.0 发布验证**：[原生 CI](https://github.com/neutralino-ai/coop-bench/actions/runs/35456150037) 的 Windows x64、Mac Intel、Mac Apple Silicon 和 PostgreSQL 任务全部通过，六个安装包已发布。每个平台管理端包内 47 项、Player 14 项；Windows 还分别对 SQLite / PostgreSQL 后端验证。Mac ARM 回放截图已检查。真实用户电脑上的 DMG 安装、Gatekeeper 与实际账号钥匙串体验仍需实机记录，不能由 CI 替代。
 
+**2026-09-20 后续并行部署**：用户明确要求原服务继续给合作者测试，禁止直接下线或将旧端口改指新库。新版已部署 `34936 → 127.0.0.1:8789 → PostgreSQL16.15`，新 unit/目录均带 `v09`；原 `34935 → 8788 → SQLite` 原样运行。五个账户和 owner 密码校验记录一次性复制，旧会话/对局不迁移；以后两边独立管理。90 项公网功能、21 项访问边界、13 表备份恢复验证通过。源码打包器为 `scripts/package-postgres-cloud.mjs`，不要拿旧 `package-cloud.mjs` 发布 PostgreSQL。详见 [并行部署记录](docs/cloud-v09-parallel.md)。
+
 **任务若是作为玩家参赛，接下来读 [PLAY.md](PLAY.md)。** 使用本席配置连接远程 API，按规则完成比赛并保存记录；本文的开发、Mac 验收和部署事项不是参赛任务。组织者给每位玩家独立配置，不能共享人工审计权限或其他座位的私有信息。
 
 ## 1. 我们在做什么

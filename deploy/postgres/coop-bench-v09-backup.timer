@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Coop Bench 0.9 PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=coop-bench-v09-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -8,14 +8,14 @@
 
 ```json
 {
-  "apiUrl": "https://coop.neutrinophysics.cn:34935/api/v1",
+  "apiUrl": "https://coop.neutrinophysics.cn:34936/api/v1",
   "episodeId": "替换为已创建的对局 ID",
   "seatTokenEnv": "COOP_SEAT_TOKEN",
   "directory": "/absolute/path/to/private-player-data"
 }
 ```
 
-`directory` 在 Windows 使用 `C:/...`，在 macOS 使用 `/Users/...`。令牌可以由宿主设置 `COOP_SEAT_TOKEN`，也可以写入私有配置的 `seatToken` 字段；不要把真实配置加入 Git。`apiUrl` 也接受管理端导出的 `baseUrl` 字段。这里的云端地址仅是配置示例，不表示云端已经升级到本次协议。
+`directory` 在 Windows 使用 `C:/...`，在 macOS 使用 `/Users/...`。令牌可以由宿主设置 `COOP_SEAT_TOKEN`，也可以写入私有配置的 `seatToken` 字段；不要把真实配置加入 Git。`apiUrl` 也接受管理端导出的 `baseUrl` 字段。**云端 0.9 协议现已部署在 `34936`；原 `34935` 保留给现有测试。** 使用新服务创建的对局和席位配置，两边不共享对局或席位令牌。详见 [并行部署与客户端切换](cloud-v09-parallel.md)。
 
 在支持 MCP 的 Agent 宿主中添加本地 stdio 服务，配置等价于：
 
