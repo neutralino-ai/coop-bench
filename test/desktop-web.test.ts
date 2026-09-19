@@ -67,15 +67,18 @@ test('legacy local desktop auto-connects without returning its coordinator token
 
 class Element{
  id='';value='';textContent='';hidden=false;disabled=false;checked=false;readOnly=false;required=false;open=false;className='';children:any[]=[];dataset:any={};lastChild:any={textContent:''};listeners:any={};isConnected=true;
- append(...items:any[]){this.children.push(...items);}
- replaceChildren(...items:any[]){this.children=items;this.textContent='';}
+ parentNode:Element|null=null;
+ append(...items:any[]){for(const item of items){item.remove?.();this.children.push(item);if(item instanceof Element)item.parentNode=this;}}
+ replaceChildren(...items:any[]){for(const child of [...this.children])child.remove?.();this.children=[];this.append(...items);this.textContent='';}
+ before(...items:any[]){const parent=this.parentNode;if(!parent)return;for(const item of items){if(item===this)continue;item.remove?.();parent.children.splice(parent.children.indexOf(this),0,item);if(item instanceof Element)item.parentNode=parent;}}
  addEventListener(name:string,handler:any){this.listeners[name]=handler;}
- setAttribute(){} focus(){} remove(){} click(){}
+ setAttribute(){} focus(){} remove(){if(this.parentNode){const siblings=this.parentNode.children;const index=siblings.indexOf(this);if(index>=0)siblings.splice(index,1);this.parentNode=null;}} click(){}
  showModal(){this.open=true;}close(){this.open=false;this.listeners.close?.();}
  querySelector(){return new Element();}
 }
 function uiContext(requestImpl:any,settings:any={}){
  const elements=new Map<string,Element>();const get=(id:string)=>{if(!elements.has(id)){const node=new Element();node.id=id;elements.set(id,node);}return elements.get(id)!;};
+ get('create-form').append(get('create-episode'));
  const intervals:any[]=[];const transport={desktop:true,defaultApi:connection.apiUrl,getConnection:()=>new Promise(()=>{}),request:requestImpl,disconnect:async()=>{},copyText:async()=>{},...settings.transport};
  const context=vm.createContext({window:{coopTransport:transport,addEventListener(){}},document:{getElementById:get,createElement:()=>new Element(),querySelector:()=>get('pill'),hidden:false,body:new Element()},location:{origin:'coop://app',protocol:'coop:',hash:''},history:{replaceState(){}},URL,URLSearchParams,AbortController,AbortSignal,Response,DOMException,TextEncoder,crypto:webcrypto,Uint8Array,Blob,setTimeout,clearTimeout,setInterval:(handler:any,ms:number)=>{intervals.push({handler,ms});return intervals.length;},clearInterval(){},console});
  vm.runInContext(appSource,context);vm.runInContext("loadGames=async()=>{};loadList=async()=>{};selectEpisode=async()=>{};",context);if(settings.initialAuth!==false)vm.runInContext("setConnectionStatus('idle');state.token='connected';state.identity={id:'fixture',role:'operator'};state.sessionReady=true;",context);get('create-game').value='hanabi';get('create-scenario').value='base';get('create-players').value='3';return {context,get,intervals,transport};

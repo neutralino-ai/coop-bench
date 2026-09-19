@@ -27,3 +27,15 @@ export async function jsonResponse(response,max=8*1024*1024) {
 export function modelObservation(observation) {
   const {decisionToken, ...safe}=observation;return safe;
 }
+
+/** The head of a snapshot is NOT an acknowledgement of paginated history.
+ * Old servers deliver the whole history and omit nextCursor/hasMore. */
+export function observationPage(packet, after=0) {
+  const observation=packet?.observation??packet;
+  if(!observation||typeof observation.observationId!=='string'||!Array.isArray(observation.updates??[]))throw Error('Invalid observation response.');
+  const hasMore=packet.hasMore??observation.hasMore??false;
+  const nextCursor=packet.nextCursor??observation.nextCursor??(hasMore?undefined:observation.updateCursor??after);
+  if(typeof hasMore!=='boolean'||!Number.isSafeInteger(nextCursor)||nextCursor<0||hasMore&&nextCursor<=after)throw Error('Invalid observation pagination cursor.');
+  if((observation.updates??[]).some(item=>!Number.isSafeInteger(item.seq)||item.seq>nextCursor))throw Error('Observation page cursor omits a delivered update.');
+  return {observation:{...observation,nextCursor,hasMore},nextCursor,hasMore,...(Number.isFinite(packet.serverTime)?{serverTime:packet.serverTime}:{}),timedOut:packet.timedOut??false};
+}

@@ -2,6 +2,7 @@
 (() => {
   const R = globalThis.CoopReplay;
   let epoch = 0, episode = '', seats = {}, busy = false, controller;
+  let recording=null,recordingError='',recordingBusy=false,recordingAt=0,recordingEpisode='';
   let readCredits=4, creditAt=Date.now();
   const dialog = (id, title) => {
     const box = node('dialog', 'audit-dialog'); box.id = id;
@@ -9,7 +10,7 @@
     const close = node('button','icon-button','×'); close.type='button';close.setAttribute('aria-label','关闭');close.onclick=()=>box.close();heading.append(close);
     const content=node('div','drawer-content');box.append(heading,content);document.body.append(box);return {box,content};
   };
-  const library=dialog('library-dialog','选择对局'), create=dialog('create-dialog','创建对局'), evidence=dialog('evidence-dialog','完整记录与技术证据'), full=dialog('decision-dialog','本次决策的原始记录'), rules=dialog('rules-dialog','游戏规则');
+  const library=dialog('library-dialog','选择对局'), create=dialog('create-dialog','创建对局'), evidence=dialog('evidence-dialog','完整记录与技术证据'), full=dialog('decision-dialog','本次决策的原始记录'), rules=dialog('rules-dialog','游戏规则'), recordingDialog=dialog('recording-dialog','本局轨迹收集状态');
   library.content.append(document.querySelector('.library'));
   create.content.append($('create-panel'));
   const detail=$('detail'), timeline=document.querySelector('.replay-panel');
@@ -29,16 +30,19 @@
   focus.append(shared,grid,chat);detail.append(focus,timeline);
   const title=node('strong','focus-step-title');title.id='focus-step-title';timeline.prepend(title);
   const phase=node('span','focus-timing','手牌 / 可见信息：动作前');phase.id='focus-timing';document.querySelector('.episode-header-actions').prepend(phase);
+  const recordingButton=node('button','button subtle recording-summary','轨迹待核对');recordingButton.id='recording-summary';recordingButton.type='button';recordingButton.onclick=()=>{showRecording();void loadRecording(true);};document.querySelector('.episode-header-actions').prepend(recordingButton);
   const more=node('button','button subtle','读取更多消息');more.id='focus-load-more';more.hidden=true;more.onclick=()=>load(true);evidence.content.prepend(more);
 
   function clear() {
     controller?.abort();epoch++;episode='';seats={};busy=false;document.body.dataset.audit='false';
-    for(const box of [library.box,create.box,evidence.box,full.box,rules.box])if(box.open)box.close();
+    recording=null;recordingError='';recordingBusy=false;recordingAt=0;recordingEpisode='';
+    for(const box of [library.box,create.box,evidence.box,full.box,rules.box,recordingDialog.box])if(box.open)box.close();
     rules.content.replaceChildren();
     grid.replaceChildren();shared.replaceChildren();chat.replaceChildren();full.content.replaceChildren();more.hidden=true;
   }
   async function load(all=false) {
     const id=state.rollout?.summary.episodeId;if(!id||!state.token)return;
+    void loadRecording();
     if(episode!==id){epoch++;episode=id;seats={};busy=false;}
     if(busy)return;busy=true;grid.dataset.messages='loading';const serial=epoch,session=state.session;
     controller=new AbortController();const signal=controller.signal;
@@ -126,6 +130,47 @@
       for(const k of keys.filter(k=>view[k]!==undefined).slice(0,5))shared.append(node('span','',`${labels[k]??k}：${compact(view[k])}`));
     }
     shared.append(button('展开棋盘',()=>{openEvidence();document.querySelector('.board-panel').scrollIntoView({block:'start'});}));
+  }
+  // Counts and completion declarations are small metadata. Do not download the
+  // full message streams just to report whether each seat uploaded its trace.
+  async function loadRecording(force=false) {
+    const id=state.rollout?.summary.episodeId;if(!id||!state.token)return;
+    if(recordingEpisode!==id){recordingEpisode=id;recording=null;recordingError='';recordingAt=0;recordingBusy=false;}
+    if(recordingBusy||!force&&Date.now()-recordingAt<15000)return;
+    recordingBusy=true;const session=state.session;renderRecording();
+    try{
+      const data=await request(`/rollouts/${encodeURIComponent(id)}/messages`);
+      if(session!==state.session||state.rollout?.summary.episodeId!==id)return;
+      if(!Array.isArray(data.seats))throw Error('Invalid recording summary');
+      recording=data.seats;recordingError='';recordingAt=Date.now();
+    }catch{if(session===state.session&&state.rollout?.summary.episodeId===id){recordingError='轨迹状态读取失败，点击重试。';recordingAt=Date.now();}}
+    finally{if(session===state.session&&state.rollout?.summary.episodeId===id){recordingBusy=false;renderRecording();}}
+  }
+  function recordingLabel(seat) {
+    if(!seat)return '尚未核对';
+    if(!seat.messageCount)return '暂无模型 / 工具消息';
+    if(!seat.completion)return '已收到消息 · 未封存';
+    return seat.completion.completeness==='complete'?'已封存 · 声明完整':'已封存 · 部分记录';
+  }
+  function renderRecording() {
+    const sealed=recording?.filter(s=>s.completion).length??0,total=state.rollout?.players.length??0;
+    recordingButton.textContent=recordingError?'轨迹状态重试':recording?`轨迹 ${sealed}/${total} 席已封存`:recordingBusy?'核对轨迹…':'轨迹待核对';
+    recordingButton.dataset.state=recordingError?'error':recording?.some(s=>!s.messageCount||!s.completion||s.completion.completeness!=='complete')?'partial':recording?'complete':'loading';
+    recordingButton.title='封存与完整性由运行器声明，不代表全部内部思考可得。点击查看各席位收集范围。';
+    if(recordingDialog.box.open)showRecording();
+  }
+  function showRecording() {
+    const content=recordingDialog.content;content.replaceChildren(node('p','','服务端游戏事件与客户端模型消息分别保存。以下状态描述本局已上传的消息；完整性和推理可用性由运行器声明，不等于已核验全部内部思考。'));
+    if(recordingError)content.append(node('p','notice error',recordingError));
+    if(!recording)content.append(node('p','muted',recordingBusy?'正在读取各席位收集状态…':'尚未读取轨迹状态。'));
+    for(const player of state.rollout?.players??[]){const seat=recording?.find(s=>s.playerId===player),completion=seat?.completion,section=node('section','recording-seat');section.dataset.player=player;
+      section.append(node('h3','',`玩家 ${player.replace(/^p/,'')} · ${recordingLabel(seat)}`),node('p','',`服务器已收到 ${seat?.messageCount??0} 条消息`));
+      if(completion){section.append(node('p','',`采集范围：${completion.scope}`),node('p','',`推理记录：${({'provided':'有返回的原文','summary-only':'仅摘要','not-provided':'未提供','redacted':'已隐藏'})[completion.reasoningAvailability]??'未声明'}`));
+        if(completion.unavailable?.length)section.append(node('p','muted',`未采集：${completion.unavailable.join('；')}`));}
+      content.append(section);
+    }
+    const retry=node('button','button subtle',recordingBusy?'正在刷新…':'刷新收集状态');retry.disabled=recordingBusy;retry.onclick=()=>void loadRecording(true);content.append(retry);
+    if(!recordingDialog.box.open)recordingDialog.box.showModal();
   }
   function showRules() {
     rules.content.replaceChildren();

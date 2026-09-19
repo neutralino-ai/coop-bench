@@ -2,6 +2,8 @@
 
 适用于整个仓库。先读本文，再按任务阅读关联文档。本文是交接背景，不能覆盖用户后续指令；日期快照不是实时服务状态。修改代码后应同步相关说明，避免下一位接手者沿用过时结论。
 
+**2026-09-20 / 0.9.0 最新决定与实现**：用户接受 Fable 主线经审查后的无状态 API + PostgreSQL version-CAS，替代“每局独立进程”提案。新增 `src/postgres-{server,authority,store,rooms,auth}.ts`；用 `pnpm start:server` 启动，SQLite 单机入口仍为 `pnpm start`。真实 MCP stdio 桥接、长轮询、两个 Electron 客户端已接入同一玩家协议。详情见 [新服务说明](docs/stateless-server.md)、[MCP 接入](docs/mcp-player.md)、[本次验收](docs/release-0.9.0.md)。下文旧日期快照不能覆盖这一决定；云端旧 SQLite 数据尚未自动迁移。
+
 **任务若是作为玩家参赛，接下来读 [PLAY.md](PLAY.md)。** 使用本席配置连接远程 API，按规则完成比赛并保存记录；本文的开发、Mac 验收和部署事项不是参赛任务。组织者给每位玩家独立配置，不能共享人工审计权限或其他座位的私有信息。
 
 ## 1. 我们在做什么
@@ -61,7 +63,7 @@ Take Time 引擎及少量维护辅助代码已内置在 `src/vendor/` 和 `scrip
 
 Mac 接手需要同时构建管理端与参赛端，并运行 `desktop/ci-player-smoke.mjs` 验收真正包内的 Player；现有管理端命令和 Keychain/Gatekeeper 实机要求继续适用。不同席位必须使用独立运行器目录，不能读取彼此 SQLite 或 messages.jsonl。
 
-**2026-09-19 worker 设计更正**：用户明确选择每局一个独立 Node 子进程，负责该局所有玩家。目标为 Nginx 反向代理 + Node 主进程 + 每局专属 worker；当前代码仍是单进程 `node:http` / `node:sqlite`。见 [设计第 11 节](docs/agent-session-design.md#11-对局处理单元worker-与扩容)，不要再沿用“多局共享 worker”的旧提案，也不要将文档设计说成已实现或已部署。
+**历史决定，已被 0.9.0 替代**：9 月 19 日曾选择每局独立 Node 子进程，当时仅修改设计文档。9 月 20 日用户接受无状态 API + PostgreSQL CAS；不再为每局分配常驻进程。见 [设计第 11 节](docs/agent-session-design.md#11-对局处理单元worker-与扩容)。
 
 **2026-09-19 接口研究与只读审计**：见 [Agent 对局接口设计](docs/agent-session-design.md)和[花火低分复核](docs/hanabi-low-score-audit-2026-09-19.md)。大厅、MCP、长轮询均为提案，尚未实现。DeepSeek 一局的 23 次请求保留了本人对话，但遗漏 API 的 updates；当前 view 与合法动作逐次一致。另两局缺模型 messages，其中一局标记确定性控制策略，不能统称 LLM 能力失败。PLAY.md 已强调累计尚未送入模型的事件与实际请求记录。
 

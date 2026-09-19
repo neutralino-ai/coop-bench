@@ -7,6 +7,8 @@ assert.ok(executableArgument && dataArgument, 'Usage: node desktop/ci-client-smo
 const executable = resolve(executableArgument), dataDir = resolve(dataArgument); mkdirSync(dataDir, { recursive: true });
 const development = process.argv.includes('--development');
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.NODE_OPTIONS;
+const pgFixture=env.COOP_TEST_DATABASE_URL?await (await import('./pg-smoke-fixture.mjs')).startPostgresSmoke(env.COOP_TEST_DATABASE_URL):null;
+delete env.COOP_TEST_DATABASE_URL;if(pgFixture)Object.assign(env,pgFixture.env);
 const child = spawn(executable, [...(development ? [resolve('.')] : []), '--client-smoke-test', `--data-dir=${dataDir}`], { env, windowsHide: true, stdio: 'inherit', shell: false });
 const timeout = setTimeout(() => child.kill(), 90000);
 try {
@@ -15,4 +17,4 @@ try {
   assert.equal(code, 0, `Client exit=${code}, signal=${signal}: ${JSON.stringify(report)}`);
   assert.equal(report.ok, true); assert.equal(report.packaged, !development); assert.equal(report.arch, expectedArch); assert.equal(report.games, 10);
   console.log(JSON.stringify(report, null, 2));
-} finally { clearTimeout(timeout); }
+} finally { clearTimeout(timeout); await pgFixture?.close(); }

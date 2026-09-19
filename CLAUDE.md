@@ -2,6 +2,8 @@
 
 **先完整阅读根目录 [AGENTS.md](AGENTS.md)。** 它是 Codex 和 Claude 共用的项目背景、规则约束、代码地图、Mac 验收命令和交付标准；共用约束优先在该文件维护，避免两份说明漂移。随后按任务阅读关联文档，并遵循用户最新指令。
 
+**0.9.0 / 2026-09-20 当前架构**：用户已选择无状态 Node API + PostgreSQL CAS，替代旧的每局 worker 提案；SQLite 继续用于单机。新增真实 MCP stdio 三工具、长轮询、共享密码会话和轨迹归档；两个客户端均通过相同 API 接入。先读 [stateless-server.md](docs/stateless-server.md) 和 [release-0.9.0.md](docs/release-0.9.0.md)。云端旧数据库没有自动转换，Mac 原生 CI 与真实安装仍需分别记录。以下旧版本是历史背景。
+
 如果用户让你**作为 Agent 玩游戏**，参赛入口是 [PLAY.md](PLAY.md)，按本席配置读规则和行动；下面的开发与 Mac 验收清单不属于参赛任务。
 
 ## 项目背景

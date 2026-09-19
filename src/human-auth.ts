@@ -6,7 +6,7 @@ import { AccessControl, tokenHash, type AccessPermission, type AccessPrincipal, 
 import { check, object, RuleError } from './common.ts';
 
 // Versioned, fixed cost. Stored values are validated before allocating memory.
-const KDF=Object.freeze({version:1,N:65536,r:8,p:2,keyLength:64,maxmem:128*1024*1024});
+export const KDF=Object.freeze({version:1,N:65536,r:8,p:2,keyLength:64,maxmem:128*1024*1024});
 export const HUMAN_SESSION_SECONDS=7*24*60*60;
 export const HUMAN_PASSWORD_POLICY=Object.freeze({minLength:12,maxLength:128,maxBytes:512});
 export interface HumanAuthOptions {
@@ -20,7 +20,7 @@ export interface HumanLogin {token:string;expiresAt:string;identity:{id:string;r
 const denied=()=>new RuleError('UNAUTHORIZED','Login or authentication failed.');
 const unavailable=()=>new RuleError('FORBIDDEN','Password authentication is unavailable.');
 function inputValid(condition:unknown):asserts condition {check(condition,'Invalid authentication request.','INVALID_REQUEST');}
-function passwordShape(value:unknown,newPassword=false):value is string {
+export function passwordShape(value:unknown,newPassword=false):value is string {
   if(typeof value!=='string'||!value.isWellFormed()||value.length>256||Buffer.byteLength(value)>HUMAN_PASSWORD_POLICY.maxBytes)return false;
   const length=Array.from(value).length;
   return length>=(newPassword?HUMAN_PASSWORD_POLICY.minLength:1)&&length<=HUMAN_PASSWORD_POLICY.maxLength&&(!newPassword||value.trim().length>0);
@@ -28,7 +28,7 @@ function passwordShape(value:unknown,newPassword=false):value is string {
 function same(left:string,right:string):boolean {const a=Buffer.from(left),b=Buffer.from(right);return a.length===b.length&&timingSafeEqual(a,b);}
 
 /** At most two 64 MiB KDF jobs and four queued passwords; no unbounded work list. */
-class KdfQueue {
+export class KdfQueue {
   private running=0;
   private closed=false;
   private jobs:{start:()=>void;reject:(error:Error)=>void}[]=[];

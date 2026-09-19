@@ -21,7 +21,7 @@ test('invitation transport validates scheme and prohibits remote plaintext or UR
   assert.throws(()=>invitation('https://evil.test/#x'));assert.throws(()=>inviteUrl({...config,apiUrl:'https://user:password@coop.example'}));
 });
 
-for(const lostKind of ['accepted','rejected'])test(`isolated SSE runtimes recover a lost ${lostKind} receipt, correct a rule error, finish Hanabi and capture provider JSON`,async()=>{
+for(const transport of ['sse','long-poll'])for(const lostKind of ['accepted','rejected'])test(`isolated ${transport} runtimes recover a lost ${lostKind} receipt, correct a rule error, finish Hanabi and capture provider JSON`,async()=>{
   const directory=mkdtempSync(join(tmpdir(),'coop-runtime-')),a=new Authority(':memory:',games,'runtime'),server=createApi(a,'operator-test-runtime-credential');
   const requests:any[]=[],provider=createServer(async(req,res)=>{
     let text='';for await(const chunk of req)text+=chunk;const body=JSON.parse(text);requests.push(body);
@@ -35,7 +35,7 @@ for(const lostKind of ['accepted','rejected'])test(`isolated SSE runtimes recove
   let lost=false,invalidAttempted=false,sawRuleError=false;
   try{
     for(let i=0;i<2;i++){
-      const runtime=new PlayerRuntime({apiUrl,roomId:room.roomId,inviteToken:room.inviteToken,name:`Synthetic ${i}`,directory:join(directory,`p${i}`)},
+      const runtime=new PlayerRuntime({apiUrl,roomId:room.roomId,inviteToken:room.inviteToken,name:`Synthetic ${i}`,directory:join(directory,`p${i}`),transport},
         {fetchImpl:async(url:any,options:any)=>{const response=await fetch(url,options);if(i===0&&!lost&&(lostKind==='accepted'?response.ok:response.status===409)&&String(url).endsWith('/actions')){lost=true;await response.arrayBuffer();throw Error('Simulated lost receipt AFTER server committed.');}return response;}});
       const agent=new MinimalAgent({baseUrl,model:'synthetic-test-model',apiKey:'fake-provider-key'});
       runtimes.push(runtime);runtime.attachAgent({async decide(context:any,options:any){

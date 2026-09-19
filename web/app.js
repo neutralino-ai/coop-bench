@@ -47,6 +47,7 @@ async function request(path,body,options={}){
  if(session!==state.session)throw new DOMException('连接已更换，旧请求已丢弃。','AbortError');
  if(!response.ok){const error=Object.assign(Error(`${data.error?.code??data.code??response.status}：${data.error?.message??data.message??'请求被服务器拒绝'}`),{status:response.status});await markConnectionFailure(error,{status:response.status,session,identityCheck:path==='/identity'});throw error;}
  if(path==='/identity'){try{markIdentityVerified(data);}catch(error){await markConnectionFailure(error,{session});throw error;}}
+ else if(state.token&&state.connection.phase==='disconnected'&&!state.connectionCheck)void checkConnection();
  return data;
 }
 async function checkConnection(manual=false){
@@ -412,8 +413,9 @@ window.addEventListener('DOMContentLoaded',()=>{if(window.CoopFocus)window.CoopS
 // Invitation-room management stays in the operator client; it never joins a seat.
 {
  let room=null,invite='',sessionAt=state.session,refreshing=false;
- const create=node('button','button primary','创建邀请房间');create.type='button';create.id='create-room';$('create-form').append(create);
- const list=node('button','button subtle','查看房间');list.type='button';$('create-form').append(list);
+ const create=node('button','button primary','创建邀请房间');create.type='button';create.id='create-room';$('create-episode').before(create);
+ $('create-episode').className='button subtle';$('create-episode').title='直接发牌并生成全部席位配置，供受控的本地运行器或实验使用。邀请玩家请使用“创建邀请房间”。';
+ const list=node('button','button subtle','查看房间');list.type='button';list.id='list-rooms';$('create-form').append(list);
  const panel=node('section','seat-configs');panel.id='room-panel';panel.hidden=true;$('create-panel').append(panel);
  const guarded=fn=>async()=>{const session=state.session;try{await fn(session);}catch(error){if(session===state.session)message(error.message,true);}};
  function renderRoom(){
@@ -424,9 +426,10 @@ window.addEventListener('DOMContentLoaded',()=>{if(window.CoopFocus)window.CoopS
    panel.append(node('p','small muted','发牌前成员需全部准备；开始后每个必需行动窗口最多 60 秒。邀请链接交给参赛客户端或无界面运行器。'));
    const copy=node('button','button subtle',invite?'复制邀请链接':'生成新邀请');copy.onclick=guarded(async session=>{if(!invite){const data=await request(`/rooms/${room.roomId}/admin-invite`,{});if(session!==state.session)return;invite='coopbench://join#'+new URLSearchParams({api:apiUrl,room:data.roomId,invite:data.inviteToken});}await transport.copyText(invite);message('邀请已复制。让玩家粘贴到 Coop Bench Player。');});
    const start=node('button','button primary','人齐，开始游戏');start.disabled=room.members.length!==room.playerCount||!room.members.every(p=>p.ready);start.onclick=guarded(async session=>{const data=await request(`/rooms/${room.roomId}/admin-start`,{});if(session!==state.session)return;room=data;invite='';renderRoom();await loadList();message('已开始。参赛运行器会收到本席局面；此处可选择对局审计。');});panel.append(copy,start);
-  }else panel.append(node('p','',room.episodeId?'本房间已开始，请在左侧选择对局。':'邀请已过期，请创建新房间。'));
+  }else if(room.episodeId){panel.append(node('p','','房间已开始。参赛端独立行动，管理端可以审阅服务端记录。'));const replay=node('button','button primary','打开本局回放');replay.id='room-open-replay';replay.onclick=guarded(async()=>{document.getElementById('create-dialog')?.close();await selectEpisode(room.episodeId);});panel.append(replay);}
+  else panel.append(node('p','','邀请已过期，请创建新房间。'));
  }
  create.onclick=guarded(async session=>{if(!state.token||state.identity?.role==='auditor')return;create.disabled=true;try{const data=await request('/rooms',{gameId:$('create-game').value,scenarioId:$('create-scenario').value,playerCount:Number($('create-players').value)});if(session!==state.session)return;sessionAt=session;room=data;invite='coopbench://join#'+new URLSearchParams({api:apiUrl,room:data.roomId,invite:data.inviteToken});renderRoom();message('房间已创建，尚未发牌。复制邀请链接交给玩家。');}finally{create.disabled=false;}});
- list.onclick=guarded(async session=>{const result=await request('/rooms');if(session!==state.session)return;panel.replaceChildren();panel.hidden=false;for(const r of result.rooms){const button=node('button','button subtle',`${r.gameId} · ${r.members.map(p=>p.name).join('、')||'空房间'} · ${r.status}`);button.onclick=()=>{room=r;invite='';sessionAt=session;renderRoom();};panel.append(button);}});
+ list.onclick=guarded(async session=>{const result=await request('/rooms');if(session!==state.session)return;room=null;invite='';panel.replaceChildren();panel.hidden=false;if(!result.rooms.length)panel.append(node('p','','还没有房间。选择游戏、场景和人数后创建邀请房间。'));for(const r of result.rooms){const button=node('button','button subtle',`${state.games.find(g=>g.id===r.gameId)?.name??r.gameId} · ${r.members.map(p=>p.name).join('、')||'空房间'} · ${({'waiting':'等待玩家','active':'游戏中','completed':'已结束','expired':'已过期'})[r.status]??r.status}`);button.onclick=()=>{room=r;invite='';sessionAt=session;renderRoom();};panel.append(button);}});
  setInterval(async()=>{if(sessionAt!==state.session||!state.token){room=null;invite='';panel.replaceChildren();panel.hidden=true;sessionAt=state.session;return;}if(!room||room.status!=='waiting'||refreshing||panel.hidden)return;refreshing=true;const id=room.roomId,session=state.session;try{const result=await request(`/rooms/${id}/admin`);if(session===state.session&&room?.roomId===id){room=result;renderRoom();}}catch{}finally{refreshing=false;}},3000);
 }

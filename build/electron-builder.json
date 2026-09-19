@@ -21,7 +21,6 @@
   ],
   "extraMetadata": {
     "name": "cooperative-boardgame-bench",
-    "version": "0.8.0",
     "main": "desktop/main.mjs"
   },
   "artifactName": "Coop-Bench-${version}-${os}-${arch}.${ext}",

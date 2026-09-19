@@ -5,11 +5,15 @@ import { pathToFileURL } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { Authority, type AuthorityLimits } from './authority.ts';
+import type {PostgresAuthority} from './postgres-authority.ts';
+import type {PostgresRooms} from './postgres-rooms.ts';
+import type {PostgresAuth} from './postgres-auth.ts';
 import { RoomStore } from './room-store.ts';
+import {waitForSeat,type SubscribeUpdates} from './seat-feed.ts';
 import { check, exactKeys, RuleError } from './common.ts';
 import { games } from './registry.ts';
 import { defaultDataDir, coordinatorToken, acquireInstance, writePrivateJson } from './local-settings.ts';
-import { AccessControl, type AccessPrincipal, type AccessPermission } from './access-control.ts';
+import { AccessControl, tokenHash, type AccessPrincipal, type AccessPermission } from './access-control.ts';
 import { HumanAuth, HUMAN_PASSWORD_POLICY, HUMAN_SESSION_SECONDS } from './human-auth.ts';
 import { readJsonBody as body, RequestBudget, validateRequestHeaders, securityLogger, type RatePolicy, type SecurityEvent } from './http-security.ts';
 
@@ -27,12 +31,13 @@ async function download(response:ServerResponse,content:ReturnType<Authority['ro
     'Content-Security-Policy':"default-src 'none'; sandbox",'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Artifact-SHA256':artifact.sha256});
   await pipeline(Readable.from(chunks),response);
 }
-export interface ApiOptions {access?:AccessControl;humanAuth?:HumanAuth;ratePolicy?:Partial<RatePolicy>;audit?:(event:SecurityEvent)=>void;serveWeb?:boolean;}
-export function createApi(authority:Authority,adminToken:string,options:ApiOptions={}) {
+export interface ApiOptions {access?:AccessControl;humanAuth?:HumanAuth|PostgresAuth;rooms?:RoomStore|PostgresRooms;subscribe?:SubscribeUpdates;ratePolicy?:Partial<RatePolicy>;audit?:(event:SecurityEvent)=>void;serveWeb?:boolean;}
+export function createApi(authority:Authority|PostgresAuthority,adminToken:string,options:ApiOptions={}) {
   check(adminToken.length>=24,'Coordinator token must be at least 24 characters.','INVALID_CONFIG');
   check(adminToken.length<=256 && /^[A-Za-z0-9._~+\/-]+=*$/.test(adminToken),'Coordinator token must use Bearer-compatible characters (base64 or base64url).','INVALID_CONFIG');
   const access=options.access??new AccessControl(),budget=new RequestBudget(options.ratePolicy);
-  const rooms=new RoomStore(authority),streams=new Map<string,Set<ServerResponse>>();
+  const rooms=options.rooms??new RoomStore(authority as Authority),streams=new Map<string,Set<ServerResponse>>();
+  const waiters=new Map<string,number>();
   const app=createServer({maxHeaderSize:8192,headersTimeout:10000,requestTimeout:15000,connectionsCheckingInterval:1000},async(request,response)=>{
     let principal:AccessPrincipal|undefined,transport:string|undefined,endpoint='unmatched',errorCode:string|undefined;
     response.setHeader('Referrer-Policy','no-referrer');
@@ -74,11 +79,11 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
         }
         check(options.humanAuth,'Password authentication is unavailable.','FORBIDDEN');
         if(method==='POST'&&path[1]==='login'){reply(response,200,await options.humanAuth.login(await body(request)));return;}
-        if(method==='GET'&&path[1]==='account'){reply(response,200,options.humanAuth.account(bearer(request),adminToken));return;}
+        if(method==='GET'&&path[1]==='account'){reply(response,200,await options.humanAuth.account(bearer(request),adminToken));return;}
         if(method==='POST'&&path[1]==='password'){reply(response,200,await options.humanAuth.setPassword(bearer(request),adminToken,await body(request)));return;}
         if(method==='POST'&&path[1]==='logout'){
           const input=await body(request);check(input&&typeof input==='object'&&!Array.isArray(input)&&Object.keys(input).length===0,'Invalid authentication request.','INVALID_REQUEST');
-          reply(response,200,options.humanAuth.logout(bearer(request),adminToken));return;
+          reply(response,200,await options.humanAuth.logout(bearer(request),adminToken));return;
         }
         throw new RuleError('NOT_FOUND','Unknown endpoint.');
       }
@@ -87,38 +92,38 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
       if(method==='GET' && path[0]==='games' && path.length===2){
         const game=authority.adapters.get(path[1]);check(game,'Unknown game.','NOT_FOUND');reply(response,200,game.metadata);return;
       }
-      const authorize=(permission:AccessPermission)=>{
-        principal=options.humanAuth?.authorize(bearer(request),adminToken,permission)??access.authorize(bearer(request),adminToken,permission);
+      const authorize=async(permission:AccessPermission)=>{
+        principal=(await options.humanAuth?.authorize(bearer(request),adminToken,permission))??access.authorize(bearer(request),adminToken,permission);
         check(!access.sharingEnabled||principal.role!=='coordinator','Use an individual credential while sharing is configured.','FORBIDDEN');
         return principal;
       };
-      const historicalOnly=(id:string)=>{
+      const historicalOnly=async(id:string)=>{
         if(principal?.role==='auditor'){
-          const row=authority.db.prepare('SELECT status FROM episodes WHERE id=?').get(id) as {status:string}|undefined;
-          check(row,'Unknown episode.','NOT_FOUND');check(row.status!=='active','Auditors can open ended episodes only.','FORBIDDEN');
+          const status=await authority.episodeStatus(id);
+          check(status!=='active','Auditors can open ended episodes only.','FORBIDDEN');
         }
       };
       if(path[0]==='rooms') {
         endpoint='room';const token=bearer(request),id=path[1],op=path[2];
-        if(path.length===1&&method==='GET'){authorize('episode:create');reply(response,200,rooms.list());return;}
-        if(path.length===1&&method==='POST'){const who=authorize('episode:create');reply(response,201,rooms.create(who.id,await body(request)));return;}
-        if(path.length===2&&method==='GET'){reply(response,200,rooms.observe(id,token));return;}
-        if(path.length===3&&op==='admin'&&method==='GET'){authorize('episode:create');reply(response,200,rooms.admin(id));return;}
+        if(path.length===1&&method==='GET'){await authorize('episode:create');reply(response,200,await rooms.list());return;}
+        if(path.length===1&&method==='POST'){const who=await authorize('episode:create');reply(response,201,await rooms.create(who.id,await body(request)));return;}
+        if(path.length===2&&method==='GET'){reply(response,200,await rooms.observe(id,token));return;}
+        if(path.length===3&&op==='admin'&&method==='GET'){await authorize('episode:create');reply(response,200,await rooms.admin(id));return;}
         if(path.length===3&&method==='POST'){
           const data=await body(request);
-          if(op==='join'){reply(response,200,rooms.join(id,token,data));return;}
-          if(op==='ready'){reply(response,200,rooms.ready(id,token,data));return;}
-          const admin=op.startsWith('admin-');if(admin)authorize('episode:create');
+          if(op==='join'){reply(response,200,await rooms.join(id,token,data));return;}
+          if(op==='ready'){reply(response,200,await rooms.ready(id,token,data));return;}
+          const admin=op.startsWith('admin-');if(admin)await authorize('episode:create');
           const operation=admin?op.slice(6):op,memberToken=admin?undefined:token;
-          if(operation==='start'){exactKeys(data,[]);reply(response,200,rooms.start(id,memberToken));return;}
-          if(operation==='invite'){exactKeys(data,[]);reply(response,200,rooms.invite(id,memberToken));return;}
-          if(operation==='kick'){exactKeys(data,['playerId']);reply(response,200,rooms.remove(id,data.playerId,memberToken));return;}
-          if(operation==='leave'&&!admin){exactKeys(data,[]);reply(response,200,rooms.remove(id,rooms.observe(id,token).playerId,token,true));return;}
+          if(operation==='start'){exactKeys(data,[]);reply(response,200,await rooms.start(id,memberToken));return;}
+          if(operation==='invite'){exactKeys(data,[]);reply(response,200,await rooms.invite(id,memberToken));return;}
+          if(operation==='kick'){exactKeys(data,['playerId']);reply(response,200,await rooms.remove(id,data.playerId,memberToken));return;}
+          if(operation==='leave'&&!admin){exactKeys(data,[]);reply(response,200,await rooms.remove(id,(await rooms.observe(id,token)).playerId,token,true));return;}
         }
         throw new RuleError('NOT_FOUND','Unknown room endpoint.');
       }
       if(method==='GET'&&url.pathname==='/identity'){
-        endpoint='identity';const who=authorize('rollout:read');reply(response,200,{id:who.id,role:who.role,transport,retention:authority.retention()});return;
+        endpoint='identity';const who=await authorize('rollout:read');reply(response,200,{id:who.id,role:who.role,transport,retention:await authority.retention()});return;
       }
       const messageQuery=(allowPlayer:boolean)=>{
         const allowed=allowPlayer?['after','limit','playerId']:['after','limit'];
@@ -126,75 +131,90 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
         return {after:Number(url.searchParams.get('after')??-1),limit:Number(url.searchParams.get('limit')??50),playerId:url.searchParams.get('playerId')??undefined};
       };
       if(path[0]==='rollouts'&&path.length===3&&path[2]==='messages'&&method==='GET') {
-        endpoint='messages:read';authorize('rollout:read');historicalOnly(path[1]);const query=messageQuery(true);
-        budget.credential(bearer(request),true);reply(response,200,authority.listRolloutMessages(path[1],query.playerId,query.after,query.limit));return;
+        endpoint='messages:read';await authorize('rollout:read');await historicalOnly(path[1]);const query=messageQuery(true);
+        budget.credential(bearer(request),true);reply(response,200,await authority.listRolloutMessages(path[1],query.playerId,query.after,query.limit));return;
       }
       if(path[0]==='episodes'&&path[2]==='messages') {
         const id=path[1],token=bearer(request);
         if(path.length===3&&method==='GET'){
-          endpoint='seat:messages';const query=messageQuery(false);reply(response,200,authority.listSeatMessages(id,token,query.after,query.limit));return;
+          endpoint='seat:messages';const query=messageQuery(false);reply(response,200,await authority.listSeatMessages(id,token,query.after,query.limit));return;
         }
         if(path.length===3&&method==='POST'){
-          endpoint='seat:message-append';reply(response,201,authority.appendMessage(id,token,await body(request)));return;
+          endpoint='seat:message-append';reply(response,201,await authority.appendMessage(id,token,await body(request)));return;
         }
         if(path.length===4&&path[3]==='complete'&&method==='POST'){
-          endpoint='seat:messages-complete';reply(response,200,authority.completeMessages(id,token,await body(request)));return;
+          endpoint='seat:messages-complete';reply(response,200,await authority.completeMessages(id,token,await body(request)));return;
         }
       }
       if(path[0]==='rollouts'&&path[2]==='artifacts'&&method==='GET') {
-        endpoint='artifact:read';authorize('rollout:read');historicalOnly(path[1]);
-        if(path.length===3){reply(response,200,authority.listRolloutArtifacts(path[1]));return;}
-        if(path.length===5&&path[4]==='content'){budget.credential(bearer(request),true);await download(response,authority.rolloutArtifactContent(path[1],path[3]));return;}
+        endpoint='artifact:read';await authorize('rollout:read');await historicalOnly(path[1]);
+        if(path.length===3){reply(response,200,await authority.listRolloutArtifacts(path[1]));return;}
+        if(path.length===5&&path[4]==='content'){budget.credential(bearer(request),true);await download(response,await authority.rolloutArtifactContent(path[1],path[3]));return;}
       }
       if(path[0]==='episodes'&&path[2]==='artifacts') {
         const id=path[1],token=bearer(request);
-        if(path.length===3&&method==='GET'){endpoint='seat:artifacts';reply(response,200,authority.listSeatArtifacts(id,token));return;}
+        if(path.length===3&&method==='GET'){endpoint='seat:artifacts';reply(response,200,await authority.listSeatArtifacts(id,token));return;}
         if(path.length===3&&method==='POST'){
           endpoint='seat:artifact-create';const data=await body(request),key=request.headers['idempotency-key'];
-          reply(response,201,authority.createArtifact(id,token,typeof key==='string'?key:'',data));return;
+          reply(response,201,await authority.createArtifact(id,token,typeof key==='string'?key:'',data));return;
         }
         if(path.length===5&&path[4]==='chunks'&&method==='POST'){
-          endpoint='seat:artifact-chunk';reply(response,200,authority.putArtifactChunk(id,token,path[3],await body(request)));return;
+          endpoint='seat:artifact-chunk';reply(response,200,await authority.putArtifactChunk(id,token,path[3],await body(request)));return;
         }
         if(path.length===5&&path[4]==='complete'&&method==='POST'){
           endpoint='seat:artifact-complete';const data=await body(request);exactKeys(data,[]);budget.credential(token,true);
-          reply(response,200,authority.completeArtifact(id,token,path[3]));return;
+          reply(response,200,await authority.completeArtifact(id,token,path[3]));return;
         }
         if(path.length===5&&path[4]==='content'&&method==='GET'){
-          endpoint='seat:artifact-read';budget.credential(token,true);await download(response,authority.seatArtifactContent(id,token,path[3]));return;
+          endpoint='seat:artifact-read';budget.credential(token,true);await download(response,await authority.seatArtifactContent(id,token,path[3]));return;
         }
       }
       // Human audit APIs are privileged, read stored evidence, and never issue a
       // player observation or advance the game. Player tools keep separate seats.
       if(method==='GET' && url.pathname==='/rollouts'){
-        endpoint='rollout:list';authorize('rollout:read');
+        endpoint='rollout:list';await authorize('rollout:read');
         for(const key of url.searchParams.keys())check(['limit','offset','status','gameId'].includes(key),'Unknown rollout filter.','INVALID_REQUEST');
         const filters={limit:Number(url.searchParams.get('limit')??50),offset:Number(url.searchParams.get('offset')??0),
           ...(url.searchParams.has('status')?{status:url.searchParams.get('status')!}:{}),
           ...(url.searchParams.has('gameId')?{gameId:url.searchParams.get('gameId')!}:{})};
-        reply(response,200,authority.listRollouts(filters));return;
+        reply(response,200,await authority.listRollouts(filters));return;
       }
       if(path[0]==='rollouts' && path.length===2 && method==='GET'){
-        endpoint='rollout:read';authorize('rollout:read');historicalOnly(path[1]);budget.credential(bearer(request),true);reply(response,200,authority.getRollout(path[1]));return;
+        endpoint='rollout:read';await authorize('rollout:read');await historicalOnly(path[1]);budget.credential(bearer(request),true);reply(response,200,await authority.getRollout(path[1]));return;
       }
       if(path[0]==='rollouts' && path.length===3 && path[2]==='annotations' && method==='POST'){
-        endpoint='rollout:annotate';const who=authorize('rollout:annotate');historicalOnly(path[1]);const data=await body(request);exactKeys(data,['kind','playerId','text']);
+        endpoint='rollout:annotate';const who=await authorize('rollout:annotate');await historicalOnly(path[1]);const data=await body(request);exactKeys(data,['kind','playerId','text']);
         check(who.role!=='auditor'||data.kind==='review','Auditors can submit review notes only.','FORBIDDEN');
-        reply(response,201,authority.addRolloutAnnotation(path[1],{...data,source:who.source}));return;
+        reply(response,201,await authority.addRolloutAnnotation(path[1],{...data,source:who.source}));return;
       }
       if(method==='POST' && url.pathname==='/episodes'){
-        endpoint='episode:create';authorize('episode:create');budget.credential(bearer(request),true);const data=await body(request);exactKeys(data,['gameId','playerCount','scenarioId','config']);
-        const created=authority.atomic(()=>{const c=authority.create(data.gameId,{playerCount:data.playerCount,scenarioId:data.scenarioId,...(Object.hasOwn(data,'config')?{config:data.config}:{})});
-          if(authority.adapters.get(data.gameId)?.decisionWindow)authority.enableSessionBudget(c.episodeId);return c;});
+        endpoint='episode:create';await authorize('episode:create');budget.credential(bearer(request),true);const data=await body(request);exactKeys(data,['gameId','playerCount','scenarioId','config']);
+        const created=await authority.createSession(data.gameId,{playerCount:data.playerCount,scenarioId:data.scenarioId,...(Object.hasOwn(data,'config')?{config:data.config}:{})});
         reply(response,201,created);return;
       }
       if(path[0]==='episodes' && path.length===3){
         const id=path[1],operation=path[2];
+        if(method==='GET'&&operation==='rules'){endpoint='seat:rules';reply(response,200,await authority.episodeRules(id,bearer(request)));return;}
+        if(method==='GET'&&operation==='wait'){
+          endpoint='seat:wait';
+          for(const key of url.searchParams.keys())check(['after','timeoutMs','limit'].includes(key)&&url.searchParams.getAll(key).length===1,'Invalid wait query.','INVALID_REQUEST');
+          const token=bearer(request),waitKey=`${id}:${tokenHash(token)}`;
+          await authority.seatCursor(id,token);
+          check((waiters.get(waitKey)??0)<2,'At most two waits per seat.','RESOURCE_LIMIT');
+          check([...waiters.values()].reduce((a,b)=>a+b,0)<32,'Wait capacity reached; retry shortly.','RESOURCE_LIMIT');
+          waiters.set(waitKey,(waiters.get(waitKey)??0)+1);
+          const controller=new AbortController();response.once('close',()=>controller.abort());response.socket?.setTimeout(0);
+          try{
+            const result=await waitForSeat(authority,id,token,{after:Number(url.searchParams.get('after')??0),timeoutMs:Number(url.searchParams.get('timeoutMs')??25000),limit:Number(url.searchParams.get('limit')??500),signal:controller.signal,subscribe:options.subscribe});
+            reply(response,200,result);
+          }finally{const remaining=(waiters.get(waitKey)??1)-1;if(remaining)waiters.set(waitKey,remaining);else waiters.delete(waitKey);}
+          return;
+        }
         if(method==='GET'&&operation==='events'){
           endpoint='seat:events';const token=bearer(request);
           for(const key of url.searchParams.keys())check(key==='after'&&url.searchParams.getAll(key).length===1,'Invalid event cursor.','INVALID_REQUEST');
           let cursor=Number(url.searchParams.get('after')??request.headers['last-event-id']??0);
-          const first=authority.observe(id,token,cursor),key=`${id}:${first.playerId}`,connections=streams.get(key)??new Set<ServerResponse>();
+          const first=await authority.observe(id,token,cursor),key=`${id}:${first.playerId}`,connections=streams.get(key)??new Set<ServerResponse>();
           check(connections.size<2,'At most two streams per seat.','RESOURCE_LIMIT');
           connections.add(response);streams.set(key,connections);
           response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store','X-Accel-Buffering':'no'});
@@ -202,36 +222,45 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
           let blockedAt=0;
           response.on('drain',()=>{blockedAt=0;});
           const send=(obs:typeof first)=>{
-            cursor=obs.updateCursor??cursor;
+            if(response.destroyed||response.writableEnded)return;
+            cursor=obs.nextCursor??obs.updateCursor??cursor;
             const ok=response.write(`id: ${cursor}\nevent: observation\ndata: ${JSON.stringify({observation:obs,serverTime:authority.clock()})}\n\n`);
             if(!ok)blockedAt=authority.clock();
-            if(obs.status!=='active')response.end();
+            if(obs.status!=='active'&&!obs.hasMore)response.end();
           };
           let pulses=0;
-          const timer=setInterval(()=>{
+          let polling=false;
+          const poll=async()=>{
+            if(response.destroyed||response.writableEnded)return;
+            if(polling)return;polling=true;
             try{
               if(blockedAt){if(authority.clock()-blockedAt>5000)response.destroy();return;}
-              if(authority.seatCursor(id,token)>cursor)send(authority.observe(id,token,cursor));
+              if(await authority.seatCursor(id,token)>cursor)send(await authority.observe(id,token,cursor));
               else if(++pulses%20===0&&!response.write(`: heartbeat ${authority.clock()}\n\n`))response.destroy();
-            }catch{response.destroy();}
-          },250);timer.unref();
-          response.once('close',()=>{clearInterval(timer);connections.delete(response);if(!connections.size)streams.delete(key);});
+            }catch{response.destroy();}finally{polling=false;}
+          };
+          const timer=setInterval(poll,options.subscribe?1000:250);timer.unref();
+          const unsubscribe=options.subscribe?.(changed=>{if(changed===id||changed==='*')void poll();});
+          response.once('close',()=>{clearInterval(timer);unsubscribe?.();connections.delete(response);if(!connections.size)streams.delete(key);});
           send(first);return;
         }
-        if(method==='GET' && operation==='observation'){endpoint='seat:observe';reply(response,200,authority.observe(id,bearer(request),Number(url.searchParams.get('after')??0)));return;}
+        if(method==='GET' && operation==='observation'){
+          endpoint='seat:observe';for(const key of url.searchParams.keys())check(['after','limit'].includes(key)&&url.searchParams.getAll(key).length===1,'Invalid observation query.','INVALID_REQUEST');
+          reply(response,200,await authority.observe(id,bearer(request),Number(url.searchParams.get('after')??0),url.searchParams.has('limit')?Number(url.searchParams.get('limit')):undefined));return;
+        }
         if(method==='POST' && operation==='actions'){
           endpoint='seat:act';const data=await body(request), key=request.headers['idempotency-key'];
-          const result=authority.submit(id,bearer(request),typeof key==='string'?key:'',data);reply(response,result.status,result.body);return;
+          const result=await authority.submit(id,bearer(request),typeof key==='string'?key:'',data);reply(response,result.status,result.body);return;
         }
         if(method==='POST' && operation==='reflections'){
           endpoint='seat:reflect';const data=await body(request);exactKeys(data,['text']);
-          reply(response,201,authority.submitReflection(id,bearer(request),data.text));return;
+          reply(response,201,await authority.submitReflection(id,bearer(request),data.text));return;
         }
         if(method==='POST' && operation==='truncate'){
-          endpoint='episode:truncate';authorize('episode:truncate');const data=await body(request);exactKeys(data,['reason']);authority.truncate(id,data.reason);reply(response,200,{truncated:true});return;
+          endpoint='episode:truncate';await authorize('episode:truncate');const data=await body(request);exactKeys(data,['reason']);await authority.truncate(id,data.reason);reply(response,200,{truncated:true});return;
         }
         if(method==='GET' && ['audit','training','replay'].includes(operation)){
-          endpoint=`episode:${operation}`;authorize(operation==='replay'?'episode:replay':'episode:export');budget.credential(bearer(request),true);reply(response,200,operation==='audit'?authority.audit(id):operation==='training'?authority.exportTraining(id):authority.verifyReplay(id));return;
+          endpoint=`episode:${operation}`;await authorize(operation==='replay'?'episode:replay':'episode:export');budget.credential(bearer(request),true);reply(response,200,operation==='audit'?await authority.audit(id):operation==='training'?await authority.exportTraining(id):await authority.verifyReplay(id));return;
         }
       }
       throw new RuleError('NOT_FOUND','Unknown endpoint.');
@@ -246,8 +275,10 @@ export function createApi(authority:Authority,adminToken:string,options:ApiOptio
     }
   });
   app.maxConnections=64;app.maxRequestsPerSocket=100;app.keepAliveTimeout=5000;app.setTimeout(10000,socket=>socket.destroy());
-  const watchdog=setInterval(()=>{
-    try{authority.advanceSessions();}catch{options.audit?.({at:new Date().toISOString(),method:'OTHER',endpoint:'session-watchdog',status:500,code:'WATCHDOG_FAILED'});}
+  let advancing=false;
+  const watchdog=setInterval(async()=>{
+    if(advancing)return;advancing=true;
+    try{await authority.advanceSessions();}catch{options.audit?.({at:new Date().toISOString(),method:'OTHER',endpoint:'session-watchdog',status:500,code:'WATCHDOG_FAILED'});}finally{advancing=false;}
   },1000);watchdog.unref();
   app.once('close',()=>{clearInterval(watchdog);for(const group of streams.values())for(const response of group)response.destroy();streams.clear();});
   return app;

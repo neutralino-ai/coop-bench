@@ -46,6 +46,8 @@ export interface Envelope {
   control?: {windowId:string|null;deadlineAt:number|null;episodeDeadlineAt:number;required:boolean;mode:'all'|'any'|'official-clock';endReason:string|null};
   /** Per-seat sequence only. Pull again with this cursor; no global event index. */
   updateCursor?: number;
+  nextCursor?: number;
+  hasMore?: boolean;
   updates?: {seq:number;preparedAt:string;view:JsonObject;status:Envelope['status']}[];
 }
 export interface Creation { episodeId:string; gameId:string; scenarioId:string; seats:{playerId:string;token:string}[] }
@@ -234,13 +236,15 @@ export class Authority {
     this.recordFrame(row,{at,kind:'elapsed',stateHash,payload});
     this.expire(row);
   }
-  private issue(row:Row,playerId:string,after=0):Envelope {
+  private issue(row:Row,playerId:string,after=0,limit=this.limits.maxObservationsPerSeat):Envelope {
     const view=this.db.prepare('SELECT decision_token FROM views WHERE episode_id=? AND player_id=?').get(row.id,playerId)!;
     const latest=this.db.prepare('SELECT COALESCE(MAX(seq),0) AS seq FROM visible_updates WHERE episode_id=? AND player_id=?').get(row.id,playerId)!;
     check(Number.isSafeInteger(after) && after>=0 && after<=Number(latest.seq),'Invalid own-view update cursor.','INVALID_REQUEST');
-    const updates=this.db.prepare('SELECT seq,prepared_at,payload FROM visible_updates WHERE episode_id=? AND player_id=? AND seq>? ORDER BY seq').all(row.id,playerId,after)
+    check(Number.isSafeInteger(limit)&&limit>=1&&limit<=this.limits.maxObservationsPerSeat,'Invalid observation page size.','INVALID_REQUEST');
+    const updates=this.db.prepare('SELECT seq,prepared_at,payload FROM visible_updates WHERE episode_id=? AND player_id=? AND seq>? ORDER BY seq LIMIT ?').all(row.id,playerId,after,limit)
       .map(u=>({seq:Number(u.seq),preparedAt:u.prepared_at as string,...JSON.parse(u.payload as string)}));
-    const projected={...this.projection(row,playerId),decisionToken:view.decision_token as string,updateCursor:Number(latest.seq),updates};
+    const nextCursor=updates.at(-1)?.seq??after;
+    const projected={...this.projection(row,playerId),decisionToken:view.decision_token as string,updateCursor:nextCursor,updates,nextCursor,hasMore:nextCursor<Number(latest.seq),...(nextCursor<Number(latest.seq)?{headCursor:Number(latest.seq)}:{})};
     const fingerprint=digest(projected);
     const cached=this.db.prepare('SELECT o.payload FROM observation_cache c JOIN observations o ON o.id=c.observation_id WHERE c.episode_id=? AND c.player_id=? AND c.fingerprint=?').get(row.id,playerId,fingerprint);
     if(cached)return JSON.parse(cached.payload as string);
@@ -275,8 +279,13 @@ export class Authority {
       return {episodeId:id,gameId,scenarioId:options.scenarioId,seats};
     },id);
   }
-  observe(id:string,token:string,after=0):Envelope {
-    return this.transaction(()=>{const playerId=this.seat(id,token),row=this.row(id);this.tick(row); return this.issue(row,playerId,after);},id);
+  observe(id:string,token:string,after=0,limit=this.limits.maxObservationsPerSeat):Envelope {
+    return this.transaction(()=>{const playerId=this.seat(id,token),row=this.row(id);this.tick(row); return this.issue(row,playerId,after,limit);},id);
+  }
+  episodeStatus(id:string):Envelope['status'] {return this.historicalRow(id).status;}
+  episodeRules(id:string,token:string) {this.seat(id,token);const row=this.row(id),game=this.adapter(row);return {gameId:row.game_id,metadata:game.metadata,rulesSummary:game.metadata.rulesSummary};}
+  createSession(gameId:string,options:Omit<SetupOptions,'seed'> & {seed?:string}):Creation {
+    return this.atomic(()=>{const c=this.create(gameId,options);if(this.adapters.get(gameId)?.decisionWindow)this.enableSessionBudget(c.episodeId);return c;});
   }
   submit(id:string,token:string,requestId:string,command:Command):{status:number;body:JsonObject} {
     check(typeof requestId==='string' && /^[A-Za-z0-9._:-]{1,100}$/.test(requestId),'A 1–100 character Idempotency-Key is required.','INVALID_REQUEST');

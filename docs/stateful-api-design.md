@@ -1,5 +1,7 @@
 # 合作桌游环境机制设计 V2
 
+**2026-09-20 实现更新**：用户批准经审查的 stateless API + PostgreSQL CAS 方案，源码 0.9.0 已新增对应服务，并保留本地 SQLite。内部 revision、玩家可见 cursor、决策令牌分离；必需行动 60 秒、通信与原始模型轨迹归档继续保留。本文是设计背景，最新实现、启动方式与验收以 [stateless-server.md](stateless-server.md) 和 [release-0.9.0.md](release-0.9.0.md) 为准。没有采用每局常驻进程、Redis 或区块链。
+
 **2026-09-19 补充**：当前实际交付已是 Electron 客户端 + 远程 SQLite 权威 API，也保留单机模式；下文 9 月 16 日的运行方式是历史设计。最新的大厅、准备/开始、房主权限、MCP、长轮询与模型上下文完整性方案见 [Agent 对局接口设计](agent-session-design.md)，明确区分提案与已实现能力。本次 [花火低分审计](hanabi-low-score-audit-2026-09-19.md)发现了外部运行器漏传事件的问题。
 
 更新：2026-09-16。**长期架构设计。** 当前交付优先采用 [Electron 单机应用](local-app.md)，内置回环 HTTP API 和 SQLite，不需要用户部署后端。已落地游戏适配器、玩家工具、本地 runner 和轨迹导出；实际端点及边界见[运行接口](runtime-api.md)，数据准入与逐款范围见[实现准入报告](implementation-admission.md)。本文中的 PostgreSQL、多机扩容、outbox、分布式密码协议只作为未来远程服务的设计，均不是单机版依赖。

@@ -4,14 +4,15 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
+import {externalSmokeFixture} from './pg-smoke-fixture.mjs';
 
 export async function startClientFixture(dataDir) {
   const { startLocalApp } = await import('../runtime/coop-bench/src/server.mjs');
-  const personalToken = 'synthetic-owner-' + randomUUID();
+  const external=externalSmokeFixture(),personalToken = external?.adminToken??'synthetic-owner-' + randomUUID();
   const usersFile = join(dataDir, 'synthetic-access-users.json');
   writeFileSync(usersFile, JSON.stringify({ version: 1, users: [{ id: 'owner', role: 'operator', disabled: false,
     tokenHash: createHash('sha256').update(personalToken).digest('hex') }] }), { mode: 0o600 });
-  const local = await startLocalApp({ dataDir: join(dataDir, 'synthetic-api'), port: 0, serveWeb: false,
+  const local = external??await startLocalApp({ dataDir: join(dataDir, 'synthetic-api'), port: 0, serveWeb: false,
     usersFile, trustedProxyOrigin: 'https://synthetic.example.test' });
   local.adminToken = personalToken; // All human fixture calls use a real individual account.
   const call = async (path, token = local.adminToken, body, key) => {
@@ -68,7 +69,8 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
     return fetcher(url,options);
   };
   const checks = [], check = (value, name) => { assert.ok(value, name); checks.push(name); };
-  const run = (fn, ...args) => window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`, true);
+  const run = (fn, ...args) => window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`, true)
+    .catch(error=>{throw Error(`Synthetic UI check failed: ${fn.toString().slice(0,300)}: ${error.message}`);});
   const wait = async (fn, message) => { const deadline = Date.now() + 18000; while (!await fn()) { if (Date.now() > deadline) throw new Error(message); await new Promise(r => setTimeout(r, 50)); } };
   const screenshots = {};
   const capture = async name => {
@@ -139,6 +141,13 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await run(()=>document.getElementById('retry-replay').click());
   await wait(()=>run(()=>!document.getElementById('detail').hidden&&document.getElementById('player-grid').dataset.messages==='ready'),'Replay retry did not recover');
   check(await run(()=>document.getElementById('replay-loading').hidden),'replay retry restores board');
+  await wait(async()=>(await status()).phase==='connected','Recovered API was not revalidated after a successful retry');
+  checks.push('successful retry revalidates identity and restores the green connection indicator');
+  await wait(()=>run(()=>document.getElementById('recording-summary').textContent.includes('1/3')),'Per-seat recording summary failed to load');
+  await run(()=>document.getElementById('recording-summary').click());
+  check(await run(()=>document.getElementById('recording-dialog').open&&document.querySelector('[data-player=p1].recording-seat').textContent.includes('部分记录')&&document.querySelector('[data-player=p2].recording-seat').textContent.includes('暂无模型 / 工具消息')),'audit distinguishes sealed partial capture from missing seat messages');
+  check(await run(()=>document.getElementById('recording-dialog').textContent.includes('不等于已核验全部内部思考')),'recording completeness is labelled as a client declaration');
+  await run(()=>document.getElementById('recording-dialog').close());
   await run(()=>document.getElementById('open-evidence').click());
   await wait(() => run(() => document.getElementById('episode-title').textContent.includes('Hanabi') && document.getElementById('artifacts').querySelector('button') && document.getElementById('model-messages').textContent.includes('synthetic-ui-message')), 'On-demand messages/artifacts failed to render.');
   await run(() => { for (const detail of document.getElementById('model-messages').querySelectorAll('details')) detail.open = true; });
@@ -188,6 +197,13 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await run(() => document.getElementById('copy-api').click());
   await wait(() => Promise.resolve(getCopied() === fixture.apiUrl), 'Copy API bridge failed.');
   checks.push('copy API bridge');
+  await run(()=>document.getElementById('open-create').click());
+  await run(()=>document.getElementById('create-room').click());
+  await wait(()=>run(()=>!document.getElementById('room-panel').hidden&&document.getElementById('room-panel').textContent.includes('复制邀请链接')),'Admin invitation room did not appear');
+  await run(()=>[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent==='复制邀请链接').click());
+  await wait(()=>Promise.resolve(getCopied()?.startsWith('coopbench://join#')),'Admin invitation copy failed');
+  check(await run(()=>document.getElementById('room-panel').textContent.includes('60 秒')&&[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent==='人齐，开始游戏').disabled),'admin creates invitation room and prevents starting without ready seats');
+  await run(()=>document.getElementById('create-dialog').close());
   let screenshot;
   try { const picture = await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); assert.ok(!picture.isEmpty()); writeFileSync(join(dataDir, 'client-audit.png'), picture.toPNG()); screenshot = { saved: true }; }
   catch (error) { screenshot = { saved: false, error: String(error) }; }
@@ -268,5 +284,5 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await run(() => document.getElementById('disconnect').click());
   await wait(() => run(() => document.getElementById('disconnect').hidden && !document.getElementById('seat-list').textContent && !document.getElementById('model-messages').textContent), 'Logout did not clear captured data.');
   check(!remote.descriptor().connected && !readFileSync(join(dataDir, 'remote-connection.json'), 'utf8').includes('encrypted'), 'logout clears credential and saved secret');
-  return { ok: true, at: new Date().toISOString(), fixture: 'isolated synthetic localhost API; no production data or model calls', games: 10, checks, screenshot, screenshots };
+  return { ok: true, at: new Date().toISOString(), fixture: `isolated synthetic localhost ${fixture.backend??'sqlite'} API; no production data or model calls`, games: 10, checks, screenshot, screenshots };
 }

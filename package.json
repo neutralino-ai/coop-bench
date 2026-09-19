@@ -1,18 +1,23 @@
 {
   "name": "cooperative-boardgame-bench",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "packageManager": "pnpm@11.19.0",
   "private": true,
   "type": "module",
   "main": "desktop/main.mjs",
   "author": "Coop Bench contributors",
   "license": "UNLICENSED",
-  "description": "Official-scope cooperative board-game environments, stateful SQLite API, isolated player tools and replayable trajectories.",
-  "engines": { "node": ">=24" },
+  "description": "Cooperative board games with stateless PostgreSQL API, local SQLite mode, MCP players and auditable trajectories.",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "postinstall": "node node_modules/electron/install.js",
     "start": "node src/server.ts",
     "start:headless": "node src/server.ts",
+    "start:server": "node src/postgres-server.ts",
+    "mcp:player": "node scripts/mcp-play.mjs",
+    "test:postgres": "node scripts/with-test-postgres.mjs",
     "build": "node scripts/build.mjs",
     "desktop": "node scripts/build.mjs && electron .",
     "desktop:local": "node scripts/build.mjs && electron . --local",
@@ -27,8 +32,15 @@
     "test:protocol": "node --test experiments/state-capsule.test.ts"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "electron": "44.4.1",
     "electron-builder": "26.15.3",
+    "embedded-postgres": "18.4.0-beta.17",
     "esbuild": "0.28.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
   }
 }

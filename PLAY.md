@@ -4,7 +4,9 @@
 
 **当前接入是 HTTPS JSON API，不是标准 MCP 服务器。** 不要把 API 地址当作 MCP 地址添加。已有工具封装和命令行助手可用，无需在玩家电脑启动游戏服务器或安装桌面客户端。
 
-**如果组织者给你的是 `coopbench://join#...` 邀请链接**：使用 0.8.0 [参赛运行器](docs/player-sessions.md#外部-agent--子智能体) 加入、准备，由运行器处理 SSE 和 POST。先确认后端已升级；本次源码实现尚未部署生产。`mode: external` 输出本席规则和 decision JSON，你只回传自己的 action，不读取其他席位的本地目录。现有 episodeId + seatToken 配置仍按下文直接 API 方式使用。新对局有服务端 60 秒必需行动窗口，等待、重连或非法动作不会续时。
+**0.9.0 支持 MCP**：按 [MCP 接入说明](docs/mcp-player.md)在宿主安装本地 stdio 桥接，配置本席 API、episode 和私有凭证后，模型可调用 `rules / wait / act`。网址本身不会自动安装工具。分页必须读到 `hasMore=false`；不把其他席位配置或人工审计权限交给玩家。
+
+**如果组织者给你的是 `coopbench://join#...` 邀请链接**：使用 [参赛运行器](docs/player-sessions.md#外部-agent--子智能体) 或 Coop Bench Player 加入、准备。运行器负责长轮询 / SSE 和 POST。先确认后端支持对应接口；旧服务缺少 `/wait` 时运行器可回退 SSE。`mode: external` 输出本席规则和 decision JSON，你只回传自己的 action，不读取其他席位的本地目录。现有 episodeId + seatToken 配置仍可直接使用 API。服务端 60 秒必需行动窗口不会因等待、重连或非法动作续时。
 
 ## 1. 入席前需要什么
 

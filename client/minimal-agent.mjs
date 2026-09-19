@@ -1,4 +1,10 @@
-import { jsonResponse } from './protocol.mjs';
+async function providerBody(response) {
+  const reader=response.body?.getReader();if(!reader)throw Error('EMPTY_RESPONSE');
+  const chunks=[];let size=0;
+  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>16*1024*1024)throw Error('RESPONSE_TOO_LARGE');chunks.push(value);}}
+  finally{await reader.cancel().catch(()=>{});}
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 /** Deliberately no game policy. The provider receives only the legal seat context. */
 export class MinimalAgent {
@@ -13,14 +19,28 @@ export class MinimalAgent {
     const pending=runtime.get('modelPendingTools');
     if(pending){for(const call of pending)messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(call.function.name==='wait'?{waiting:true}:context.lastActionResult??{accepted:false,error:{code:'NO_RECEIPT',message:'No accepted action receipt is available.'}})});runtime.put('modelPendingTools',null);}
     messages.push({role:'user',content:JSON.stringify(context)});
+    // Persist the actual outbound history before network I/O; failed requests
+    // remain available for the next decision and local crash recovery.
+    runtime.put('modelHistory',messages);
     const tools=[{type:'function',function:{name:'act',description:'Submit exactly one rule action. actionJson encodes the full action object matching a supplied legalActions schema.',parameters:{type:'object',properties:{actionJson:{type:'string'}},required:['actionJson'],additionalProperties:false}}},
       {type:'function',function:{name:'wait',description:'Choose to wait for a new visible event; this does not extend a required deadline.',parameters:{type:'object',properties:{},additionalProperties:false}}}];
     for(let attempt=0;attempt<2;attempt++){
       const request={model:this.#model,messages,tools,tool_choice:'required',parallel_tool_calls:false};
       const details={observationId:context.observation.observationId,model:this.#model,provider:new URL(this.#url).origin};
       await runtime.recordModelRequest(request,details);
-      const response=await this.#fetch(this.#url,{method:'POST',redirect:'error',headers:{Authorization:`Bearer ${this.#key}`,'Content-Type':'application/json'},body:JSON.stringify(request),signal});
-      const raw=await jsonResponse(response,16*1024*1024);
+      let response,body;
+      try {
+        response=await this.#fetch(this.#url,{method:'POST',redirect:'error',headers:{Authorization:`Bearer ${this.#key}`,'Content-Type':'application/json'},body:JSON.stringify(request),signal});
+        body=await providerBody(response);
+      }catch(error){
+        await runtime.recordTransportResult?.({source:'model-api',outcome:'response-unavailable',code:signal?.aborted?'CANCELLED':error.message==='RESPONSE_TOO_LARGE'?'RESPONSE_TOO_LARGE':'NETWORK_ERROR'},details);
+        throw error;
+      }
+      let raw;
+      try{raw=JSON.parse(body);}catch{
+        await runtime.recordModelResponse({format:'non-json-http-body',httpStatus:response.status,bodyText:body},{...details,reasoningAvailability:'not-provided'});
+        throw Error(`Model API returned non-JSON (HTTP ${response.status}).`);
+      }
       const message=raw.choices?.[0]?.message;
       const plainReasoning=[message?.reasoning_content,message?.reasoning].some(v=>typeof v==='string'&&v.trim());
       await runtime.recordModelResponse(raw,{...details,reasoningAvailability:plainReasoning?'provided':typeof message?.reasoning_summary==='string'?'summary-only':'not-provided'});

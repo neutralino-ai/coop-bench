@@ -1,6 +1,6 @@
 # Coop Bench · 合作桌游环境
 
-**0.8.0 本地实现：邀请房间 + SSE/POST 运行器 + 独立参赛客户端。** 管理端创建房间、发邀请并审计；Coop Bench Player 支持人工出牌或配置模型 API；也可无界面接外部 Agent。服务端持久化 60 秒必需行动期限。腾讯云本次尚未升级，MCP / worker 集群仍为后续设计。[使用说明](docs/player-sessions.md) · [测试与交付边界](docs/release-0.8.0.md)。
+**0.9.0：无状态 PostgreSQL 服务、MCP 工具、管理端与参赛端。** 服务端用数据库 CAS 原子提交局面、回执和事件；多个 API 实例共享房间、密码会话、轨迹和固定 60 秒期限。Agent 可使用真实 stdio MCP 的 `rules / wait / act`，也可使用长轮询 / SSE 运行器。两个 Electron 客户端覆盖邀请、人类或模型参赛、紧凑回放和轨迹完整性提示。SQLite 单机模式继续保留。腾讯云旧服务未在本次开发中自动迁移。[服务器配置](docs/stateless-server.md) · [MCP 接入](docs/mcp-player.md) · [0.9.0 验收](docs/release-0.9.0.md)。
 
 **0.7.2：启动 / 回放加载状态、失败重试、按当前步骤读取消息。** 修复打开花火时预取整局消息并固定等待的问题，首屏先显示牌局；复制玩家配置包含游戏和场景。已有 0.7.1 可从“设置 → 检查更新”升级。[变更、实测与边界](docs/release-0.7.2.md)。
 
