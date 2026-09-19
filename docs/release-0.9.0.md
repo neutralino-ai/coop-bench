@@ -19,7 +19,7 @@ Windows local verification (2026-09-20, Node 24.21.0):
 | Full test suite with real PostgreSQL enabled | **341 passed, 0 failed, 0 skipped** |
 | Follow-up desktop transport regression tests | **46 passed**, including numeric/date retry delays, exact attachment bytes and cancellation |
 | PostgreSQL authority, API, authentication and room tests (included above) | **18 passed** |
-| Packaged admin against SQLite / PostgreSQL | **46 / 46 passed** |
+| Packaged admin against SQLite / PostgreSQL | **47 / 47 passed**, rebuilt after the download retry fix |
 | Packaged Player against SQLite / PostgreSQL | **14 / 14 passed** |
 | Packaged admin optional local mode | **14 passed** |
 | Replay layout at 1280×800 and 1440×900 | Screenshots inspected; no document scrolling required |
@@ -28,7 +28,16 @@ Bundled engine build: `df1cf9a3efa36a3bfde9660a7eb1d8167058808ac4c61af8343d7514c
 
 The release workflow publishes only after PostgreSQL tests and packaged-client checks pass on Windows x64, Mac Intel and Mac Apple Silicon. Download installers and their generated `SHA256SUMS.txt` from [the GitHub release](https://github.com/neutralino-ai/coop-bench/releases/tag/v0.9.0). Locally rebuilt installers can have different bytes from CI installers; use the checksum shipped with the matching build.
 
-Raw evidence remains in ignored `artifacts/v09-release-tests.log`, `client-v09-packaged-{sqlite,pg}`, `player-v09-packaged-{sqlite,pg}` and `client-v09-packaged-local`. Real model traces and credentials are never committed. Mac Intel / Apple Silicon build jobs and a separate PostgreSQL CI job are configured; their live GitHub result is distinct from this Windows record. No physical Mac installation/Keychain acceptance is claimed here.
+The separately rebuilt local Windows installers have these hashes (the GitHub release has its own checksums):
+
+| Local installer | SHA-256 |
+| --- | --- |
+| `Coop-Bench-0.9.0-win-x64.exe` | `f58b1012401c8ca391854c76b989c30d9d769adebc96039b0147f2afa3802425` |
+| `Coop-Bench-Player-0.9.0-win-x64.exe` | `93bc07c0e4bc6a411311f69e50c113dba2a2d870c3768264efbbffd77d5c1622` |
+
+The [release CI run](https://github.com/neutralino-ai/coop-bench/actions/runs/35456150037) succeeded for Windows x64, Mac Intel, Mac Apple Silicon and PostgreSQL, then published all six native installers. Each platform passed the ordinary engine/interface suite and real packaged admin/Player acceptance. The Mac ARM log records 326 ordinary passing tests; the four database groups are skipped there and run in the separate PostgreSQL job (18 passing tests). Packaged admin/Player checks are 47/14. Mac ARM replay screenshots at 1280×800 and 1440×900 were also inspected and fit without document scrolling.
+
+Raw evidence remains in ignored `artifacts/v09-release-tests.log`, `client-v09-retry-packaged-{sqlite,pg}`, `player-v09-retry-packaged-{sqlite,pg}`, `client-v09-packaged-local` and `mac09-success`. Real model traces and credentials are never committed. No physical user-Mac installation/Keychain acceptance is claimed here.
 
 ## Operation and limits
 

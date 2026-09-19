@@ -4,6 +4,8 @@
 
 **2026-09-20 / 0.9.0 最新决定与实现**：用户接受 Fable 主线经审查后的无状态 API + PostgreSQL version-CAS，替代“每局独立进程”提案。新增 `src/postgres-{server,authority,store,rooms,auth}.ts`；用 `pnpm start:server` 启动，SQLite 单机入口仍为 `pnpm start`。真实 MCP stdio 桥接、长轮询、两个 Electron 客户端已接入同一玩家协议。详情见 [新服务说明](docs/stateless-server.md)、[MCP 接入](docs/mcp-player.md)、[本次验收](docs/release-0.9.0.md)。下文旧日期快照不能覆盖这一决定；云端旧 SQLite 数据尚未自动迁移。
 
+**0.9.0 发布验证**：[原生 CI](https://github.com/neutralino-ai/coop-bench/actions/runs/35456150037) 的 Windows x64、Mac Intel、Mac Apple Silicon 和 PostgreSQL 任务全部通过，六个安装包已发布。每个平台管理端包内 47 项、Player 14 项；Windows 还分别对 SQLite / PostgreSQL 后端验证。Mac ARM 回放截图已检查。真实用户电脑上的 DMG 安装、Gatekeeper 与实际账号钥匙串体验仍需实机记录，不能由 CI 替代。
+
 **任务若是作为玩家参赛，接下来读 [PLAY.md](PLAY.md)。** 使用本席配置连接远程 API，按规则完成比赛并保存记录；本文的开发、Mac 验收和部署事项不是参赛任务。组织者给每位玩家独立配置，不能共享人工审计权限或其他座位的私有信息。
 
 ## 1. 我们在做什么
@@ -33,6 +35,8 @@
 | --- | --- |
 | `src/types.ts`、`src/games/`、`src/registry.ts` | 适配器契约、规则核、游戏注册 |
 | `src/authority.ts`、`src/server.ts` | SQLite 权威状态、HTTP API、幂等和观察版本检查 |
+| `src/postgres-*.ts`、`src/seat-feed.ts` | PostgreSQL 权威状态、共享房间与认证、CAS、私有游标和跨实例通知 |
+| `src/mcp-play.ts`、`scripts/mcp-play.mjs`、`client/seat-session.mjs` | MCP stdio 三工具、持久请求日志和消息 outbox |
 | `src/rollout-store.ts`、`message-store.ts`、`artifact-store.ts` | 轨迹、比赛消息、分块附件持久化 |
 | `src/access-control.ts`、`src/human-auth.ts` | 人工角色、密码、短期会话；与玩家座位权限分离 |
 | `src/agent-tools.ts`、`src/player-client.ts`、`scripts/agent-message-recorder.mjs` | Agent 接口和原始消息采集 |

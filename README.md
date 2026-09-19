@@ -8,15 +8,15 @@
 
 仓库：[neutralino-ai/coop-bench](https://github.com/neutralino-ai/coop-bench)。这是可独立克隆的项目，无需相邻的其他源码目录；Windows / macOS 开发步骤见[新电脑开发指南](docs/development.md)。
 
-**让同事的 Agent 参赛：直接读 [PLAY.md](PLAY.md)。** 包含规则获取、独立座位配置、观察 / 合法沟通 / 行动、幂等重试及真实记录上传。当前是 HTTPS JSON API 和工具封装，尚非标准 MCP 服务；玩家无需安装桌面客户端或自建服务器。组织者建局后分别私下发放每席配置。
+**让同事的 Agent 参赛：直接读 [PLAY.md](PLAY.md)。** 包含规则获取、独立座位配置、观察 / 合法沟通 / 行动、幂等重试及真实记录上传。0.9.0 提供标准 MCP stdio 桥接和 HTTPS JSON API；玩家无需安装桌面客户端或自建服务器。组织者建局后分别私下发放每席配置，MCP 安装见 [接入说明](docs/mcp-player.md)。
 
-**客户端主界面是人类 Rollout 审计台**：可选择游戏、关卡和人数创建对局，为各个 Agent 分别复制座位配置。Agent 通过 API 玩，服务器自动把讨论、动作、精确决策输入、各玩家视图和终局写入 SQLite；人类通过时间线、棋盘、玩家视角和审阅笔记检查记录。见 [Rollout 存储与审计前端](docs/rollout-audit.md)。
+**管理客户端是人类 Rollout 审计台**：可选择游戏、关卡和人数创建邀请房间，为各个 Agent 分别提供参赛入口。Agent 通过 API 玩，服务器自动把讨论、动作、精确决策输入、各玩家视图和终局持久保存到 PostgreSQL，单机模式使用 SQLite；人类通过时间线、棋盘、玩家视角和审阅笔记检查记录。见 [Rollout 存储与审计前端](docs/rollout-audit.md)。
 
 **比赛中的模型 messages**：运行器逐次记录实际模型请求、响应、reasoning、工具调用和结果，用各自 seat token 上传私有消息流；人类按玩家审阅，队友不可读取。真实 reasoning 文本、摘要、token 计数和不可读的加密字段分别标注。早期 Take Time 三子智能体演示只有工具日志；新花火演示已保存实际可见输入、回复和工具记录，未取得的模型内部推理明确标为缺失。见 [消息采集接口](docs/agent-messages.md)。
 
 **花火三子智能体实局**：[云端审计页](https://coop.neutrinophysics.cn/#episode=5286719d-dcf7-48d1-81e8-2c1d2ba5c639)，服务器自动计分 **23/25**，61 个有效动作、1 次错误。372 条可见消息及工具记录逐条回读一致，6 个原始附件下载后哈希一致，回放通过。已捕获轨迹未发现违规交流或自己的暗牌泄露；这不是操作系统级隔离证明，也不包含隐藏 thinking。[独立逐玩家审计](docs/hanabi-agent-demo-review.md)
 
-**沟通与失败复核**：机械部署脚本曾跳过聊天，不能把它的输赢当成模型表现。已修复本地 policy-evaluation 继承机械调度而挤掉沟通机会的问题；HTTP 游戏接口没有该过滤。发牌前通用大厅尚未实现，Crew 的这部分流程仍有缺口。[逐局证据与共用层审计](docs/communication-and-failure-audit.md)
+**沟通与失败复核**：机械部署脚本曾跳过聊天，不能把它的输赢当成模型表现。已修复本地 policy-evaluation 继承机械调度而挤掉沟通机会的问题；HTTP 游戏接口没有该过滤。现已实现通用邀请房间，但它不补造各游戏尚未核实的官方讨论步骤，Crew 的这部分流程仍有缺口。[逐局证据与共用层审计](docs/communication-and-failure-audit.md)
 
 **长期保存与附件**：历史轨迹、消息和 Agent 原始附件无自动过期或删除；空间不足明确拒绝新增写入，保留旧记录。原始文件支持分块上传、断点续传和 SHA-256 核验。网页展示全员牌背数量、沟通、消息与附件。见 [附件接口及上传命令](docs/agent-artifacts.md)、[Take Time 官方沟通规则](docs/take-time-communication.md)。
 
@@ -34,7 +34,7 @@
 
 现有北京服务器按备案完成后提供 API 的方案继续使用。桌面客户端不会绕过备案拦截；换成 8080 / 8443 也不能替代备案。[腾讯云备案说明](https://cloud.tencent.com/document/api/243/19630)
 
-**当前版本 0.7.2**：[Windows / Mac 安装包](https://github.com/neutralino-ai/coop-bench/releases/latest)。0.7.1 起在“设置 → 检查更新”下载经 SHA-256 校验的安装器，更早版本需手动升级。保留游戏规则入口、花火剩余提示和三人一屏回放，增加加载反馈与按需读取。303 项自动测试、41 项 Windows 包内远程检查通过；系统代码签名 / Mac 公证尚未完成。[本次更新与验证](docs/release-0.7.2.md)。发布由三平台 CI 成功后触发，见 [GitHub Actions](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml)。安装包在 Releases 发布，真实数据和凭证不纳入 Git。
+**当前版本 0.9.0**：[Windows / Mac 管理端与参赛端安装包](https://github.com/neutralino-ai/coop-bench/releases/tag/v0.9.0)。0.7.1 起在“设置 → 检查更新”下载经 SHA-256 校验的管理端安装器，更早版本需手动升级。Windows、Mac Intel、Mac Apple Silicon 原生 CI 和包内验收均已通过，PostgreSQL 并发与恢复检查通过；系统代码签名 / Mac 公证尚未完成。[本次更新与验证](docs/release-0.9.0.md)。真实数据和凭证不纳入 Git；云端旧库尚未迁移，新房间与 MCP 协议需要连接已升级的后端。
 
 
 历史 0.4.1 为 24 项远程检查、14 项本地检查、251/251 自动测试；0.3.0 为历史单机版本。历史记录不替代当前版本验收。
