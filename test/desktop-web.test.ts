@@ -17,7 +17,7 @@ const connection={mode:'remote',apiUrl:'https://example.test/api/v1',connected:t
 test('read-only rate-limit retries are bounded; writes are never automatically retried',async()=>{
  let calls=0;const delays:number[]=[];
  const api=transportContext({connect:async()=>connection,request:async()=>({status:++calls<3?429:200,headers:{},bytes:new Uint8Array()}),cancelRequest:async()=>{}},undefined,{setTimeout:(f:any,ms:number)=>{delays.push(ms);return setTimeout(f,0);},clearTimeout});
- assert.equal((await api.request('/api/v1/games')).status,200);assert.equal(calls,3);assert.deepEqual(delays,[3200,3200]);
+ assert.equal((await api.request('/api/v1/games')).status,200);assert.equal(calls,3);assert.deepEqual(delays,[3200,6400]);
  calls=0;assert.equal((await api.request('/api/v1/episodes',{method:'POST',body:{}})).status,429);assert.equal(calls,1);
  const blocked=transportContext({connect:async()=>connection,request:async()=>({status:429,headers:{},bytes:new Uint8Array()}),cancelRequest:async()=>{}},undefined,{setTimeout:(f:any)=>setTimeout(f,0),clearTimeout});
  assert.equal((await blocked.request('/api/v1/games')).status,429);
@@ -26,6 +26,24 @@ test('logout cancels rate-limit waiting without sending another request as the n
  const entered=deferred();let calls=0;
  const api=transportContext({connect:async()=>connection,request:async()=>{calls++;return {status:429,headers:{},bytes:new Uint8Array()};},cancelRequest:async()=>{},disconnect:async()=>{}},undefined,{setTimeout:(f:any)=>{entered.resolve();return setTimeout(f,30000);},clearTimeout});
  const pending=api.request('/api/v1/games');await entered.promise;await api.disconnect();await assert.rejects(pending,{name:'AbortError'});assert.equal(calls,1);
+});
+
+test('artifact GET honors numeric and HTTP-date Retry-After, preserves bytes and rejects excessive waits',async()=>{
+ for(const retryAfter of ['5',new Date(Date.now()+10000).toUTCString()]){
+  let calls=0;const delays:number[]=[];
+  const api=transportContext({request:async()=>++calls===1?{status:429,headers:{'retry-after':retryAfter},bytes:new Uint8Array()}:{status:200,headers:{'content-type':'application/octet-stream'},bytes:new Uint8Array([0,255,8])},connect:async()=>connection,cancelRequest:async()=>{}},undefined,{setTimeout:(fn:any,ms:number)=>{delays.push(ms);return setTimeout(fn,0);},clearTimeout});
+  const result=await api.request('/api/v1/rollouts/e/artifacts/a/content');assert.deepEqual([...new Uint8Array(await result.arrayBuffer())],[0,255,8]);assert.equal(calls,2);
+  assert.equal(delays.length,1);if(retryAfter==='5')assert.equal(delays[0],5000);else assert.ok(delays[0]>8000&&delays[0]<=10000);
+ }
+ let calls=0,timers=0;const api=transportContext({request:async()=>{calls++;return {status:429,headers:{'retry-after':'120'},bytes:new Uint8Array()};},connect:async()=>connection,cancelRequest:async()=>{}},undefined,{setTimeout:()=>{timers++;throw Error('Must not retry earlier than requested.');},clearTimeout});
+ assert.equal((await api.request('/api/v1/rollouts/e/artifacts/a/content')).status,429);assert.equal(calls,1);assert.equal(timers,0);
+});
+
+test('switching server cancels rate-limited artifact backoff instead of replaying it with the new session',async()=>{
+ const entered=deferred();let calls=0;
+ const api=transportContext({request:async()=>{calls++;return {status:429,headers:{'retry-after':'5'},bytes:new Uint8Array()};},connect:async()=>({...connection,apiUrl:'https://new.example.test/api/v1'}),cancelRequest:async()=>{}},undefined,{setTimeout:(fn:any)=>{entered.resolve();return setTimeout(fn,30000);},clearTimeout});
+ const controller=new AbortController(),pending=api.request('/api/v1/rollouts/e/artifacts/a/content',{signal:controller.signal});await entered.promise;
+ await api.connect({apiUrl:'https://new.example.test/api/v1',token:'synthetic-new-account'});await assert.rejects(pending,{name:'AbortError'});assert.equal(calls,1);
 });
 
 test('desktop transport keeps credentials inside connect and preserves binary response bytes',async()=>{

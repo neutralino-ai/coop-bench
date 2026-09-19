@@ -6,6 +6,7 @@
 - True stdio MCP `rules / wait / act`, backed by the same HTTP player API. Credentials stay outside tool arguments. Stable pending requests survive runner restarts; pagination never skips undelivered events; long polling and SSE are both supported.
 - Server-enforced 60-second required-decision windows remain fixed across invalid actions, reconnects and process restarts. Expired actions cannot beat a delayed sweeper. Official clocks are separate from benchmark truncation.
 - Admin desktop prioritizes invitation rooms and compact replay, with per-seat missing/partial/sealed trajectory indicators. Player desktop supports invitation deep links, explicit human/model resume, connection feedback, readable actions, score and deadline display. Windows, Mac Intel and Apple Silicon build configurations share the package version.
+- Read-only attachment downloads preserve the server's `Retry-After` response through desktop IPC and retry within a bounded budget. Switching accounts or servers cancels the pending retry; writes are not automatically retried by this UI transport.
 
 ## Evidence
 
@@ -16,18 +17,16 @@ Windows local verification (2026-09-20, Node 24.21.0):
 | Check | Result |
 | --- | --- |
 | Full test suite with real PostgreSQL enabled | **341 passed, 0 failed, 0 skipped** |
+| Follow-up desktop transport regression tests | **46 passed**, including numeric/date retry delays, exact attachment bytes and cancellation |
 | PostgreSQL authority, API, authentication and room tests (included above) | **18 passed** |
 | Packaged admin against SQLite / PostgreSQL | **46 / 46 passed** |
 | Packaged Player against SQLite / PostgreSQL | **14 / 14 passed** |
 | Packaged admin optional local mode | **14 passed** |
 | Replay layout at 1280×800 and 1440×900 | Screenshots inspected; no document scrolling required |
 
-Final packages were rebuilt after the runtime event-retention fix. Bundled engine build: `df1cf9a3efa36a3bfde9660a7eb1d8167058808ac4c61af8343d7514cf79b26e`.
+Bundled engine build: `df1cf9a3efa36a3bfde9660a7eb1d8167058808ac4c61af8343d7514cf79b26e`. The full-suite record above precedes the follow-up desktop retry fix; native CI runs the complete non-PostgreSQL suite on that final source, and its dedicated PostgreSQL job repeats the database integration tests.
 
-| Windows installer | SHA-256 |
-| --- | --- |
-| `Coop-Bench-0.9.0-win-x64.exe` | `9a20d74936a2ff564337e91879482d190cec3c766811f2714962c4e87452e374` |
-| `Coop-Bench-Player-0.9.0-win-x64.exe` | `dff025411eb237eaba4d1dddd27783b953744287ae3c41b35101eaa951d305d5` |
+The release workflow publishes only after PostgreSQL tests and packaged-client checks pass on Windows x64, Mac Intel and Mac Apple Silicon. Download installers and their generated `SHA256SUMS.txt` from [the GitHub release](https://github.com/neutralino-ai/coop-bench/releases/tag/v0.9.0). Locally rebuilt installers can have different bytes from CI installers; use the checksum shipped with the matching build.
 
 Raw evidence remains in ignored `artifacts/v09-release-tests.log`, `client-v09-packaged-{sqlite,pg}`, `player-v09-packaged-{sqlite,pg}` and `client-v09-packaged-local`. Real model traces and credentials are never committed. Mac Intel / Apple Silicon build jobs and a separate PostgreSQL CI job are configured; their live GitHub result is distinct from this Windows record. No physical Mac installation/Keychain acceptance is claimed here.
 

@@ -175,7 +175,11 @@ export class RemoteSession {
       }
       requireThat(epoch === this.epoch && !controller.signal.aborted, '连接已更换或请求已取消，旧响应已丢弃。', 'CANCELLED');
       const bytes = new Uint8Array(size); let offset = 0; for (const part of parts) { bytes.set(part, offset); offset += part.length; }
-      return { status: response.status, headers: { 'content-type': type, 'content-length': String(size) }, bytes };
+      // Retry-After is required by the renderer's bounded GET backoff. Dropping
+      // it made fast audit clients retry downloads before their budget refilled.
+      const retryAfter=response.headers.get('retry-after');
+      return { status: response.status, headers: { 'content-type': type, 'content-length': String(size),
+        ...(response.status===429&&retryAfter&&retryAfter.length<=128?{'retry-after':retryAfter}:{}) }, bytes };
     } catch (error) {
       if (timedOut) throw new ClientConnectionError('TIMEOUT', 'API 请求超时，请检查网络和服务器状态；请求不会自动重试。');
       if (controller.signal.aborted || epoch !== this.epoch || error?.name === 'AbortError') throw new ClientConnectionError('CANCELLED', '连接已更换或请求已取消，旧响应已丢弃。');

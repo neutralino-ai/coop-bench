@@ -81,6 +81,14 @@ test('redirects never forward a credential to the redirect destination',async t=
   assert.equal(session.pending.size,0);
 });
 
+test('rate-limited artifact reads preserve Retry-After through IPC without forwarding private headers',async t=>{
+  const f=await fixture(t,(req,res)=>{if(req.url.endsWith('/content')){res.writeHead(429,{'Content-Type':'application/json','Retry-After':'5','Set-Cookie':'private=must-not-escape','X-Private':'must-not-escape'});res.end('{"error":{"code":"RATE_LIMITED"}}');return true;}return false;});
+  const session=new RemoteSession({fetcher:fetch,store:memoryStore(f.apiUrl)});await session.connect({apiUrl:f.apiUrl,token:TOKEN_A});
+  const response=await session.request(request('artifact-retry','/api/v1/rollouts/e/artifacts/a/content'));
+  assert.equal(response.status,429);assert.equal(response.headers['retry-after'],'5');assert.equal(response.headers['set-cookie'],undefined);assert.equal(response.headers['x-private'],undefined);
+  assert.equal(f.requests.at(-1).authorization,`Bearer ${TOKEN_A}`);assert.equal(session.pending.size,0);
+});
+
 test('HTML interception and oversized declared/chunked responses are rejected, including artifact HTML',async t=>{
   const f=await fixture(t,(req,res)=>{
     if(req.url==='/api/v1/rollouts/html'||req.url==='/api/v1/rollouts/e/artifacts/html/content'){res.writeHead(200,{'Content-Type':'text/html'});res.end('<h1>intercepted</h1>');return true;}

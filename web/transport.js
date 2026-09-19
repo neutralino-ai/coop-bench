@@ -59,8 +59,12 @@ if(typeof document!=='undefined'){
    if(version!==generation||options.signal?.aborted)throw abortError();
    const response=await requestOnce(path,options);
    if(response.status!==429||(options.method??'GET').toUpperCase()!=='GET'||retry>=2)return response;
-   const seconds=Number(response.headers.get('retry-after'));
-   const ms=seconds>0?Math.min(15000,Math.max(1000,seconds*1000)):3200;
+   const retryAfter=response.headers.get('retry-after');
+   const advertised=retryAfter&&/^\d+$/.test(retryAfter)?Number(retryAfter)*1000:retryAfter?Date.parse(retryAfter)-Date.now():NaN;
+   const ms=Number.isNaN(advertised)?3200*(retry+1):Math.max(1000,advertised);
+   // Never retry earlier than the server asks. A long advertised pause exceeds
+   // this interactive budget, so return the 429 for a later explicit retry.
+   if(!Number.isFinite(ms)||ms>15000)return response;
    await response.body?.cancel();
    await new Promise((resolve,reject)=>{
     const id=crypto.randomUUID();let timer;

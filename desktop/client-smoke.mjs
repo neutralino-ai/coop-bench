@@ -59,9 +59,14 @@ export async function startClientFixture(dataDir) {
 }
 
 export async function runClientSmoke({ window, fixture, remote, dataDir, getCopied }) {
-  const apiReads=[],fetcher=remote.fetcher;let failDetail=false;
+  const apiReads=[],fetcher=remote.fetcher,artifactAttempts=[];let failDetail=false,artifactRetryAt=0;
   remote.fetcher=async(url,options)=>{
     const path=new URL(url).pathname+new URL(url).search;apiReads.push(path);
+    if(/\/artifacts\/[^/?]+\/content$/.test(path)){
+      artifactAttempts.push(Date.now());
+      if(!artifactRetryAt)artifactRetryAt=Date.now()+5000;
+      if(Date.now()<artifactRetryAt)return Response.json({error:{code:'RATE_LIMITED',message:'Synthetic artifact download cooldown'}},{status:429,headers:{'Retry-After':'5'}});
+    }
     if(/\/rollouts\/[^/?]+$/.test(path)){
       await new Promise(resolve=>setTimeout(resolve,800));
       if(failDetail){failDetail=false;return Response.json({error:{code:'SYNTHETIC_FAILURE',message:'Synthetic loading failure'}},{status:503});}
@@ -193,6 +198,7 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await run(() => document.querySelector('[data-download-artifact]').click());
   await wait(() => Promise.resolve(existsSync(join(dataDir, fixture.artifact.name))), 'Attachment was not downloaded.');
   await wait(() => Promise.resolve(readFileSync(join(dataDir, fixture.artifact.name)).equals(fixture.bytes)), 'Downloaded attachment differs.');
+  check(artifactAttempts.length>=2&&artifactAttempts.slice(1).every(at=>at>=artifactRetryAt),'artifact download honors server Retry-After across packaged IPC before retrying');
   checks.push('attachment download preserves exact bytes and SHA-256');
   await run(() => document.getElementById('copy-api').click());
   await wait(() => Promise.resolve(getCopied() === fixture.apiUrl), 'Copy API bridge failed.');
