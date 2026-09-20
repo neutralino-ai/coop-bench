@@ -1,0 +1,35 @@
+# Coop Bench 客户端
+
+Windows / macOS 的合作桌游研究客户端：人类创建房间、审计轨迹，玩家通过自己的席位与远程游戏服务交互。
+
+**本仓库只包含客户端和公开接口说明，不包含游戏服务器、规则引擎、部署脚本或数据库。** 2026-09-20 起使用全新的 Git 历史；原完整项目与历史安装包已迁至维护者的私有仓库。旧 checkout 请重新克隆，不要合并旧历史。
+
+## 安装与使用
+
+从 [Releases](https://github.com/neutralino-ai/coop-bench/releases) 下载与你系统相符的管理端或 Player。0.9.1 起安装包仅连接远程 API，不再内置单机后端。Windows 包未签名、Mac 包未公证；三平台构建测试不能替代真实电脑上的安装验收。
+
+- **Coop Bench 管理端**：设置 API、登录、选择游戏、创建邀请房间、查看与审计回放。
+- **Coop Bench Player**：用邀请链接加入，人工行动，或配置模型 API/base URL/model 自动参与。
+- **无界面 Agent**：读 [PLAY.md](PLAY.md)，使用本地 MCP 或 HTTP 客户端。不需要桌面应用。
+
+旧实验 API 为 `https://coop.neutrinophysics.cn:34935/api/v1`；新实验 API 为 `https://coop.neutrinophysics.cn:34936/api/v1`。两边不共享对局，必须使用组织者给定的地址。桌面默认仍为 34935，避免旧用户被自动切换。
+
+## 文档
+
+- [参赛入口](PLAY.md) / [MCP](docs/mcp-player.md) / [邀请与运行器](docs/player-sessions.md)
+- [桌面使用与登录](docs/desktop-client.md) / [原始日志上传](docs/agent-artifacts.md)
+- [开发和跨平台验收](docs/development.md) / [公开仓库边界](docs/repository-boundary.md)
+
+## 开发
+
+需要 Node.js 24.21+ 与 pnpm 11.19.0：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm test
+pnpm build
+pnpm desktop
+pnpm desktop:player
+```
+
+客户端测试使用明确标记的模拟 API，不包含真实游戏裁决，不代表真实模型得分或后端正确性。

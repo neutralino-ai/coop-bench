@@ -1,0 +1,9 @@
+{
+  "extends": "./build/electron-builder.json",
+  "appId": "org.coopbench.player",
+  "productName": "Coop Bench Player",
+  "directories": {"output": "release-player"},
+  "extraMetadata": {"name": "coop-bench-player", "main": "desktop/player-main.mjs"},
+  "protocols": [{"name": "Coop Bench invitation", "schemes": ["coopbench"]}],
+  "artifactName": "Coop-Bench-Player-${version}-${os}-${arch}.${ext}"
+}

@@ -1,0 +1,51 @@
+{
+  "appId": "org.coopbench.desktop",
+  "productName": "Coop Bench",
+  "copyright": "Copyright © 2026 Coop Bench contributors",
+  "asar": true,
+  "npmRebuild": false,
+  "directories": { "output": "release" },
+  "files": [
+    "desktop/main.mjs",
+    "desktop/preload.cjs",
+    "desktop/remote-session.mjs",
+    "desktop/update-client.mjs",
+    "desktop/player-main.mjs",
+    "desktop/player-preload.cjs",
+    "desktop/client-smoke.mjs",
+    "desktop/player-smoke.mjs",
+    "desktop/mock-api.mjs",
+    "runtime/coop-bench/client/player.mjs",
+    "runtime/coop-bench/web/**/*",
+    "runtime/coop-bench/build-manifest.json",
+    "package.json",
+    "!**/*.sqlite",
+    "!**/*.sqlite-*",
+    "!**/.env*",
+    "!**/connection.json",
+    "!**/node_modules/**/*"
+  ],
+  "extraMetadata": {
+    "name": "cooperative-boardgame-bench",
+    "main": "desktop/main.mjs"
+  },
+  "artifactName": "Coop-Bench-${version}-${os}-${arch}.${ext}",
+  "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "deleteAppDataOnUninstall": false
+  },
+  "mac": {
+    "category": "public.app-category.education",
+    "target": [
+      { "target": "dmg", "arch": ["x64", "arm64"] },
+      { "target": "zip", "arch": ["x64", "arm64"] }
+    ],
+    "hardenedRuntime": true
+  },
+  "publish": null
+}

@@ -1,0 +1,39 @@
+{
+  "name": "cooperative-boardgame-bench",
+  "version": "0.9.1",
+  "packageManager": "pnpm@11.19.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.mjs",
+  "author": "Coop Bench contributors",
+  "license": "UNLICENSED",
+  "description": "Remote cooperative board-game clients, player runtime, MCP bridge and auditable replay UI.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
+    "start": "node scripts/build.mjs && electron .",
+    "build": "node scripts/build.mjs",
+    "desktop": "node scripts/build.mjs && electron .",
+    "desktop:player": "node scripts/build.mjs && electron desktop/player-main.mjs",
+    "agent": "node scripts/player.mjs",
+    "mcp:player": "node scripts/mcp-play.mjs",
+    "test": "node --test test/*.test.ts",
+    "verify:package": "node scripts/verify-package.mjs",
+    "dist:win": "node scripts/build.mjs && electron-builder --config build/electron-builder.json --win nsis --x64",
+    "dist:mac": "node scripts/build.mjs && electron-builder --config build/electron-builder.json --mac dmg zip --x64 --arm64",
+    "dist:player:win": "node scripts/build.mjs && electron-builder --config build/player-electron-builder.json --win nsis --x64",
+    "dist:player:mac": "node scripts/build.mjs && electron-builder --config build/player-electron-builder.json --mac dmg zip --x64 --arm64"
+  },
+  "devDependencies": {
+    "electron": "44.4.1",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "@electron/asar": "3.4.1"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.6.5"
+  }
+}

@@ -1,0 +1,261 @@
+/* Focused human replay. No data from these combined audit views is sent to seats. */
+(() => {
+  const R = globalThis.CoopReplay;
+  let epoch = 0, episode = '', seats = {}, busy = false, controller;
+  let recording=null,recordingError='',recordingBusy=false,recordingAt=0,recordingEpisode='';
+  let readCredits=4, creditAt=Date.now();
+  const dialog = (id, title) => {
+    const box = node('dialog', 'audit-dialog'); box.id = id;
+    const heading = node('header','drawer-heading'); heading.append(node('h2','',title));
+    const close = node('button','icon-button','×'); close.type='button';close.setAttribute('aria-label','关闭');close.onclick=()=>box.close();heading.append(close);
+    const content=node('div','drawer-content');box.append(heading,content);document.body.append(box);return {box,content};
+  };
+  const library=dialog('library-dialog','选择对局'), create=dialog('create-dialog','创建对局'), evidence=dialog('evidence-dialog','完整记录与技术证据'), full=dialog('decision-dialog','本次决策的原始记录'), rules=dialog('rules-dialog','游戏规则'), recordingDialog=dialog('recording-dialog','本局轨迹收集状态');
+  library.content.append(document.querySelector('.library'));
+  create.content.append($('create-panel'));
+  const detail=$('detail'), timeline=document.querySelector('.replay-panel');
+  evidence.content.append($('episode-stats'),$('coverage-notice'),$('export-rollout'),$('copy-api'),document.querySelector('.audit-columns'));
+  const toolbar=node('div','focus-toolbar');
+  const addButton=(id,label,fn)=>{const b=node('button','button subtle',label);b.id=id;b.type='button';b.onclick=()=>{stopPlayback();fn();};toolbar.append(b);return b;};
+  addButton('open-library','对局记录',()=>library.box.showModal());
+  addButton('open-create','＋ 新对局',()=>{if(!state.token){$('auth-panel').hidden=false;return;}create.box.showModal();});
+  const openEvidence=()=>{evidence.box.showModal();if(!state.artifacts.length&&!state.artifactLoading)void loadArtifacts();if(!state.modelMessages.length&&!state.modelMessageLoading)void loadModelMessages();};
+  addButton('open-evidence','完整记录',openEvidence);
+  addButton('open-rules','游戏规则',showRules);
+  document.querySelector('.top-actions').prepend(toolbar);
+  const focus=node('section','focus-replay');focus.id='focus-replay';
+  const shared=node('div','shared-board');shared.id='shared-board';
+  const grid=node('div','player-grid');grid.id='player-grid';
+  const chat=node('div','focus-communication');chat.id='focus-communication';
+  focus.append(shared,grid,chat);detail.append(focus,timeline);
+  const title=node('strong','focus-step-title');title.id='focus-step-title';timeline.prepend(title);
+  const phase=node('span','focus-timing','手牌 / 可见信息：动作前');phase.id='focus-timing';document.querySelector('.episode-header-actions').prepend(phase);
+  const recordingButton=node('button','button subtle recording-summary','轨迹待核对');recordingButton.id='recording-summary';recordingButton.type='button';recordingButton.onclick=()=>{showRecording();void loadRecording(true);};document.querySelector('.episode-header-actions').prepend(recordingButton);
+  const more=node('button','button subtle','读取更多消息');more.id='focus-load-more';more.hidden=true;more.onclick=()=>load(true);evidence.content.prepend(more);
+
+  function clear() {
+    controller?.abort();epoch++;episode='';seats={};busy=false;document.body.dataset.audit='false';
+    recording=null;recordingError='';recordingBusy=false;recordingAt=0;recordingEpisode='';
+    for(const box of [library.box,create.box,evidence.box,full.box,rules.box,recordingDialog.box])if(box.open)box.close();
+    rules.content.replaceChildren();
+    grid.replaceChildren();shared.replaceChildren();chat.replaceChildren();full.content.replaceChildren();more.hidden=true;
+  }
+  async function load(all=false) {
+    const id=state.rollout?.summary.episodeId;if(!id||!state.token)return;
+    void loadRecording();
+    if(episode!==id){epoch++;episode=id;seats={};busy=false;}
+    if(busy)return;busy=true;grid.dataset.messages='loading';const serial=epoch,session=state.session;
+    controller=new AbortController();const signal=controller.signal;
+    const valid=()=>epoch===serial&&session===state.session&&state.rollout?.summary.episodeId===id;
+    // Bounded pages per click, streaming progress. Larger traces remain available
+    // in the paginated original-message viewer rather than freezing the renderer.
+    const selectedIndex=state.index,targets=R.snapshot(state.rollout,state.index).players;
+    for(const {player,decision} of targets){
+      const seat=seats[player]??(seats[player]={messages:[],bytes:0,after:-1,more:true,error:'',loading:true});
+      const available=()=>R.linkedMessages(seat.messages,decision,player).some(m=>m.kind==='model-output');
+      seat.loading=false;
+      if(seat.capped||!seat.more||!all&&(!decision||seat.error||available()))continue;
+      seat.loading=true;seat.error='';render();
+      try{
+        for(let page=0;page<5;page++){
+          // Use a small initial burst, then refill at the server's read budget.
+          // Only read seats needed at the selected step; never block the board.
+          readCredits=Math.min(4,readCredits+(Date.now()-creditAt)/3100);creditAt=Date.now();
+          if(readCredits<1){await new Promise(resolve=>setTimeout(resolve,(1-readCredits)*3100));readCredits=1;creditAt=Date.now();}
+          if(!valid())return;readCredits--;
+          const data=await request(`/rollouts/${encodeURIComponent(id)}/messages?playerId=${encodeURIComponent(player)}&after=${seat.after}&limit=100`,undefined,{signal});
+          if(!valid())return;
+          if(!Array.isArray(data.messages))throw Error('消息响应不完整');
+          const next=data.nextAfter;
+          if(data.hasMore&&(!Number.isInteger(next)||next<=seat.after))throw Error('消息分页游标未前进');
+          const bytes=JSON.stringify(data.messages).length;
+          if(seat.bytes+bytes>8*1024*1024||seat.messages.length+data.messages.length>2000){seat.capped=true;seat.more=false;break;}
+          seat.messages.push(...data.messages);seat.bytes+=bytes;seat.after=Number.isInteger(next)?next:seat.after;seat.more=!!data.hasMore;
+          seat.completion=data.completion;render();if(!seat.more||!all&&available())break;
+        }
+      }catch(error){if(valid())seat.error=error.status===429?'读取频率已达上限；稍后在完整记录中重试。':'消息读取失败，可在完整记录中重试。';}
+      finally{if(valid()){seat.loading=false;render();}}
+    }
+    if(valid()){busy=false;grid.dataset.messages='ready';more.hidden=!Object.values(seats).some(s=>s.more||s.error);more.textContent=Object.values(seats).some(s=>s.error)?'重试读取消息':'读取更多消息';render();if(state.index!==selectedIndex)void load();}
+  }
+  const button=(label,fn)=>{const b=node('button','text-button',label);b.type='button';b.onclick=()=>{stopPlayback();fn();};return b;};
+  function showOriginal(p) {
+    const matches=R.linkedMessages(seats[p.player]?.messages??[],p.decision,p.player);
+    full.content.replaceChildren(node('h3','',`${p.player} · ${p.decision ? `第 ${p.decision.seq} 步`:'尚未行动'}`));
+    full.content.append(node('p','', '消息由运行器上传，按本动作的观察编号关联；不是服务器核验的模型内部过程。'));
+    if(p.decision?.decisionSummary)full.content.append(node('h3','','行动时的决策简述'),node('pre','readable-original',p.decision.decisionSummary));
+    const reasoning=R.reasoning(matches);
+    for(const item of reasoning)full.content.append(node('h3','',item.label),node('pre','readable-original',item.text));
+    if(!reasoning.length)full.content.append(node('p','muted','本动作尚无可读的 reasoning 原文。'));
+    full.content.append(node('h3','','动作前精确输入'),node('pre','readable-original',p.decision?.observed?JSON.stringify(p.decision.observed,null,2):'没有记录动作前精确输入。'));
+    for(const m of matches){const details=node('details','raw-details');details.append(node('summary','',`${m.kind??'message'} · ${m.sequence}`),node('pre','readable-original',JSON.stringify(m,null,2)));full.content.append(details);}
+    if(!matches.length)full.content.append(node('p','muted','尚未载入可关联的原始消息。整局未关联消息见“完整记录”。'));
+    if(!full.box.open)full.box.showModal();
+  }
+  function cardRow(cards, unknownText) {
+    const row=node('div','audit-hand');
+    if(!Array.isArray(cards)){row.append(node('p','muted',unknownText??'这个时点未记录手牌'));return row;}
+    if(!cards.length)row.append(node('p','muted','手牌已空'));
+    for(const [i,card] of cards.entries()){
+      const tile=node('div','audit-card');const c=typeof card==='object'&&card!==null?card:{value:card};
+      // Class names come only from this allowlist; model text never becomes markup.
+      const known=['white','red','blue','yellow','green','solar','lunar'].includes(c.color);if(known)tile.className+=' '+c.color;
+      tile.append(node('span','audit-card-color',c.color||c.suit?R.color(c.color??c.suit):c.cut?'已剪':' '),node('strong','',c.value??c.rank??'?'),node('small','',`${i+1}`));
+      tile.title=`第 ${i+1} 张 · ${R.cardText(c)}`;row.append(tile);
+    }
+    return row;
+  }
+  function compact(value) {
+    if(value===null||value===undefined)return '未记录';
+    if(Array.isArray(value))return value.map(v=>typeof v==='object'?R.cardText(v):String(v)).join(' · ')||'无';
+    if(typeof value==='object')return Object.entries(value).map(([k,v])=>`${R.color(k)} ${typeof v==='object'?JSON.stringify(v):v}`).join(' · ');
+    return String(value);
+  }
+  function renderShared(snap) {
+    shared.replaceChildren();const view=snap.views[state.rollout.players[0]]?.view??snap.players.find(p=>p.observation)?.observation?.view;
+    if(!view){shared.append(node('span','','此时点的棋盘未记录'));return;}
+    shared.append(node('span','shared-label','公共棋盘'));
+    if(view.fireworks){
+      const fireworks=node('div','firework-row');for(const [c,v] of Object.entries(view.fireworks))fireworks.append(node('span',`firework ${['white','red','blue','yellow','green'].includes(c)?c:''}`,`${R.color(c)} ${v}`));shared.append(fireworks);
+      const hints=node('div',`hint-counter${view.hints===0?' exhausted':''}`);hints.id='hint-counter';
+      hints.append(node('strong','',`剩余提示 ${view.hints} / 8`));
+      const tokens=node('span','hint-tokens');tokens.setAttribute('aria-hidden','true');
+      for(let i=0;i<8;i++)tokens.append(node('i',i<view.hints?'available':''));hints.append(tokens);
+      hints.title='提示消耗 1 枚；弃牌或成功打出 5 恢复 1 枚，最多 8 枚。0 枚不能提示，8 枚不能弃牌。';
+      shared.append(node('strong','',`${Object.values(view.fireworks).reduce((a,b)=>a+Number(b),0)} / 25`),hints,node('span','board-counts',`失误 ${view.errors} / 3 · 牌库 ${view.deckCount}`));
+    }else if(state.rollout.summary.gameId==='take-time'){
+      const slots=node('div','clock-overview');for(let n=1;n<=6;n++){const cards=(view.placements??[]).filter(p=>p.position===n);slots.append(node('span','',`${n}号位：${cards.length?cards.map(c=>c.value??'?').join(' + '):'空'}`));}shared.append(slots,node('span','',phaseNames[view.phase]??view.phase??''));
+    }else{
+      const keys=['phase','current','level','hints','lives','piles','stacks','trick','tasks','position','altitude','speed'];
+      for(const k of keys.filter(k=>view[k]!==undefined).slice(0,5))shared.append(node('span','',`${labels[k]??k}：${compact(view[k])}`));
+    }
+    shared.append(button('展开棋盘',()=>{openEvidence();document.querySelector('.board-panel').scrollIntoView({block:'start'});}));
+  }
+  // Counts and completion declarations are small metadata. Do not download the
+  // full message streams just to report whether each seat uploaded its trace.
+  async function loadRecording(force=false) {
+    const id=state.rollout?.summary.episodeId;if(!id||!state.token)return;
+    if(recordingEpisode!==id){recordingEpisode=id;recording=null;recordingError='';recordingAt=0;recordingBusy=false;}
+    if(recordingBusy||!force&&Date.now()-recordingAt<15000)return;
+    recordingBusy=true;const session=state.session;renderRecording();
+    try{
+      const data=await request(`/rollouts/${encodeURIComponent(id)}/messages`);
+      if(session!==state.session||state.rollout?.summary.episodeId!==id)return;
+      if(!Array.isArray(data.seats))throw Error('Invalid recording summary');
+      recording=data.seats;recordingError='';recordingAt=Date.now();
+    }catch{if(session===state.session&&state.rollout?.summary.episodeId===id){recordingError='轨迹状态读取失败，点击重试。';recordingAt=Date.now();}}
+    finally{if(session===state.session&&state.rollout?.summary.episodeId===id){recordingBusy=false;renderRecording();}}
+  }
+  function recordingLabel(seat) {
+    if(!seat)return '尚未核对';
+    if(!seat.messageCount)return '暂无模型 / 工具消息';
+    if(!seat.completion)return '已收到消息 · 未封存';
+    return seat.completion.completeness==='complete'?'已封存 · 声明完整':'已封存 · 部分记录';
+  }
+  function renderRecording() {
+    const sealed=recording?.filter(s=>s.completion).length??0,total=state.rollout?.players.length??0;
+    recordingButton.textContent=recordingError?'轨迹状态重试':recording?`轨迹 ${sealed}/${total} 席已封存`:recordingBusy?'核对轨迹…':'轨迹待核对';
+    recordingButton.dataset.state=recordingError?'error':recording?.some(s=>!s.messageCount||!s.completion||s.completion.completeness!=='complete')?'partial':recording?'complete':'loading';
+    recordingButton.title='封存与完整性由运行器声明，不代表全部内部思考可得。点击查看各席位收集范围。';
+    if(recordingDialog.box.open)showRecording();
+  }
+  function showRecording() {
+    const content=recordingDialog.content;content.replaceChildren(node('p','','服务端游戏事件与客户端模型消息分别保存。以下状态描述本局已上传的消息；完整性和推理可用性由运行器声明，不等于已核验全部内部思考。'));
+    if(recordingError)content.append(node('p','notice error',recordingError));
+    if(!recording)content.append(node('p','muted',recordingBusy?'正在读取各席位收集状态…':'尚未读取轨迹状态。'));
+    for(const player of state.rollout?.players??[]){const seat=recording?.find(s=>s.playerId===player),completion=seat?.completion,section=node('section','recording-seat');section.dataset.player=player;
+      section.append(node('h3','',`玩家 ${player.replace(/^p/,'')} · ${recordingLabel(seat)}`),node('p','',`服务器已收到 ${seat?.messageCount??0} 条消息`));
+      if(completion){section.append(node('p','',`采集范围：${completion.scope}`),node('p','',`推理记录：${({'provided':'有返回的原文','summary-only':'仅摘要','not-provided':'未提供','redacted':'已隐藏'})[completion.reasoningAvailability]??'未声明'}`));
+        if(completion.unavailable?.length)section.append(node('p','muted',`未采集：${completion.unavailable.join('；')}`));}
+      content.append(section);
+    }
+    const retry=node('button','button subtle',recordingBusy?'正在刷新…':'刷新收集状态');retry.disabled=recordingBusy;retry.onclick=()=>void loadRecording(true);content.append(retry);
+    if(!recordingDialog.box.open)recordingDialog.box.showModal();
+  }
+  function showRules() {
+    rules.content.replaceChildren();
+    const choices=node('select','rules-game-select');choices.id='rules-game-select';choices.setAttribute('aria-label','选择游戏规则');
+    const games=[...state.games];const saved=state.rollout?.metadata;
+    if(saved&&!games.some(g=>g.id===state.rollout.summary.gameId))games.unshift({...saved,id:state.rollout.summary.gameId});
+    if(!games.length){rules.content.append(node('p','','连接服务器后可查看已支持游戏的规则。'));rules.box.showModal();return;}
+    for(const game of games){const option=node('option','',game.name??game.id);option.value=game.id;choices.append(option);}
+    choices.value=state.rollout?.summary.gameId??$('create-game').value??games[0].id;
+    const body=node('div','readable-rules');rules.content.append(choices,body);
+    const render=()=>{
+      const game=choices.value===state.rollout?.summary.gameId&&saved?saved:games.find(g=>g.id===choices.value);if(!game)return;
+      body.replaceChildren(node('h3','',game.name??choices.value));
+      if(choices.value===state.rollout?.summary.gameId)body.append(node('p','muted','当前对局 · '+(state.rollout.summary.scenarioId??'')));
+      const instructions=choices.value==='hanabi'?[
+        '目标：合作将五种颜色各从 1 依次打到 5；各堆顶数字相加为得分，满分 25。',
+        '看得见队友的牌，看不见自己的牌。2–3 人每人 5 张，4–5 人每人 4 张。自己的牌只保留收到的提示信息。',
+        '轮到你时只做一件事：提示、打出一张牌，或弃掉一张牌。出牌 / 弃牌后有牌就补一张。',
+        '提示标记全队共用：开始 8 枚，每次提示消耗 1 枚，0 枚时不能提示。弃牌或成功打出一张 5 恢复 1 枚，最多 8 枚；8 枚时不能弃牌。',
+        '提示只能指定一位队友的一种颜色或一个数字，必须指出全部匹配的牌。本实现采用 2019 法文版，允许没有匹配牌的空提示。禁止额外聊天和重排手牌。',
+        '错误出牌计 1 次失误，累计 3 次立即失败。牌库最后一张被抽走后，每人再行动一次，包括抽最后一张的人；提前完成 25 分则直接结束。'
+      ]:game.rulesSummary??[];
+      const list=node('ol');for(const text of instructions)list.append(node('li','',text));body.append(list);
+      const implementation=game.implementation;
+      if(implementation){const details=node('details','raw-details');details.append(node('summary','','实现范围与未覆盖内容'),structure(implementation));body.append(details);}
+      if(game.scenarios?.length){const details=node('details','raw-details');details.append(node('summary','','可用场景 / 关卡'));for(const scenario of game.scenarios)details.append(node('p','',`${scenario.name}：${scenario.description??''}`));body.append(details);}
+      body.append(node('h3','','规则来源'));
+      for(const source of game.sources??[]){let url;try{url=new URL(source.url);if(url.protocol!=='https:'||url.username||url.password)continue;}catch{continue;}
+        const row=node('p','rule-source',source.title??url.hostname);row.append(button('复制规则链接',()=>void transport.copyText(url.href).then(()=>message('已复制规则链接，可在浏览器查看原文。')).catch(error=>message(error.message,true))));body.append(row);
+      }
+    };choices.onchange=render;render();rules.box.showModal();
+  }
+  function renderPlayer(p,snap) {
+    const actor=snap.frame?.playerId===p.player;
+    const panel=node('article',`player-panel${actor?' acting':''}`);panel.dataset.player=p.player;
+    const head=node('div','player-heading');head.append(node('h2','',`玩家 ${p.player.replace(/^p/,'')}`),node('span','player-turn',actor?'本步行动者':'观察 / 等待'));panel.append(head);
+    const game=state.rollout.summary.gameId;
+    const hand=node('section','player-hand');hand.append(node('h3','',game==='sky-team'?'手中的骰子':game==='bomb-busters'?'面前的电线':game==='magic-maze'?'行动能力':'手里是什么牌'),node('span','audit-scope',game==='hanabi'?'审计可见 · 玩家不见牌面':'这个时点已记录的信息'));
+    const backs=p.observation?.view?.cardBacks?.[p.player]?.hand;
+    hand.append(cardRow(p.actual??(backs?.map(color=>({color}))),p.observation?'牌面未知 / 本游戏没有手牌':'历史视角缺失'));panel.append(hand);
+    const visibility=node('section',`player-visibility${game==='hanabi'?' hanabi-knowledge':''}`);visibility.append(node('h3','',game==='hanabi'?'自身提示 · 可见队友牌面':'它当时能看到什么'));
+    if(state.rollout.summary.gameId==='hanabi'&&Array.isArray(p.hand)){
+      visibility.append(node('p','', '队友牌面与公共棋盘；自己的牌只知道提示。'));
+      const knowledge=node('div','knowledge-row');
+      for(const c of p.hand){
+        const k=node('div','knowledge-card'),colors=c.possibleColors??[],values=c.possibleValues??[];
+        const colorLabel=colors.length===5?'颜色未知':colors.length===4?`非${R.color(['white','red','blue','yellow','green'].find(v=>!colors.includes(v)))}`:colors.length?colors.map(R.color).join(' / '):'未记录';
+        const valueLabel=values.length===5?'1–5':values.length===4?`非 ${[1,2,3,4,5].find(v=>!values.includes(v))}`:values.join('/')||'?';
+        k.title=`可能颜色：${colors.map(R.color).join('、')}；可能数字：${values.join('、')}`;
+        k.append(node('span','',colorLabel),node('strong','',valueLabel));knowledge.append(k);
+      }visibility.append(knowledge);
+    }else if(p.observation){
+      const v=p.observation.view;
+      const text=state.rollout.summary.gameId==='take-time'?v.hand===null?'太阳 / 月亮牌背及公开放牌位置；尚未看自己的点数。':'自己的手牌、公开牌背与放牌位置；队友暗牌点数未知。':`记录的合法视角 · 可选动作：${(p.observation.legalActions??[]).map(a=>a.type).join('、')||'无'}`;
+      visibility.append(node('p','',text));
+    }else visibility.append(node('p','muted','未保存这个时点的合法视角。'));
+    visibility.append(button(p.exact?'动作绑定的真实输入 ↗':'查看已录制的可见状态 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}));panel.append(visibility);
+    const decision=node('section','player-decision');
+    const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',p.decisionIndex===state.index?'这一步怎么想':'最近一次决策'),node('span','decision-step',p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
+    const matched=R.linkedMessages(seats[p.player]?.messages??[],p.decision,p.player),thoughts=R.reasoning(matched);
+    const reasoning=thoughts.length?thoughts.map(t=>t.text).join('\n'):p.decision?.decisionSummary;
+    decision.append(node('span','thinking-source',thoughts.length?`${thoughts[0].label} · 客户端来源未核验`:p.decision?.decisionSummary?'决策简述 · 非完整 thinking':'没有已记录的决策简述'));
+    const status=seats[p.player];
+    decision.append(node('p','thinking-excerpt',reasoning??(p.decision?status?.more!==false?'正在查找该步的模型记录…':'该步没有可读的思考记录。':'还没有轮到它行动。')));
+    if(p.decision&&(status?.error||status?.loading||status?.more||status?.capped))decision.append(node('span','trace-status',status.error|| (status.capped?'大轨迹 · 在完整记录中分页查看':status.loading?'正在读取对应消息…':'已载入部分消息 · 完整记录中可继续读取')));
+    decision.append(button('完整输入 / 思考 / 消息 ↗',()=>showOriginal(p)));panel.append(decision);
+    const action=node('section',`player-action${p.decision?.error?' rejected-action':''}`);action.append(node('span','action-label',p.decisionIndex===state.index?'做了什么':'上次做了什么'),node('strong','action-description',p.decision?R.actionText(p.decision):'等待行动'));
+    if(p.decision?.error)action.append(node('span','','服务器拒绝，未生效'));
+    if(p.decision&&p.decisionIndex!==state.index)action.append(button('跳到这一步',()=>{stopPlayback();selectFrame(p.decisionIndex);}));panel.append(action);return panel;
+  }
+  function render() {
+    if(!state.rollout)return;document.body.dataset.audit='true';const snap=R.snapshot(state.rollout,state.index);
+
+    $('open-create').hidden=state.identity?.role==='auditor';
+    setText('focus-timing',snap.frame?.action?'手牌 / 可见信息：动作前':'手牌 / 可见信息：此时点');
+    setText('focus-step-title',`${snap.frame?.seq===0?'初始局面':`第 ${snap.frame?.seq??0} 步`} · ${snap.frame?.playerId??'系统'} · ${R.actionText(snap.frame)}`);
+    grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);
+    const communications=state.rollout.frames.slice(0,state.index+1).map(f=>({frame:f,text:publicCommunication(f)})).filter(m=>m.text);
+    const last=communications.at(-1);chat.replaceChildren(node('strong','','公开交流'),node('span','chat-preview',last?`${last.frame.playerId} · ${last.text}`:'截至这一步还没有公开交流。'));
+    chat.append(button(`全部 ${communications.length} 条 ↗`,()=>{openEvidence();$('communication-panel').scrollIntoView({block:'start'});}));
+  }
+  window.CoopFocus={clear,load,render,selected(){controller?.abort();epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();if(evidence.box.open)evidence.box.close();full.content.replaceChildren();}};
+  window.addEventListener('keydown',event=>{
+    if(!state.rollout||document.querySelector('dialog[open]')||['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName))return;
+    if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();stopPlayback();selectFrame(state.index+(event.key==='ArrowRight'?1:-1));}
+  });
+  if(state.rollout){render();void load();}
+})();

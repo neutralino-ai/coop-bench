@@ -1,0 +1,155 @@
+name: Remote clients
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clients-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-2025
+            artifact: windows-x64
+            build-args: --win nsis --x64
+            executable: release/win-unpacked/Coop Bench.exe
+            player-executable: release-player/win-unpacked/Coop Bench Player.exe
+            asar: release/win-unpacked/resources/app.asar
+            player-asar: release-player/win-unpacked/resources/app.asar
+            arch: x64
+          - name: macOS Intel
+            os: macos-15-intel
+            artifact: macos-x64
+            build-args: --mac dmg zip --x64
+            executable: release/mac/Coop Bench.app/Contents/MacOS/Coop Bench
+            player-executable: release-player/mac/Coop Bench Player.app/Contents/MacOS/Coop Bench Player
+            asar: release/mac/Coop Bench.app/Contents/Resources/app.asar
+            player-asar: release-player/mac/Coop Bench Player.app/Contents/Resources/app.asar
+            arch: x64
+          - name: macOS Apple Silicon
+            os: macos-15
+            artifact: macos-arm64
+            build-args: --mac dmg zip --arm64
+            executable: release/mac-arm64/Coop Bench.app/Contents/MacOS/Coop Bench
+            player-executable: release-player/mac-arm64/Coop Bench Player.app/Contents/MacOS/Coop Bench Player
+            asar: release/mac-arm64/Coop Bench.app/Contents/Resources/app.asar
+            player-asar: release-player/mac-arm64/Coop Bench Player.app/Contents/Resources/app.asar
+            arch: arm64
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: '11.19.0'
+          run_install: false
+          cache: true
+      - name: Install locked client dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Client unit and public-boundary tests
+        run: pnpm test
+      - name: Build remote-only client runtime
+        run: pnpm build
+      - name: Exercise desktop against synthetic mock API
+        timeout-minutes: 3
+        run: pnpm exec electron . --client-smoke-test --data-dir=artifacts/ci-client-smoke
+      - name: Require client acceptance report
+        run: node -e "const r=require('./artifacts/ci-client-smoke/client-smoke-result.json');if(!r.ok)throw Error('Client smoke failed');console.log(r.checks.length+' mock API/UI checks passed')"
+      - name: Package management client
+        run: pnpm exec electron-builder --config build/electron-builder.json ${{ matrix.build-args }} --publish never
+      - name: Audit management package file boundary
+        run: node scripts/verify-package.mjs "${{ matrix.asar }}"
+      - name: Verify actual packaged management client with mock API
+        timeout-minutes: 3
+        run: node desktop/ci-client-smoke.mjs "${{ matrix.executable }}" artifacts/ci-packaged-smoke "${{ matrix.arch }}"
+      - name: Package Player client
+        run: pnpm exec electron-builder --config build/player-electron-builder.json ${{ matrix.build-args }} --publish never
+      - name: Audit Player package file boundary
+        run: node scripts/verify-package.mjs "${{ matrix.player-asar }}"
+      - name: Verify actual packaged Player with mock API
+        timeout-minutes: 3
+        run: node desktop/ci-player-smoke.mjs "${{ matrix.player-executable }}" artifacts/ci-player-smoke "${{ matrix.arch }}"
+      - name: Upload remote-only installers
+        uses: actions/upload-artifact@v6
+        with:
+          name: coop-bench-${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release-player/*.exe
+            release-player/*.dmg
+            release-player/*.zip
+      - name: Upload synthetic client evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: synthetic-client-${{ matrix.artifact }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            artifacts/ci-client-smoke/client-smoke-result.json
+            artifacts/ci-client-smoke/*.png
+            artifacts/ci-client-smoke/replay-layout.json
+            artifacts/ci-packaged-smoke/client-smoke-result.json
+            artifacts/ci-packaged-smoke/*.png
+            artifacts/ci-packaged-smoke/replay-layout.json
+            artifacts/ci-player-smoke/player-smoke-result.json
+            artifacts/ci-player-smoke/*.png
+
+  publish:
+    name: Publish verified remote clients
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: coop-bench-*
+          path: dist
+          merge-multiple: true
+      - name: Verify version and all native installers
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync,existsSync,writeFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const version=JSON.parse(readFileSync('package.json')).version;
+          if(process.env.GITHUB_REF_NAME!=='v'+version)throw Error('Tag/version mismatch');
+          const files=['release','release-player'].flatMap(dir=>['win-x64.exe','mac-x64.dmg','mac-arm64.dmg','mac-x64.zip','mac-arm64.zip'].map(s=>[dir,`Coop-Bench-${dir==='release-player'?'Player-':''}${version}-${s}`]));
+          for(const [d,n] of files)if(!existsSync(`dist/${d}/${n}`))throw Error('Missing installer '+n);
+          writeFileSync('dist/release/SHA256SUMS.txt',files.map(([d,n])=>createHash('sha256').update(readFileSync(`dist/${d}/${n}`)).digest('hex')+'  '+n).join('\n')+'\n');
+          NODE
+      - name: Publish after all platform and package-boundary checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/release/*.exe dist/release/*.dmg dist/release/*.zip dist/release-player/*.exe dist/release-player/*.dmg dist/release-player/*.zip dist/release/SHA256SUMS.txt --verify-tag --title "Coop Bench ${GITHUB_REF_NAME#v}" --notes-file "docs/release-${GITHUB_REF_NAME#v}.md"
