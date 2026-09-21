@@ -15,7 +15,7 @@ export class MinimalAgent {
     this.#key=apiKey;this.#url=u.href.replace(/\/$/,'')+'/chat/completions';this.#model=model;this.#fetch=fetchImpl;
   }
   async decide(context,{signal,runtime}) {
-    const messages=runtime.get('modelHistory')??[{role:'system',content:'You are one player in a cooperative board game. Obey the supplied rules and information restrictions. Only use your seat observations. Every unseen visible event is included in observation.updates. Choose your own action, never infer access to hidden state. Call act with a JSON action from legalActions, or wait when strategic waiting is legal. No side-channel communication. Operational deadline is 60 seconds; waiting does not extend it.'}];
+    const messages=runtime.get('modelHistory')??[{role:'system',content:'You are one player in a cooperative board game. Use only the supplied API rules, even if this game differs from familiar rules. Only use your seat observations. Every unseen visible event is included in observation.updates. Choose your own action, never infer access to hidden state. Call act with a JSON action from legalActions, or wait when strategic waiting is legal. No side-channel communication. Obey observation.control.deadlineAt and the server decision budget; waiting does not extend it.'}];
     const pending=runtime.get('modelPendingTools');
     if(pending){for(const call of pending)messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(call.function.name==='wait'?{waiting:true}:context.lastActionResult??{accepted:false,error:{code:'NO_RECEIPT',message:'No accepted action receipt is available.'}})});runtime.put('modelPendingTools',null);}
     messages.push({role:'user',content:JSON.stringify(context)});

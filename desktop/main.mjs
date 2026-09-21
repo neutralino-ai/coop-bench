@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { ConnectionStore, RemoteSession, publicConnectionError } from './remote-session.mjs';
 import { UpdateClient } from './update-client.mjs';
 import { LobbyPlayer } from './lobby-player.mjs';
+import { HostSeats } from './host-seats.mjs';
+import { PlayerRuntime,MinimalAgent,invitation } from '../runtime/coop-bench/client/player.mjs';
 
 // This public client contains no local game engine. All game decisions are
 // verified by the configured remote API. Synthetic smoke fixtures are UI-only.
@@ -16,7 +18,10 @@ import { LobbyPlayer } from './lobby-player.mjs';
   const dataDir = argument ? resolve(argument) : join(app.getPath('appData'), 'Coop Bench Client');
   if (smoke && !argument) throw new Error('Client smoke test requires an isolated --data-dir.');
   mkdirSync(dataDir, { recursive: true }); app.setPath('userData', dataDir); app.setName('Coop Bench');
-  let window, remote, fixture, copiedText, updater, player, quitting=false;
+  let window, remote, fixture, copiedText, updater, player, hostSeats, quitting=false, pendingInvitation='';
+  function receiveInvitation(value){try{invitation(value);pendingInvitation=value;if(window&&!window.webContents.isLoading())window.webContents.send('coop:invitation',value);}catch{}}
+  for(const arg of process.argv)if(arg.startsWith('coopbench:'))receiveInvitation(arg);
+  app.on('open-url',(event,url)=>{event.preventDefault();receiveInvitation(url);window?.show();window?.focus();});
   const report = value => writeFileSync(join(dataDir, 'client-smoke-result.json'), JSON.stringify(value, null, 2));
   const trusted = url => { try { const u = new URL(url); return u.protocol === 'coop:' && u.host === 'app' && !u.username && !u.password && ['/', '/index.html'].includes(u.pathname); } catch { return false; } };
   function validateSender(event) {
@@ -30,7 +35,8 @@ import { LobbyPlayer } from './lobby-player.mjs';
     const apiSession = session.fromPartition('coop-api');
     remote = new RemoteSession({ fetcher: (url, options) => apiSession.fetch(url, options), store: new ConnectionStore(join(dataDir, 'remote-connection.json'), safeStorage) });
     player = new LobbyPlayer({remote,directory:join(dataDir,'lobby-seats'),preload:join(here,'player-preload.cjs'),show:!smoke});
-    Object.assign(assets,{'/lobby.js':'lobby.js','/player.html':'player.html','/player.js':'player.js','/player.css':'player.css'});
+    hostSeats=new HostSeats({remote,directory:join(dataDir,'host-seats'),encryption:safeStorage,Runtime:PlayerRuntime,Agent:MinimalAgent});
+    Object.assign(assets,{'/room-seats.js':'room-seats.js','/lobby.js':'lobby.js','/player.html':'player.html','/player.js':'player.js','/player.css':'player.css'});
     if (smoke) {
       const { startClientFixture } = await import('./client-smoke.mjs');
       fixture = await startClientFixture(dataDir);
@@ -52,9 +58,11 @@ import { LobbyPlayer } from './lobby-player.mjs';
       'update-info': () => updater.info(), 'update-check': () => updater.check(),
       'update-download': () => updater.download(), 'update-install': () => updater.install(),
       'open-player': input => player.open(input),
-      connect: async input => {await player.close();return remote.connect(input);}, login: async input => {await player.close();return remote.login(input);},
-      'set-password': input => remote.setPassword(input), 'get-account': () => remote.getAccount(), disconnect: async () => {await player.close();return remote.logout();},
-      request: input => remote.request(input), 'cancel-request': id => { if (typeof id === 'string') remote.cancel(id); },
+      'incoming-invitation':()=>{const value=pendingInvitation;pendingInvitation='';return value;},
+      'host-seat': async ({name,input}={})=>{if(!['key','start','status'].includes(name)||JSON.stringify(input).length>65536)throw Error('无效席位操作。');return hostSeats[name](input);},
+      connect: async input => {await hostSeats.close();await player.close();return remote.connect(input);}, login: async input => {await hostSeats.close();await player.close();return remote.login(input);},
+      'set-password': input => remote.setPassword(input), 'get-account': () => remote.getAccount(), disconnect: async () => {await hostSeats.close();await player.close();return remote.logout();},
+      request: async input => {const epoch=remote.epoch,response=await remote.request(input);if(epoch===remote.epoch)await hostSeats.capture(input,response);return response;}, 'cancel-request': id => { if (typeof id === 'string') remote.cancel(id); },
       'copy-text': text => { if (typeof text !== 'string' || text.length > 65536) throw new Error('复制内容过大。'); if (smoke) copiedText = text; else clipboard.writeText(text); },
     })) ipcMain.handle(`coop:${name}`, async (event, input) => {
       validateSender(event);
@@ -82,14 +90,14 @@ import { LobbyPlayer } from './lobby-player.mjs';
     await window.loadURL('coop://app/');
     if (smoke) {
       const { runClientSmoke } = await import('./client-smoke.mjs');
-      const result = await runClientSmoke({ window, fixture, remote, player, dataDir, getCopied: () => copiedText });
+      const result = await runClientSmoke({ window, fixture, remote, player, hostSeats, dataDir, getCopied: () => copiedText });
       report({ ...result, packaged: app.isPackaged, platform: process.platform, arch: process.arch, version: app.getVersion() });
       await fixture.close(); remote.invalidate(); app.quit();
     }
   }
-  app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
+  app.on('second-instance', (_event,argv) => {for(const arg of argv)if(arg.startsWith('coopbench:'))receiveInvitation(arg);if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', event => { remote?.invalidate(); updater?.stop();if(player?.runtime&&!quitting){event.preventDefault();quitting=true;player.close().finally(()=>app.quit());} });
+  app.on('before-quit', event => { updater?.stop();if(!quitting){event.preventDefault();quitting=true;Promise.all([player?.close(),hostSeats?.close()]).finally(()=>{remote?.invalidate();app.quit();});} });
   main().catch(async error => {
     if (smoke) report({ ok: false, error: String(error), stack: error.stack,
       ui: window ? await window.webContents.executeJavaScript(`Object.fromEntries(['message','episode-title','model-message-status','model-messages','artifacts'].map(id=>[id,document.getElementById(id)?.textContent?.slice(0,1000)]))`).catch(() => null) : null });

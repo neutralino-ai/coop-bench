@@ -10,6 +10,9 @@ async function invoke(channel, input) {
 }
 contextBridge.exposeInMainWorld('coopDesktop', Object.freeze({
   openPlayer: input => invoke('coop:open-player', input),
+  hostSeat: (name,input) => invoke('coop:host-seat',{name,input}),
+  incomingInvitation:()=>invoke('coop:incoming-invitation'),
+  onInvitation:callback=>ipcRenderer.on('coop:invitation',(_event,value)=>callback(value)),
   updateInfo: () => invoke('coop:update-info'),
   checkUpdate: () => invoke('coop:update-check'),
   downloadUpdate: () => invoke('coop:update-download'),

@@ -99,6 +99,7 @@ export async function startMockApi() {
         assets: [{ name: updateName, size: updateBytes.length, digest: `sha256:${updateDigest}`, browser_download_url: `${REPOSITORY}/releases/download/v99.0.0/${updateName}` }] });
       if (path === '/_mock/update/redirect') { res.writeHead(302, { Location: 'https://release-assets.githubusercontent.com/synthetic-installer' }); return res.end(); }
       if (path === '/_mock/update/content') return res.end(updateBytes);
+      if(path==='/model/chat/completions'){if(credential!=='synthetic-provider-key')return fail(res,401,'MODEL_AUTH');return respond(res,{choices:[{message:{role:'assistant',tool_calls:[{id:'synthetic-call',type:'function',function:{name:'act',arguments:JSON.stringify({actionJson:JSON.stringify({type:'hint',target:'p2',kind:'color',value:'red'})})}}]}}]});}
       if (!url.pathname.startsWith('/api/v1/')) return fail(res, 404, 'MOCK_ROUTE_NOT_FOUND');
       if (path === '/health') return respond(res, { ok: true, service: 'coop-bench', apiVersion: 'v1', backend: 'mock' });
       if (path === '/games') return respond(res, { games: [metadata] });
@@ -143,17 +144,18 @@ export async function startMockApi() {
       if (match) {
         const room = rooms.get(match[1]), operation = match[2]; if (!room) return fail(res, 404, 'UNKNOWN_ROOM');
         if (operation === 'join') {
-          if (credential !== room.inviteToken) return fail(res, 401, 'INVALID_INVITE');
+          if (credential !== room.inviteToken && !(room.allowHumans&&credential===body.playerToken)) return fail(res, 401, 'INVALID_INVITE');
           let member = memberFor(room, body.playerToken);
-          if (!member) { member = { playerId: `p${room.members.length + 1}`, name: body.name, ready: false, token: body.playerToken }; room.members.push(member); room.rosterVersion++; room.members.forEach(m => m.ready = false); }
+          if (!member) { if(room.status!=='waiting')return fail(res,409,'ROOM_CLOSED');const issued=room.seatTokens?.find(s=>s.seatToken===body.playerToken);if(room.allowHumans&&!issued)return fail(res,409,'INVALID_SEAT_TOKEN');member = { playerId: issued?.playerId??`p${room.members.length + 1}`, name: body.name, ready: false, token: body.playerToken }; room.members.push(member); room.rosterVersion++; room.members.forEach(m => m.ready = false); }
           return respond(res, roomView(room, body.playerToken));
         }
         const member = memberFor(room, credential);
         if (!isAdmin(credential) && !member) return fail(res, 401, 'UNAUTHORIZED');
         if (operation?.startsWith('admin') && !isAdmin(credential)) return fail(res, 403, 'ADMIN_ONLY');
-        if(operation==='admin-seat-tokens'){const seatTokens=room.seatTokens.filter(s=>!room.members.some(m=>m.playerId===s.playerId)).map(s=>({...s,seatToken:token()}));room.seatTokens=room.seatTokens.map(s=>seatTokens.find(k=>k.playerId===s.playerId)??s);return respond(res,{roomId:room.roomId,seatTokens});}
+        if(operation==='admin-seat-tokens'){const seatTokens=room.seatTokens.filter(s=>!room.members.some(m=>m.playerId===s.playerId)&&(!body.playerId||body.playerId===s.playerId)).map(s=>({...s,seatToken:token()}));room.seatTokens=room.seatTokens.map(s=>seatTokens.find(k=>k.playerId===s.playerId)??s);return respond(res,{roomId:room.roomId,seatTokens});}
         if (['invite', 'admin-invite'].includes(operation)) { room.inviteToken = token(); return respond(res, roomView(room, credential, true)); }
         if (operation === 'ready') member.ready = body.ready;
+        if(operation==='admin-kick'){room.members=room.members.filter(m=>m.playerId!==body.playerId);room.seatTokens=room.seatTokens.map(s=>s.playerId===body.playerId?{...s,seatToken:null}:s);room.rosterVersion++;room.members.forEach(m=>m.ready=false);}
         if (operation === 'leave'){room.members=room.members.filter(m=>m!==member);room.rosterVersion++;room.members.forEach(m=>m.ready=false);}
         if (['start', 'admin-start'].includes(operation)) { const next = makeEpisode(room.playerCount, new Map(room.members.map(m => [m.token, m.playerId])),room.name); room.episodeId = next.episodeId; room.status = 'active'; }
         return respond(res, roomView(room, credential));

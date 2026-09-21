@@ -13,6 +13,7 @@
     "desktop/player-main.mjs",
     "desktop/player-preload.cjs",
     "desktop/lobby-player.mjs",
+    "desktop/host-seats.mjs",
     "desktop/client-smoke.mjs",
     "desktop/player-smoke.mjs",
     "desktop/mock-api.mjs",
@@ -31,6 +32,7 @@
     "main": "desktop/main.mjs"
   },
   "artifactName": "Coop-Bench-${version}-${os}-${arch}.${ext}",
+  "protocols": [{"name":"Coop Bench room","schemes":["coopbench"]}],
   "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
   "nsis": {
     "oneClick": false,

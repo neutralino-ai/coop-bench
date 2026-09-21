@@ -9,11 +9,11 @@ export function invitation(text) {
   const u=new URL(text.trim());
   if(u.protocol!=='coopbench:'||u.hostname!=='join'||u.pathname||u.username||u.password||u.search)throw Error('Paste a coopbench://join# invitation.');
   const q=new URLSearchParams(u.hash.slice(1)),roomId=q.get('room'),inviteToken=q.get('invite');
-  if(!/^[a-f0-9-]{36}$/.test(roomId??'')||!/^[A-Za-z0-9_-]{43}$/.test(inviteToken??''))throw Error('Invalid invitation fields.');
-  return {apiUrl:apiUrl(q.get('api')),roomId,inviteToken};
+  if(!/^[a-f0-9-]{36}$/.test(roomId??'')||(inviteToken!==null&&!/^[A-Za-z0-9_-]{43}$/.test(inviteToken)))throw Error('Invalid invitation fields.');
+  return {apiUrl:apiUrl(q.get('api')),roomId,...(inviteToken?{inviteToken}:{})};
 }
 export function inviteUrl({apiUrl:base,roomId,inviteToken}) {
-  return 'coopbench://join#'+new URLSearchParams({api:apiUrl(base),room:roomId,invite:inviteToken});
+  return 'coopbench://join#'+new URLSearchParams({api:apiUrl(base),room:roomId,...(inviteToken?{invite:inviteToken}:{})});
 }
 export async function jsonResponse(response,max=8*1024*1024) {
   if(!response.body)throw Error('Empty response.');

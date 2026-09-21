@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { startMockApi } from './mock-api.mjs';
 export const startClientFixture = () => startMockApi();
 
-export async function runClientSmoke({ window, fixture, remote, player, dataDir, getCopied }) {
+export async function runClientSmoke({ window, fixture, remote, player, hostSeats, dataDir, getCopied }) {
   const apiReads=[],fetcher=remote.fetcher,artifactAttempts=[];let failDetail=false,artifactRetryAt=0;
   remote.fetcher=async(url,options)=>{
     const path=new URL(url).pathname+new URL(url).search;apiReads.push(path);
@@ -195,10 +195,10 @@ export async function runClientSmoke({ window, fixture, remote, player, dataDir,
   });
   await wait(()=>run(()=>!document.getElementById('create-room').disabled),'Human creation did not finish.');
   await wait(()=>run(()=>document.getElementById('room-panel').textContent.includes('已开放大厅')),'Human room creation did not appear.');
-  await run(()=>document.querySelector('#room-panel button[data-seat="p1"]').click());
+  await run(()=>document.querySelector('#room-panel button[data-seat="p1"][data-action="token"]').click());
   await wait(()=>Promise.resolve(getCopied()&&!getCopied().startsWith('coopbench:')),'Creator did not copy the issued seat key.');
   const issuedFirst=getCopied();
-  await run(()=>document.querySelector('#room-panel button[data-seat="p2"]').click());
+  await run(()=>document.querySelector('#room-panel button[data-seat="p2"][data-action="token"]').click());
   await wait(()=>Promise.resolve(getCopied()!==issuedFirst),'Creator did not copy the second seat key.');
   const issuedSecond=getCopied();
   const publicRooms=(await fixture.call('/lobby')).rooms,humanRoom=publicRooms.at(-1);
@@ -279,6 +279,41 @@ export async function runClientSmoke({ window, fixture, remote, player, dataDir,
   await wait(()=>run(()=>document.getElementById('episode-title').textContent==='周日花火练习 <b>一起玩</b>'),'Replay title lost the room name.');
   checks.push('named rooms remain named in the lobby, player, saved records and replay');
   checks.push('packaged lobby creates, discovers, joins, leaves, readies, starts and accepts a human action');
+  await run(()=>{document.getElementById('open-create').click();document.getElementById('create-participation').value='human';document.getElementById('create-participation').dispatchEvent(new Event('change'));document.getElementById('create-name').value='内置 Agent 混合入席';document.getElementById('create-players').value='2';document.getElementById('create-room').click();});
+  await wait(()=>run(()=>document.querySelectorAll('.host-seat.vacant').length===2),'Vacant host seats missing.');
+  check(await run(()=>[...document.querySelectorAll('.host-seat')].every(c=>[...c.querySelectorAll('button')].map(b=>b.dataset.action).join(',')==='claude,agent,token')),'empty seats expose exactly prompt, built-in agent and token buttons');
+  await run(()=>document.querySelector('[data-seat="p1"][data-action="claude"]').click());
+  await wait(()=>Promise.resolve(getCopied()?.includes('玩家专用说明文档')),'Claude prompt not copied.');
+  const prompt=getCopied(),agentRoomId=prompt.match(/roomId: ([a-f0-9-]{36})/)[1],originalKey=prompt.match(/seat token: ([A-Za-z0-9_-]+)/)[1];
+  check(prompt.includes(fixture.baseUrl+'/player.md')&&prompt.includes('playerId: p1')&&!prompt.includes(fixture.adminToken),'Claude prompt carries exactly its own seat and same-origin player guide without organizer credentials');
+  await capture('client-host-empty-seats.png');
+  const launchModel=async()=>{
+    await run(()=>document.querySelector('[data-seat="p1"][data-action="agent"]').click());
+    await wait(()=>run(()=>document.querySelector('#host-agent-dialog')?.open),'Model configuration did not open.');
+    await run(base=>{document.getElementById('host-agent-url').value=base+'/model';document.getElementById('host-agent-model').value='synthetic-model';document.getElementById('host-agent-key').value='synthetic-provider-key';document.getElementById('host-agent-form').requestSubmit();},fixture.baseUrl);
+    await wait(()=>run(()=>document.querySelector('.host-seat[data-player-id="p1"].occupied')&&!document.querySelector('#host-agent-dialog')),'Built-in agent failed to occupy its seat.');
+    check(await run(()=>!document.getElementById('host-agent-key')&&document.querySelector('.host-seat[data-player-id="p1"]').querySelectorAll('button').length===1&&document.querySelector('.host-seat[data-player-id="p1"] button').dataset.action==='kick'),'occupied seat only exposes kick and provider secret is cleared from UI');
+  };
+  await launchModel();
+  await run(()=>document.querySelector('[data-seat="p1"][data-action="kick"]').click());
+  await wait(()=>Promise.resolve(hostSeats.agents.size===0),'Kicking did not stop the local agent.');
+  await wait(()=>run(()=>document.querySelector('.host-seat[data-player-id="p1"].vacant')),'Kicked seat did not become vacant.');
+  const revoked=await fetch(fixture.apiUrl+`/rooms/${agentRoomId}`,{headers:{Authorization:`Bearer ${originalKey}`}});check(revoked.status===401,'kicked built-in agent loses its seat credential');
+  await launchModel();
+  const another=(await hostSeats.key({roomId:agentRoomId,playerId:'p2'})).seatToken;
+  const teammate=await fixture.call(`/rooms/${agentRoomId}/join`,another,{name:'External API player',playerToken:another});
+  await fixture.call(`/rooms/${agentRoomId}/ready`,another,{ready:true,rosterVersion:teammate.rosterVersion});
+  await wait(()=>run(()=>document.querySelector('#start-room')&&!document.querySelector('#start-room').disabled),'Built-in agent did not automatically ready with a complete roster.');
+  await capture('client-host-agent-ready.png');
+  await run(()=>document.querySelector('#start-room').click());
+  await wait(()=>Promise.resolve(fixture.requests.some(r=>r.path==='/model/chat/completions')),'Built-in harness did not call the model API.');
+  const builtInEpisode=(await fixture.call(`/rooms/${agentRoomId}/admin`)).episodeId;
+  await wait(()=>Promise.resolve(fixture.requests.some(r=>r.path===`/api/v1/episodes/${builtInEpisode}/actions`)),'Built-in harness did not submit a model action.');
+  const modelRequest=fixture.requests.find(r=>r.path==='/model/chat/completions');check(!JSON.stringify(modelRequest).includes(another)&&!JSON.stringify(modelRequest).includes(fixture.adminToken),'provider receives only seat context, not teammate or organizer credentials');
+  check(await run(()=>document.querySelectorAll('#room-panel [data-action="kick"]').length===0),'started rooms never expose kick');
+  await fixture.call(`/episodes/${builtInEpisode}/truncate`,fixture.adminToken,{reason:'synthetic host-agent smoke complete'});await hostSeats.close();
+  await run(()=>document.querySelector('#create-dialog').close());
+  checks.push('packaged host prompt, built-in model harness, token copy, kick, revoked key, rejoin, ready and action verified');
   if (remote.store.encryption.isEncryptionAvailable()) {
     await remote.connect({ apiUrl: fixture.apiUrl, token: fixture.adminToken, remember: true });
     const saved = readFileSync(join(dataDir, 'remote-connection.json'), 'utf8');

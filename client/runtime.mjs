@@ -12,7 +12,7 @@ export class PlayerRuntime extends EventEmitter {
   #config;#db;#fetch;#stop=new AbortController();#recorder;#running;#modelBusy=false;#actionBusy=false;#recorderTasks=[];#retry;#decisionTask;#closing;#clockOffset=0;#transport='long-poll';
   room=null;observation=null;rules=null;status='disconnected';
   constructor(config,{fetchImpl=fetch}={}) {
-    super();this.#config={...config,apiUrl:apiUrl(config.apiUrl),playerToken:config.playerToken??randomBytes(32).toString('base64url')};this.#fetch=fetchImpl;
+    super();this.#config={...config,apiUrl:apiUrl(config.apiUrl),playerToken:config.playerToken??config.seatToken??randomBytes(32).toString('base64url')};this.#fetch=fetchImpl;
     if(config.transport&&!['auto','sse','long-poll'].includes(config.transport))throw Error('Unknown observation transport.');
     if(config.transport==='sse')this.#transport='sse';
     if(!/^[a-f0-9-]{36}$/.test(config.roomId??''))throw Error('Invalid room ID.');
@@ -39,7 +39,11 @@ export class PlayerRuntime extends EventEmitter {
   }
   async connect() {
     this.#state('connecting');
-    this.room=this.#config.inviteToken?await this.#request(`/rooms/${this.#config.roomId}/join`,{name:this.#config.name??'Player',playerToken:this.#config.playerToken},this.#config.inviteToken):await this.#request(`/rooms/${this.#config.roomId}`);
+    if(this.#config.inviteToken)this.room=await this.#request(`/rooms/${this.#config.roomId}/join`,{name:this.#config.name??'Player',playerToken:this.#config.playerToken},this.#config.inviteToken);
+    else {
+      try{this.room=await this.#request(`/rooms/${this.#config.roomId}`);}
+      catch(error){if(error.status!==401)throw error;this.room=await this.#request(`/rooms/${this.#config.roomId}/join`,{name:this.#config.name??'Player',playerToken:this.#config.playerToken});}
+    }
     this.rules=await this.#request(`/games/${this.room.gameId}`);
     this.#state('waiting');return this.snapshot();
   }
@@ -119,6 +123,7 @@ export class PlayerRuntime extends EventEmitter {
   }
   async #openEpisode() {
     if(this.#recorder)return;
+    this.rules=await this.#request(`/episodes/${this.room.episodeId}/rules`);
     this.#recorder=await AgentMessageRecorder.open({baseUrl:this.#config.apiUrl,episodeId:this.room.episodeId,seatToken:this.#config.playerToken,
       outboxFile:join(this.#config.directory,'messages.jsonl'),scope:'Exact JSON model requests/responses and executed tool calls/results captured by this seat runtime. Unavailable provider internals and external-agent hidden thinking are excluded.',retries:1,timeoutMs:5000},{fetchImpl:this.#fetch});
     this.#recorder.resume().catch(()=>{});

@@ -15,12 +15,12 @@
  const tokenLabel=node('label','','Seat token'),token=node('input');token.id='lobby-seat-token';token.type='password';token.required=true;token.minLength=43;token.maxLength=128;token.pattern='[A-Za-z0-9_-]{43,128}';token.autocomplete='off';token.placeholder='输入你的席位密钥';tokenLabel.append(token);
  const hint=node('p','small muted','Seat token 由房主单独发给你。返回原席位时请使用同一密钥。');
  const joinStatus=node('p','small');joinStatus.id='join-status';joinStatus.setAttribute('role','status');
- const submit=node('button','button primary full','确认入席');submit.id='join-seat';submit.type='submit';form.append(intro,nameLabel,tokenLabel,hint,joinStatus,submit);box.append(header,form);document.body.append(box);
+ const submit=node('button','button primary full','确认入席');submit.id='join-seat';submit.type='submit';const roomLabel=node('label','','房间 ID'),roomInput=node('input');roomInput.id='lobby-room-id';roomInput.required=true;roomInput.pattern='[a-f0-9-]{36}';roomLabel.append(roomInput);form.append(intro,roomLabel,nameLabel,tokenLabel,hint,joinStatus,submit);box.append(header,form);document.body.append(box);
  let serial=0,loading=false,joining=false,selectedRoom=null;
  const issue=error=>error.status===404?'当前服务器尚未提供大厅功能，请更新服务端后重试。':error.message;
  function reset(){serial++;loading=false;joining=false;selectedRoom=null;list.replaceChildren();status.textContent='';token.value='';box.close();document.body.dataset.view='login';}
- function showHome(){if(!state.token)return;stopPlayback();detailController?.abort();clearInterval(detailTimer);state.detailRequest++;document.body.dataset.audit='false';document.body.dataset.view='home';$('detail').hidden=true;$('replay-loading').hidden=true;history.replaceState(null,'',location.pathname);manage.hidden=state.identity?.role==='auditor';void load();}
- function choose(room){selectedRoom=room;title.textContent=room.name||'加入房间';token.value='';token.type='password';joinStatus.textContent='';if(!box.open)box.showModal();name.focus();}
+ function showHome(){if(!state.token)return;stopPlayback();detailController?.abort();clearInterval(detailTimer);state.detailRequest++;document.body.dataset.audit='false';document.body.dataset.view='home';$('detail').hidden=true;$('replay-loading').hidden=true;history.replaceState(null,'',location.pathname);manage.hidden=state.identity?.role==='auditor';void load();if(incoming&&incoming.apiUrl===apiUrl){choose(incoming);incoming=null;}}
+ function choose(room){selectedRoom=room;title.textContent=room.name||'加入房间';roomInput.value=room.roomId??'';token.value='';token.type='password';joinStatus.textContent='';if(!box.open)box.showModal();name.focus();}
  async function openPlayer(input){
   if(joining)return;if(!transport.openPlayer){joinStatus.textContent='请使用更新后的桌面客户端加入房间。';return;}
   joining=true;token.value='';const session=state.session;joinStatus.textContent='正在连接席位…';renderBusy();
@@ -28,7 +28,7 @@
   catch(error){if(session===state.session){if(box.open)joinStatus.textContent=issue(error);else status.textContent=issue(error);if(error.status===404&&apiUrl==='https://coop.neutrinophysics.cn:34935/api/v1'){const switchServer=node('button','button primary','登录新版大厅');switchServer.type='button';switchServer.onclick=async()=>{await disconnect();$('api-address').value='https://coop.neutrinophysics.cn:34936/api/v1';$('login-password').focus();};list.append(node('p','muted','当前连接旧版服务。新版大厅使用 34936 端口，旧对局仍保留在原服务。'),switchServer);}}}
   finally{if(session===state.session){joining=false;renderBusy();}}
  }
- form.onsubmit=event=>{event.preventDefault();if(selectedRoom&&form.reportValidity())void openPlayer({roomId:selectedRoom.roomId,name:name.value.trim(),seatToken:token.value});};
+ form.onsubmit=event=>{event.preventDefault();if(form.reportValidity())void openPlayer({roomId:roomInput.value.trim(),name:name.value.trim(),seatToken:token.value});};
  box.addEventListener('close',()=>{token.value='';token.type='password';});
  function renderBusy(){refresh.disabled=loading;resume.disabled=joining;submit.disabled=joining;for(const button of list.querySelectorAll('button'))button.disabled=joining;}
  async function load(){
@@ -47,6 +47,9 @@
   }catch(error){if(version===serial&&session===state.session){list.replaceChildren();status.textContent=issue(error);if(error.status===404&&apiUrl==='https://coop.neutrinophysics.cn:34935/api/v1'){const switchServer=node('button','button primary','登录新版大厅');switchServer.type='button';switchServer.onclick=async()=>{await disconnect();$('api-address').value='https://coop.neutrinophysics.cn:34936/api/v1';$('login-password').focus();};list.append(node('p','muted','当前连接旧版服务。新版大厅使用 34936 端口，旧对局仍保留在原服务。'),switchServer);}}}
   finally{if(version===serial){loading=false;renderBusy();}}
  }
+ const byId=node('button','button subtle','输入房间 ID 加入');byId.id='join-by-id';byId.type='button';byId.onclick=()=>choose({});controls.prepend(byId);
+ let incoming=null;function acceptLink(value){try{const u=new URL(value),q=new URLSearchParams(u.hash.slice(1));if(u.protocol!=='coopbench:'||u.hostname!=='join'||!/^[a-f0-9-]{36}$/.test(q.get('room')??''))return;const target=new URL(q.get('api'));if(target.protocol!=='https:'&&!(target.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(target.hostname)))return;incoming={roomId:q.get('room'),apiUrl:target.origin+'/api/v1'};if(!state.token){$('api-address').value=incoming.apiUrl;message('收到房间邀请，登录后输入 seat token 入席。');}else if(incoming.apiUrl===apiUrl){choose(incoming);incoming=null;}else message('邀请属于另一个服务器，请先切换登录地址。',true);}catch{}}
+ window.coopDesktop?.onInvitation?.(acceptLink);window.coopDesktop?.incomingInvitation?.().then(acceptLink);
  refresh.onclick=()=>void load();resume.onclick=()=>void openPlayer({});
  window.CoopLobby={home:showHome,open:showHome,join:choose,refresh:load,clear:reset};
  setInterval(()=>{if(state.token&&document.body.dataset.view==='home'&&!document.hidden&&!joining)void load();},5000);

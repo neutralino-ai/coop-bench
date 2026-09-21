@@ -1,29 +1,21 @@
-# 邀请与玩家运行器
+# 房间与玩家运行器（0.9.3）
 
-管理端创建邀请房间，把 coopbench://join#... 链接私下交给参赛者。Player粘贴邀请后加入、准备；成员变化会使准备状态失效。房主/管理端开始后才发牌并进入游戏期限。房间阶段不提供绕过官方规则的自由聊天。
+房主页按席位显示操作。空席可复制 Claude 入席提示词、启用内置 Agent、复制 seat token；已有玩家只显示踢出，开局后不再踢出。
 
-主客户端的“创建新房间”可选择“允许人类加入（大厅）”。已登录的人类从大厅点击房间，输入房主发放的 seat token 后打开本席参赛窗口，无需传递邀请链接。账户权限只用于大厅发现/入席；后续观察和行动使用独立席位凭据，凭据不进入页面。开局前“离开房间”释放席位，“断开”保留席位；主客户端“返回我的对局”可恢复。系统加密不可用时只保存在当前进程，退出后无法恢复该本地席位。
+人类、内置 AI、外部 Agent/harness 均使用房主发放的 seat token。首次加入新版大厅房间只需要 API 地址、roomId 和自己的 seat token，不需要邀请码。邀请链接只携带服务器地址与房间 ID，打开客户端后仍需输入密钥。
 
-Player可选人工或模型模式；模型需要baseUrl、model、API key。模型密钥只用于模型提供方，不发给游戏服务器。最小运行器目前使用Chat Completions工具调用格式，不能假定所有提供方完全兼容。
+内置 Agent 由房主在对应空席输入模型 API 地址、模型名和 API key 启动；兼容 Chat Completions 工具调用格式，模型密钥只在本次进程内使用。每席独立运行并自动准备；关闭客户端会停止运行器。实际模型请求、响应与动作写入本席轨迹。
 
-## 无界面模型
+外部 Claude 可直接使用复制的提示词和同源 /player.md；也可读取 [玩家指南](player-guide.md)。只使用服务 API 的规则与本席观察。
 
-私有配置：
+无界面内置模型配置（保存为私有 JSON）：
 
 ```json
-{"invitation":"organizer-provided-invitation","name":"Player A","mode":"model","baseUrl":"https://provider.example/v1","model":"provider-model","apiKeyEnv":"MODEL_API_KEY","directory":"./artifacts/player-a","autoReady":true}
+{"apiUrl":"https://coop.neutrinophysics.cn:34936/api/v1","roomId":"房间 UUID","playerToken":"房主发放的 seat token","name":"Player A","mode":"model","baseUrl":"https://provider.example/v1","model":"provider-model","apiKeyEnv":"MODEL_API_KEY","directory":"./artifacts/player-a","autoReady":true}
 ```
 
-```sh
-node scripts/player.mjs /absolute/path/to/private-config.json
-```
+运行 `node scripts/player.mjs /absolute/path/to/private-config.json`。每席使用独立目录。mode 改为 external 可用同一运行器的 JSONL 接口连接自写 harness；运行器发送本席 decision context，harness 返回对应 id 和合法 action。原邀请协议继续兼容，但新大厅房间不能自行生成密钥。
 
-## 外部 Agent / 子智能体
+人齐并确认当前 rosterVersion 后由房主开始，episodeId 此时才产生；随后使用同一个 seat token 访问 rules / wait / actions。完整消费分页历史后才能行动；不确定的动作 POST 使用原幂等键和原 body 重试。服务端绝对期限为准，等待和重连不会续期。
 
-配置 mode: external，使用同一个 scripts/player.mjs。运行器输出本席规则/decision JSONL；外部Agent只返回协议要求的合法action。每席独立进程和目录，不读取兄弟席位的文件或会话。实际协议见 client/runtime.mjs 与 scripts/player.mjs；先在受控环境确认真实工具调用，不编造工具结果。
-
-运行器默认长轮询，旧服务缺少wait时回退SSE；累积完整可见更新后再唤醒决策者。等待/重连/非法动作不重置服务端行动期限；新服务默认600秒，按创建时配置生效，旧局仍遵守原期限。未确认的POST必须重试原编号和参数，不新建动作覆盖。
-
-本地MCP桥接使用已分配episode与seat配置，目前不直接处理邀请加入。提前准备工具，避免在直接建局后的倒计时里安装依赖。
-
-0.9.2 开放大厅房间由房主逐席发放 seat token，不能自行生成替代。主客户端登录后直接列出可加入房间，点击后输入姓名和房主发放的密钥。人类客户端在成员齐备时自动准备；仍需房主明确开始。邀请专用房间继续使用既有独立随机 playerToken 协议。
+本地 MCP 桥接接受已分配的 episodeId 与 seat token，不负责房间入席。

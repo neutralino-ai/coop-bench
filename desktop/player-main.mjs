@@ -20,7 +20,9 @@ function saved() {if(!existsSync(sessionFile)||!safeStorage.isEncryptionAvailabl
 async function connect(input,resume=false) {
   if(runtime||joining)throw Error('请先断开当前席位。');
   const prior=saved(),config=resume?prior:{...invitation(input.invitation),name:input.name};if(!config)throw Error('没有可恢复的本地席位。');
-  if(!resume&&prior?.roomId===config.roomId&&prior?.apiUrl===config.apiUrl)config.playerToken=prior.playerToken;
+  if(!resume&&input.seatToken){if(!/^[A-Za-z0-9_-]{43,128}$/.test(input.seatToken))throw Error('无效 seat token。');config.playerToken=input.seatToken;}
+  if(!resume&&!input.seatToken&&prior?.roomId===config.roomId&&prior?.apiUrl===config.apiUrl)config.playerToken=prior.playerToken;
+  if(!resume&&!config.inviteToken&&!config.playerToken)throw Error('请输入房主发放的 seat token。');
   // A saved seat resumes with its own credential even after the invitation was
   // rotated. Invitations are for joining, not persistent seat authentication.
   if(resume)delete config.inviteToken;
