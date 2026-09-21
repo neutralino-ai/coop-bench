@@ -17,6 +17,14 @@ button.card.hint-excluded{opacity:.55}
 .card-action-preview{font-size:14px;line-height:1.6;margin:13px 0;color:#4b6855}
 .card-action-buttons{display:flex;justify-content:flex-end;gap:10px}
 .card-action-buttons .confirm-card-action{background:#266746;color:#fff;border-color:#266746;min-width:120px;font-weight:600}
-#manual-actions{margin-top:12px}#manual-actions>summary{cursor:pointer;font-size:14px;color:#4c715a}
+.turn-panel{text-align:center;padding:26px 14px 22px;background:#f4f6f3;border:1px solid #e0e7df;border-radius:14px}
+#turn-label{font-size:21px;line-height:1.4;margin:0 0 13px;color:#5d7165;overflow-wrap:anywhere}
+.turn-panel #deadline{display:block;padding:0;background:none;color:#677b6f;text-align:center;font-size:clamp(52px,6vw,80px);font-weight:700;letter-spacing:-3px;line-height:1.1;font-variant-numeric:tabular-nums}
+.turn-panel .timeout-policy{margin:16px 0 0;font-size:13px;color:#7d8c82}
+.turn-panel.own-turn{background:#eef7e9;border-color:#b9d7b5}
+.turn-panel.own-turn #turn-label,.turn-panel.own-turn #deadline{color:#256442}
+.turn-panel.urgent{background:#fff3e9;border-color:#e8c3a5}
+.turn-panel.urgent #deadline{color:#a44326}
+#action-form{margin-top:20px}
 @media(max-width:480px){.card-action-panel{padding:12px}.card-action-heading{align-items:flex-start}.card-action-step{max-width:90px;text-align:right}.card-action-buttons button{flex:1}.card-mark{right:3px;top:5px;padding:4px;font-size:10px}}
 @media(prefers-reduced-motion:reduce){button.card{transition:none}}

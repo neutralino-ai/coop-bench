@@ -292,7 +292,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>seatJs("!document.querySelector('#game').hidden"),'Started human game did not render.');
   check(await seatJs("[...document.querySelector('.player-hand').querySelectorAll('.card-face strong')].every(card=>card.textContent==='?')"),'human board retains own hidden cards');
   await seatJs("document.querySelector('.card[data-player=p2][data-index=\"0\"]').click();document.querySelector('[data-choice=color]').click()");
-  check(await seatJs("document.querySelectorAll('.card.card-preview').length===2&&!document.querySelector('#manual-actions').open"),'human card click previews every matching card before confirmation');
+  check(await seatJs("document.querySelectorAll('.card.card-preview').length===2&&!document.querySelector('#manual-actions')&&!document.querySelector('#observation')&&document.querySelector('#turn-label').textContent==='轮到你了'"),'human card click previews every matching card alongside the turn countdown without raw diagnostic controls');
   await seatJs("document.querySelector('#confirm-card-action').click()");
   await wait(()=>seatJs("document.querySelectorAll('.hint-counter .token-dot.filled').length===7"),'Human action was not reflected by runtime.');
   await seatJs('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
