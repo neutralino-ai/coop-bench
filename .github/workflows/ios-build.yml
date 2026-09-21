@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ios:
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     timeout-minutes: 30
@@ -24,8 +24,10 @@ jobs:
           node-version: '24'
       - name: Prepare native project
         run: |
+          sudo xcode-select --switch "$DEVELOPER_DIR"
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           node scripts/build-ios.mjs
+          node --test test/ios-client.test.ts
           xcodegen generate --spec ios/project.yml
           xcodebuild -version
           mkdir -p artifacts/ios

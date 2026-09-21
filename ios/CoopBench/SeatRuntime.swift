@@ -9,7 +9,9 @@ import Foundation
     var api: String { config["apiUrl"] as! String };var token: String { config["playerToken"] as! String };var roomID: String { config["roomId"] as! String }
     var episode: String? { room?["episodeId"] as? String };var cursor: Int { data["cursor"] as? Int ?? 0 }
     init(config: JSON,agent: ModelAgent? = nil) throws {
-        self.config=config;self.agent=agent
+        let base=try Endpoint.base(config["apiUrl"] as? String ?? "")
+        try require(UUID(uuidString:config["roomId"] as? String ?? "") != nil && matches(config["playerToken"] as? String ?? "","^[A-Za-z0-9_-]{43,128}$"),"保存的席位配置无效，请重新加入房间。")
+        self.config=config.merging(["apiUrl":base]){_,new in new};self.agent=agent
         store=try SeatFile(binding:(config["apiUrl"] as? String ?? "")+"\n"+(config["roomId"] as? String ?? "")+"\n"+(config["playerToken"] as? String ?? ""));data=try store.load()
         observation=data["observation"] as? JSON
     }

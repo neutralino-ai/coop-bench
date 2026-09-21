@@ -62,8 +62,14 @@ struct WebSurface: UIViewRepresentable {
         guard let eventText=try? jsonString(event),let body=try? jsonString(value) else { return }
         view.evaluateJavaScript("window.__coopEvent?.(\(eventText),\(body))",completionHandler:nil)
     }
+    private func isLocalPage(_ url: URL?) -> Bool {
+        guard let url,url.isFileURL,var parts=URLComponents(url:url,resolvingAgainstBaseURL:false) else { return false }
+        // Replay selection updates the hash without navigating away from the bundle.
+        parts.fragment=nil;parts.query=nil
+        return parts.url?.standardizedFileURL == page.standardizedFileURL
+    }
     func userContentController(_ userContentController: WKUserContentController,didReceive message: WKScriptMessage) {
-        guard message.webView === view,message.frameInfo.isMainFrame,message.frameInfo.request.url?.standardizedFileURL == page.standardizedFileURL,
+        guard message.webView === view,message.frameInfo.isMainFrame,isLocalPage(message.frameInfo.request.url),
               let body=message.body as? JSON,let id=body["id"] as? String,let name=body["name"] as? String,id.count<100,
               let bytes=try? jsonData(body),bytes.count<=262144 else { return }
         let input=body["input"] as? JSON ?? [:]
@@ -114,7 +120,7 @@ struct WebSurface: UIViewRepresentable {
     func webView(_ webView: WKWebView,decidePolicyFor navigationAction: WKNavigationAction,decisionHandler: @escaping (WKNavigationActionPolicy)->Void) {
         let url=navigationAction.request.url
         if url?.scheme == "blob" && navigationAction.shouldPerformDownload { decisionHandler(.download) }
-        else { decisionHandler(url?.standardizedFileURL == page.standardizedFileURL ? .allow:.cancel) }
+        else { decisionHandler(isLocalPage(url) ? .allow:.cancel) }
     }
     func webView(_ webView: WKWebView,navigationAction: WKNavigationAction,didBecome download: WKDownload) { download.delegate=self }
     func download(_ download: WKDownload,decideDestinationUsing response: URLResponse,suggestedFilename: String,completionHandler: @escaping (URL?)->Void) {

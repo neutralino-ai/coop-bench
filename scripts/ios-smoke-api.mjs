@@ -8,6 +8,8 @@ await mkdir('artifacts/ios',{recursive:true});
 // Network fault fixture only: drop one accepted action response, then verify
 // the native outbox retries the identical command with its original key.
 let dropped=false,retries=0;const actions=new Map();
+const saveMetrics=()=>writeFile('artifacts/ios/network-fixture.json',JSON.stringify({droppedAcceptedResponse:dropped,identicalActionRetries:retries}));
+await saveMetrics();
 const proxy=createServer(async(req,res)=>{
  try{
   if(req.url==='/_ios/slow'){
@@ -25,8 +27,8 @@ const proxy=createServer(async(req,res)=>{
   }
   const response=await fetch(mock.baseUrl+req.url,{method:req.method,headers:{...(req.headers.authorization?{Authorization:req.headers.authorization}:{}),'Content-Type':'application/json',...(req.headers['idempotency-key']?{'Idempotency-Key':req.headers['idempotency-key']}:{})},...(body.length?{body}:{}),redirect:'manual'});
   const bytes=Buffer.from(await response.arrayBuffer());
-  if(req.url.endsWith('/actions')&&!dropped){dropped=true;res.destroy();return;}
-  await writeFile('artifacts/ios/network-fixture.json',JSON.stringify({droppedAcceptedResponse:dropped,identicalActionRetries:retries}));
+  if(req.url.endsWith('/actions')&&!dropped){dropped=true;await saveMetrics();res.destroy();return;}
+  if(req.url.endsWith('/actions'))await saveMetrics();
   res.writeHead(response.status,{'Content-Type':response.headers.get('content-type')??'application/json'});res.end(bytes);
  }catch{res.writeHead(500);res.end('{"error":{"code":"IOS_FIXTURE_ASSERTION"}}');}
 });
