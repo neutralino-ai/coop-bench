@@ -106,7 +106,7 @@ struct WebSurface: UIViewRepresentable {
         case "ready":try await runtime.ready()
         case "start","kick":_ = try await runtime.roomCommand(name,input)
         case "leave":_ = try await runtime.roomCommand("leave");runtime.suspend();session.player=nil;try Vault.save("human-"+(try session.scope()),nil);return ["status":"disconnected","lobbyManaged":true]
-        case "invite":let room=try await runtime.roomCommand("invite");var query=URLComponents();query.queryItems=[URLQueryItem(name:"api",value:runtime.api),URLQueryItem(name:"room",value:runtime.roomID),URLQueryItem(name:"invite",value:room["inviteToken"] as? String)];UIPasteboard.general.string="coopbench://join#"+(query.percentEncodedQuery ?? "");return ["copied":true]
+        case "invite":var query=URLComponents();query.queryItems=[URLQueryItem(name:"api",value:runtime.api),URLQueryItem(name:"room",value:runtime.roomID)];UIPasteboard.general.string="coopbench://join#"+(query.percentEncodedQuery ?? "");return ["copied":true]
         default:throw ClientFailure("FORBIDDEN","玩家页面只允许本席操作。")
         }
         return runtime.snapshot()

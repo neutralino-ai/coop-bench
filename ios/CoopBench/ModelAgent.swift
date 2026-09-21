@@ -67,7 +67,11 @@ import Foundation
                 if call["name"] as? String == "wait",((context["observation"] as? JSON)?["control"] as? JSON)?["required"] as? Bool != true { answer=["wait":true] }
                 else if call["name"] as? String == "act",let text=call["arguments"] as? String,let args=(try? JSONSerialization.jsonObject(with:Data(text.utf8))) as? JSON,let actionText=args["actionJson"] as? String,let action=(try? JSONSerialization.jsonObject(with:Data(actionText.utf8))) as? JSON,action["type"] is String { answer=["action":action] }
             }
-            if let answer { runtime.data["modelPending"]=functions;try runtime.save();return answer }
+            if let answer {
+                runtime.data["modelPending"]=functions
+                if answer["action"] != nil { runtime.data["lastActionResult"]=["accepted":false,"reason":"action-not-submitted"] }
+                try runtime.save();return answer
+            }
             for call in functions { history.append(try receipt(call,["accepted":false,"error":"Call exactly one legal act; wait is not allowed when required."])) }
             history.append(["role":"user","content":"Return one valid tool call from the provided legal actions. There is no deadline extension."])
             runtime.data["modelHistory"]=history;try runtime.save()

@@ -17,7 +17,7 @@ import Foundation
     func snapshot() -> JSON {
         var safe=observation;safe?.removeValue(forKey:"decisionToken")
         let displayRules=(rules?["metadata"] as? JSON ?? [:]).merging(rules ?? [:]){_,new in new}
-        return ["status":status,"room":room as Any? ?? null,"observation":safe as Any? ?? null,"rules":displayRules,"mode":agent == nil ? "human":"model","autoReady":true,"lobbyManaged":true,"canResume":true,"clockOffsetMs":clockOffset,"warning":warning as Any? ?? null,
+        return ["status":status,"room":room as Any? ?? null,"observation":safe as Any? ?? null,"visibleHistory":data["visibleHistory"] ?? [],"rules":displayRules,"mode":agent == nil ? "human":"model","autoReady":true,"lobbyManaged":true,"canResume":true,"clockOffsetMs":clockOffset,"warning":warning as Any? ?? null,
           "trace":["acknowledgedThrough":(data["traceBase"] as? Int ?? 0)+(data["acked"] as? Int ?? 0)-1,"pendingMessages":(data["messages"] as? [JSON] ?? []).count-(data["acked"] as? Int ?? 0),"sealed":data["sealed"] as? Bool ?? false,"completeness":"partial"]]
     }
     func notify(_ state: String? = nil) { if let state { status=state };changed?(snapshot()) }
@@ -36,6 +36,7 @@ import Foundation
     }
     func ready() async throws { _=try await roomCommand("ready",["ready":true,"rosterVersion":room?["rosterVersion"] ?? 0]) }
     func start() {
+        if data["sealed"] as? Bool == true { notify("ended");return }
         guard loop == nil else { return };let generation=UUID();running=generation;agentFailed=false;lastDecision=""
         loop=Task { [weak self] in guard let self else { return };defer { if self.running == generation { self.loop=nil } }
             var failures=0
@@ -94,13 +95,20 @@ import Foundation
         let updates=next["updates"] as? [JSON] ?? [];try require(updates.allSatisfy{ ($0["seq"] as? Int ?? Int.max)<=position },"观察历史游标不一致。")
         var pending=data["updates"] as? [JSON] ?? [],seen=Set(pending.compactMap{ $0["seq"] as? Int })
         for update in updates { if let seq=update["seq"] as? Int,seen.insert(seq).inserted { pending.append(update) } }
-        next["nextCursor"]=position;next["hasMore"]=more;data["cursor"]=max(cursor,position);data["updates"]=pending;data["observation"]=next
-        if observation?["observationId"] as? String != id { try record("tool-result",["tool":"wait","observation":next],observationID:id) }
-        observation=next;try save()
+        let previous=data
+        var history=data["visibleHistory"] as? [JSON] ?? [],historySeen=Set(history.compactMap{$0["seq"] as? Int})
+        for update in updates { if let seq=update["seq"] as? Int,historySeen.insert(seq).inserted { history.append(["seq":seq,"preparedAt":update["preparedAt"] ?? null,"status":update["status"] ?? null,"event":(update["view"] as? JSON)?["lastEvent"] ?? null]) } }
+        next["nextCursor"]=position;next["hasMore"]=more;data["cursor"]=max(cursor,position);data["updates"]=pending;data["observation"]=next;data["visibleHistory"]=history
+        do {
+            if observation?["observationId"] as? String != id || !updates.isEmpty { try record("tool-result",["tool":"wait","observation":next],observationID:id) }
+            try save()
+        } catch { data=previous;throw error }
+        observation=next
         notify(next["status"] as? String != "active" ? "ended" : (next["control"] as? JSON)?["required"] as? Bool == true ? "your-turn":"waiting")
     }
     func act(_ action: JSON,observationID: String) async throws -> JSON {
         try require(!actionBusy,"动作正在提交，请稍候。")
+        try require(data["pendingAction"] == nil,"上一个动作结果尚未确认，正在使用原请求重试。","ACTION_PENDING")
         try require(observation?["status"] as? String == "active" && observation?["hasMore"] as? Bool != true,"请等待完整的最新观察。")
         try require(observation?["observationId"] as? String == observationID,"局面已改变，请使用最新观察。","STALE_OBSERVATION")
         if data["pendingAction"] == nil {
@@ -137,8 +145,9 @@ import Foundation
         try require(data["sealed"] as? Bool != true,"本席轨迹已经封存。","TRACE_SEALED")
         let clean=redact(raw),bytes=try canonicalData(clean),logical=UUID().uuidString
         var messages=data["messages"] as? [JSON] ?? []
+        var nodes=0
         func fits(_ value: Any,_ depth: Int=0) -> Bool {
-            if depth>24 { return false }
+            nodes+=1;if depth>24 || nodes>4000 { return false }
             if let dict=value as? JSON { return dict.allSatisfy{!["__proto__","constructor","prototype"].contains($0.key) && fits($0.value,depth+1)} }
             if let array=value as? [Any] { return array.allSatisfy{fits($0,depth+1)} }
             return true
@@ -173,8 +182,9 @@ import Foundation
                         }
                         return
                     }
-                    _=try await self.request("/episodes/\(episode)/messages",messages[acked],timeout:8)
+                    let receipt=try await self.request("/episodes/\(episode)/messages",messages[acked],timeout:8)
                     try Task.checkCancellation()
+                    try require(receipt["sequence"] as? Int == messages[acked]["sequence"] as? Int && receipt["messageId"] as? String == messages[acked]["messageId"] as? String,"轨迹上传回执不匹配，保留原记录。")
                     self.data["acked"]=acked+1;try self.save()
                 }
             } catch {
@@ -207,7 +217,7 @@ import Foundation
         } catch {
             if !Task.isCancelled {
                 let failure=publicFailure(error);warning=failure.message
-                if !["STALE_OBSERVATION","STALE_DECISION"].contains(failure.code) { agentFailed=true;warning="内置 Agent 已停止：\(failure.message) 超时将由服务器执行默认动作。" }
+                if data["pendingAction"] == nil && !["STALE_OBSERVATION","STALE_DECISION"].contains(failure.code) { agentFailed=true;warning="内置 Agent 已停止：\(failure.message) 超时将由服务器执行默认动作。" }
                 notify("waiting")
             }
         }

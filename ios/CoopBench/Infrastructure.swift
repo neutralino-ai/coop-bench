@@ -100,7 +100,7 @@ enum Vault {
         let query: JSON=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:key,kSecReturnData as String:true,kSecMatchLimit as String:kSecMatchLimitOne]
         var value: CFTypeRef?;let status=SecItemCopyMatching(query as CFDictionary,&value)
         if status == errSecItemNotFound { return nil }
-        try require(status == errSecSuccess,"钥匙串暂不可用，请解锁手机。","KEYCHAIN")
+        try require(status == errSecSuccess,"钥匙串暂不可用，请解锁手机（\(status)）。","KEYCHAIN")
         return try JSONSerialization.jsonObject(with:value as! Data) as? JSON
     }
     static func save(_ key: String, _ value: JSON?) throws {
@@ -109,8 +109,8 @@ enum Vault {
             let data=try jsonData(value),changes: JSON=[kSecValueData as String:data,kSecAttrAccessible as String:kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
             var status=SecItemUpdate(query as CFDictionary,changes as CFDictionary)
             if status == errSecItemNotFound { status=SecItemAdd(query.merging(changes){_,b in b} as CFDictionary,nil) }
-            try require(status == errSecSuccess,"无法安全保存凭证。","KEYCHAIN")
-        } else { let status=SecItemDelete(query as CFDictionary);try require(status == errSecSuccess || status == errSecItemNotFound,"无法清除钥匙串凭证。","KEYCHAIN") }
+            try require(status == errSecSuccess,"无法安全保存凭证（\(status)）。","KEYCHAIN")
+        } else { let status=SecItemDelete(query as CFDictionary);try require(status == errSecSuccess || status == errSecItemNotFound,"无法清除钥匙串凭证（\(status)）。","KEYCHAIN") }
     }
 }
 final class SeatFile {

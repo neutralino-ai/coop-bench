@@ -26,6 +26,11 @@ import WebKit
         }
         do {
             try Vault.save("connection",nil)
+            let origin=String(base.dropLast("/api/v1".count)),began=Date()
+            do { _=try await HTTP.shared.raw(origin+"/_ios/slow",timeout:0.2);throw ClientFailure("SMOKE_FAILED","slow response exceeded its budget") }
+            catch { try check(publicFailure(error).code == "TIMEOUT" && Date().timeIntervalSince(began)<3,"streaming-request-deadline") }
+            do { _=try await HTTP.shared.raw(origin+"/_ios/redirect",token:"synthetic-secret");throw ClientFailure("SMOKE_FAILED","redirect accepted") }
+            catch { try check(publicFailure(error).code == "REDIRECT_REJECTED","redirect-rejected") }
             try await wait("login-page",{try await js("return Boolean(window.CoopLobby && document.querySelector('#connect-button') && !document.querySelector('#connect-button').disabled)",app.host) as? Bool == true})
             try await snapshot("login",app.host)
             _=try await js("document.querySelector('#api-address').value=\(jsonString(base));document.querySelector('#login-password').value=\(jsonString(config["password"] ?? ""));document.querySelector('#login-form').requestSubmit();return true",app.host)
@@ -71,6 +76,13 @@ import WebKit
             runtime.suspend();runtime.start()
             try await wait("resume-refreshes-seat",{runtime.status != "disconnected"})
             try await wait("trace-upload",{(runtime.data["acked"] as? Int ?? 0)>0})
+            let captured: JSON=["synthetic":true,"text":String(repeating:"fragment 中文 ",count:4000),"value":1e-7]
+            try runtime.record("tool-result",captured)
+            let messages=runtime.data["messages"] as! [JSON]
+            let lastCapture=(messages.last?["message"] as? JSON)?["capture"] as? JSON
+            let logical=lastCapture?["logicalId"] as? String
+            let fragments=messages.filter{ (($0["message"] as? JSON)?["capture"] as? JSON)?["logicalId"] as? String == logical }
+            try jsonData(fragments).write(to:directory.appendingPathComponent("capture-fragments.json"),options:.atomic)
             try await snapshot("game",app.player)
             _=try await js("document.querySelector('#rules-button').click();return true",app.player)
             try check(try await js("return document.querySelector('#rules-dialog').open && document.querySelector('#rules-content').textContent.includes('Synthetic')",app.player) as? Bool == true,"player-rules-open")
