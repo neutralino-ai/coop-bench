@@ -50,8 +50,9 @@ jobs:
           app=artifacts/ios-derived/Build/Products/Debug-iphonesimulator/CoopBench.app
           if [ -d "$app" ]; then codesign -d --entitlements - "$app" > artifacts/ios/simulator-entitlements.log 2>&1; fi
       - name: Verify iPhone login, human seat and model harness
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: |
+          xcrun simctl bootstatus "$IOS_DEVICE" -b
           node scripts/ios-smoke-api.mjs > artifacts/ios/fixture.log 2>&1 &
           fixture_pid=$!
           trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
