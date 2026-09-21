@@ -13,7 +13,7 @@ if(typeof document!=='undefined'){
  'use strict';
  const bridge=window.coopDesktop;
  const desktop=Boolean(bridge?.request&&bridge?.connect);
- const defaultApi=desktop?'https://coop.neutrinophysics.cn:34935/api/v1':`${location.origin}/api/v1`;
+ const defaultApi=desktop?'https://coop.neutrinophysics.cn:34936/api/v1':`${location.origin}/api/v1`;
  let info={mode:desktop?'remote':'browser',apiUrl:defaultApi,connected:false,identity:null,remembered:false};
  let browserToken='',browserSession=false,generation=0;
  const pending=new Map();
@@ -114,6 +114,6 @@ if(typeof document!=='undefined'){
  }
  async function disconnect(){const oldToken=browserToken,revoke=browserSession;invalidate();const version=generation;browserToken='';browserSession=false;info={...info,connected:false,identity:null,remembered:false,connectionError:undefined};if(desktop){const result=unwrapBridge(await bridge.disconnect());if(result?.logoutWarning)throw Object.assign(Error('本机已退出，但尚未确认服务器撤销会话；请稍后重新连接确认。'),{code:'LOGOUT_UNCONFIRMED'});}else if(revoke){try{await authJson('/auth/logout',{},oldToken);}catch(error){if(version===generation&&error.status!==401)throw error;}}}
  const updates=bridge?.updateInfo?Object.fromEntries(['updateInfo','checkUpdate','downloadUpdate','installUpdate'].map(name=>[name,()=>Promise.resolve(bridge[name]()).then(unwrapBridge)])):{};
- window.coopTransport=Object.freeze({...updates,desktop,defaultApi,getConnection,connect,login,getAccount,setPassword,disconnect,request,copyText:text=>bridge?.copyText?Promise.resolve(bridge.copyText(String(text))).then(unwrapBridge):navigator.clipboard.writeText(String(text))});
+ window.coopTransport=Object.freeze({...updates,...(bridge?.openPlayer?{openPlayer:input=>Promise.resolve(bridge.openPlayer(input)).then(unwrapBridge)}:{}),desktop,defaultApi,getConnection,connect,login,getAccount,setPassword,disconnect,request,copyText:text=>bridge?.copyText?Promise.resolve(bridge.copyText(String(text))).then(unwrapBridge):navigator.clipboard.writeText(String(text))});
 })();
 

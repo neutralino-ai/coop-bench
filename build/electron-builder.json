@@ -12,6 +12,7 @@
     "desktop/update-client.mjs",
     "desktop/player-main.mjs",
     "desktop/player-preload.cjs",
+    "desktop/lobby-player.mjs",
     "desktop/client-smoke.mjs",
     "desktop/player-smoke.mjs",
     "desktop/mock-api.mjs",

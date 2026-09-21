@@ -90,7 +90,7 @@ class Element{
 }
 function uiContext(requestImpl:any,settings:any={}){
  const elements=new Map<string,Element>();const get=(id:string)=>{if(!elements.has(id)){const node=new Element();node.id=id;elements.set(id,node);}return elements.get(id)!;};
- get('create-form').append(get('create-episode'));
+ get('create-form').append(get('create-episode'));get('create-name').value='Test game';get('create-timeout').value='600';
  const intervals:any[]=[];const transport={desktop:true,defaultApi:connection.apiUrl,getConnection:()=>new Promise(()=>{}),request:requestImpl,disconnect:async()=>{},copyText:async()=>{},...settings.transport};
  const context=vm.createContext({window:{coopTransport:transport,addEventListener(){}},document:{getElementById:get,createElement:()=>new Element(),querySelector:()=>get('pill'),hidden:false,body:new Element()},location:{origin:'coop://app',protocol:'coop:',hash:''},history:{replaceState(){}},URL,URLSearchParams,AbortController,AbortSignal,Response,DOMException,TextEncoder,crypto:webcrypto,Uint8Array,Blob,setTimeout,clearTimeout,setInterval:(handler:any,ms:number)=>{intervals.push({handler,ms});return intervals.length;},clearInterval(){},console});
  vm.runInContext(appSource,context);vm.runInContext("loadGames=async()=>{};loadList=async()=>{};selectEpisode=async()=>{};",context);if(settings.initialAuth!==false)vm.runInContext("setConnectionStatus('idle');state.token='connected';state.identity={id:'fixture',role:'operator'};state.sessionReady=true;",context);get('create-game').value='hanabi';get('create-scenario').value='base';get('create-players').value='3';return {context,get,intervals,transport};

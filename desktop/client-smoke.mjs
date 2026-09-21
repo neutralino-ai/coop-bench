@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { startMockApi } from './mock-api.mjs';
 export const startClientFixture = () => startMockApi();
 
-export async function runClientSmoke({ window, fixture, remote, dataDir, getCopied }) {
+export async function runClientSmoke({ window, fixture, remote, player, dataDir, getCopied }) {
   const apiReads=[],fetcher=remote.fetcher,artifactAttempts=[];let failDetail=false,artifactRetryAt=0;
   remote.fetcher=async(url,options)=>{
     const path=new URL(url).pathname+new URL(url).search;apiReads.push(path);
@@ -48,7 +48,8 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   check(await run(() => typeof window.require === 'undefined' && typeof window.process === 'undefined'), 'renderer cannot access Node');
   const preferences = window.webContents.getLastWebPreferences();
   check(preferences.sandbox && preferences.contextIsolation && !preferences.nodeIntegration, 'sandbox and context isolation enabled');
-  check(await run(() => !document.getElementById('auth-panel').hidden), 'connection screen renders before API login');
+  check(await run(() => !document.getElementById('auth-panel').hidden && document.body.dataset.view==='login' && getComputedStyle(document.querySelector('.workspace')).display==='none' && !document.getElementById('password-login-fields').hidden), 'fresh launch shows the password screen without lobby or audit clutter');
+  await capture('client-login.png');
   const initial = await status();
   check(initial.phase === 'idle' && initial.label === '未连接' && Math.max(...initial.color) - Math.min(...initial.color) < 20, 'initial connection indicator is gray and explicitly not connected');
   // Well-formed but unauthorized, synthetic credential: reaches the fixture's
@@ -82,7 +83,10 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   const info = await run(() => window.coopDesktop.getConnection());
   check(info.connected && !Object.hasOwn(info, 'token') && !Object.hasOwn(info, 'adminToken'), 'connection descriptor contains no credential');
   check(!readFileSync(join(dataDir, 'remote-connection.json'), 'utf8').includes(fixture.adminToken), 'non-remembered token absent from disk config');
-  await wait(()=>run(()=>!document.getElementById('replay-loading').hidden),'Loading screen did not appear during slow response');
+  await wait(()=>run(()=>document.body.dataset.view==='home' && document.querySelectorAll('#episode-list button').length>0),'Login did not land on the lobby.');
+  check(await run(()=>document.querySelector('#home-replays .library') && getComputedStyle(document.getElementById('lobby-home')).display!=='none' && document.getElementById('detail').hidden), 'login displays permanent rooms and replay blocks without auto-opening a game');
+  await capture('client-home.png');
+  await run(id=>{void selectEpisode(id);},fixture.id);
   const loadingUi=await run(()=>({startupHidden:document.getElementById('startup-screen').hidden,detailHidden:document.getElementById('detail').hidden,animation:getComputedStyle(document.querySelector('#replay-loading .loading-spinner')).animationName,reduced:matchMedia('(prefers-reduced-motion:reduce)').matches}));
   check(loadingUi.startupHidden&&loadingUi.detailHidden&&(loadingUi.animation==='loading-spin'||loadingUi.reduced),`startup finishes and replay loader honors motion preference: ${JSON.stringify(loadingUi)}`);
   await capture('client-replay-loading.png');
@@ -156,7 +160,7 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await wait(()=>run(()=>!document.getElementById('room-panel').hidden&&document.getElementById('room-panel').textContent.includes('复制邀请链接')),'Admin invitation room did not appear');
   await run(()=>[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent==='复制邀请链接').click());
   await wait(()=>Promise.resolve(getCopied()?.startsWith('coopbench://join#')),'Admin invitation copy failed');
-  check(await run(()=>document.getElementById('room-panel').textContent.includes('60 秒')&&[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent==='人齐，开始游戏').disabled),'admin creates invitation room and prevents starting without ready seats');
+  check(await run(()=>document.getElementById('room-panel').textContent.includes('600 秒')&&[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent==='开始游戏').disabled),'admin creates invitation room and prevents starting without ready seats');
   await run(()=>document.getElementById('create-dialog').close());
   let screenshot;
   try { const picture = await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); assert.ok(!picture.isEmpty()); writeFileSync(join(dataDir, 'client-audit.png'), picture.toPNG()); screenshot = { saved: true }; }
@@ -164,6 +168,7 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await capture('client-connection-success.png');
   await run(() => {
     document.getElementById('open-create').click();
+    document.getElementById('create-participation').value='agent';document.getElementById('create-participation').dispatchEvent(new Event('change'));
     const game = document.getElementById('create-game'); game.value = 'hanabi'; game.dispatchEvent(new Event('change'));
     document.getElementById('create-players').value = '3'; document.getElementById('create-form').requestSubmit();
   });
@@ -173,13 +178,107 @@ export async function runClientSmoke({ window, fixture, remote, dataDir, getCopi
   await wait(() => Promise.resolve(getCopied()?.includes('seatToken')), 'Copy seat config failed.');
   const copied = JSON.parse(getCopied()); check(copied.baseUrl === fixture.apiUrl && copied.episodeId !== fixture.id && typeof copied.seatToken === 'string' && copied.gameId==='hanabi' && copied.scenarioId==='base' && copied.playerId==='p1', 'seat config copies current API, episode, game, scenario and own player');
   await fixture.call(`/episodes/${copied.episodeId}/truncate`, fixture.adminToken, { reason: 'synthetic UI-created episode cleanup' });
-  await run(()=>{document.getElementById('open-create').click();document.getElementById('create-room').click();});
+  await run(()=>{document.getElementById('open-create').click();document.getElementById('create-participation').value='invite';document.getElementById('create-participation').dispatchEvent(new Event('change'));document.getElementById('create-room').click();});
+  await wait(()=>run(()=>!document.getElementById('create-room').disabled),'Invitation creation did not finish.');
   await wait(()=>run(()=>!document.getElementById('room-panel').hidden&&document.getElementById('room-panel').textContent.includes('复制邀请链接')),'Invitation room did not render.');
   await run(()=>[...document.getElementById('room-panel').querySelectorAll('button')].find(b=>b.textContent.includes('邀请')).click());
   await wait(()=>Promise.resolve(getCopied()?.startsWith('coopbench://join#')),'Invitation was not copied.');
   const invitationParams=new URLSearchParams(new URL(getCopied()).hash.slice(1));
   const createdRoom=await fixture.call(`/rooms/${invitationParams.get('room')}/admin`);
   check(createdRoom.status==='waiting'&&createdRoom.episodeId===null&&!('seats' in createdRoom),'operator creates a pre-deal room and copies an invitation without player credentials');
+  await run(()=>{
+    document.getElementById('create-dialog').close();document.getElementById('open-create').click();
+    document.getElementById('create-players').value='2';
+    document.getElementById('create-name').value='  周日花火练习 <b>一起玩</b>  ';
+    document.getElementById('create-participation').value='human';document.getElementById('create-participation').dispatchEvent(new Event('change'));
+    document.getElementById('create-form').requestSubmit();
+  });
+  await wait(()=>run(()=>!document.getElementById('create-room').disabled),'Human creation did not finish.');
+  await wait(()=>run(()=>document.getElementById('room-panel').textContent.includes('已开放大厅')),'Human room creation did not appear.');
+  await run(()=>document.querySelector('#room-panel button[data-seat="p1"]').click());
+  await wait(()=>Promise.resolve(getCopied()&&!getCopied().startsWith('coopbench:')),'Creator did not copy the issued seat key.');
+  const issuedFirst=getCopied();
+  await run(()=>document.querySelector('#room-panel button[data-seat="p2"]').click());
+  await wait(()=>Promise.resolve(getCopied()!==issuedFirst),'Creator did not copy the second seat key.');
+  const issuedSecond=getCopied();
+  const publicRooms=(await fixture.call('/lobby')).rooms,humanRoom=publicRooms.at(-1);
+  check(!JSON.stringify(publicRooms).includes(issuedFirst),'lobby never exposes issued seat keys');
+  check(await run(()=>document.getElementById('start-room').disabled&&getComputedStyle(document.getElementById('start-room')).cursor==='default'),'incomplete room has gray start button and normal cursor');
+  await capture('client-room-waiting.png');
+  check(humanRoom.name==='周日花火练习 <b>一起玩</b>','room name is trimmed and sent at creation');
+  check(Boolean(humanRoom)&&!(await fixture.call('/lobby')).rooms.some(r=>r.roomId===createdRoom.roomId),'lobby excludes invitation-only rooms');
+  await run(()=>{document.getElementById('create-dialog').close();document.getElementById('open-join').click();});
+  await wait(()=>run(()=>document.querySelectorAll('#joinable-rooms button[data-room-id]').length>0),'Joinable lobby rooms did not render.');
+  await capture('client-lobby.png');
+  check(await run(()=>document.getElementById('joinable-rooms').textContent.includes('周日花火练习 <b>一起玩</b>')&&!document.querySelector('#joinable-rooms b')),'lobby room names are displayed as inert text');
+  const joinHuman=async()=>{
+    await run(id=>{document.querySelector(`#joinable-rooms button[data-room-id="${id}"]`).click();document.getElementById('lobby-player-name').value='Synthetic lobby human';},humanRoom.roomId);
+    check(!player.runtime,'clicking a room does not claim a seat without its token');
+    await run(()=>document.getElementById('join-seat').click());
+    check(!player.runtime,'blank seat token cannot claim a seat');
+    check(await run(()=>!document.getElementById('generate-seat-token')),'players cannot generate their own seat keys');
+    await run(()=>{document.getElementById('lobby-seat-token').value='x'.repeat(43);document.getElementById('join-seat').click();});
+    await wait(()=>run(()=>!document.getElementById('join-seat').disabled&&document.getElementById('join-status').textContent.includes('无效')),'Unissued seat key was not rejected.');
+    check(!player.runtime,'a syntactically valid but unissued key cannot take a seat');
+    await run(key=>{document.getElementById('lobby-seat-token').value=key;document.getElementById('join-seat').click();},issuedFirst);
+    await wait(()=>Promise.resolve(player.window&&!player.window.isDestroyed()&&player.runtime?.room),'Human player window did not open.');
+    check(await run(()=>!document.getElementById('lobby-seat-token').value),'seat token field clears after joining');
+  };
+  await joinHuman();
+  const seatJs=code=>player.window.webContents.executeJavaScript(code,true);
+  await wait(()=>seatJs("!document.querySelector('#lobby').hidden"),'Human waiting room did not render.');
+  check(await seatJs("document.querySelector('#game-name').textContent==='周日花火练习 <b>一起玩</b>'"),'joined player sees the room name');
+  check(await seatJs("!window.coopDesktop && Boolean(window.coopPlayer)"),'integrated player window cannot access the account/audit bridge');
+  check(!JSON.stringify(await seatJs("window.coopPlayer.command('status')")).includes(player.credentials.playerToken),'player renderer never receives seat credentials');
+  await seatJs("document.querySelector('#leave-room').click()");
+  await wait(()=>Promise.resolve(!player.runtime),'Leaving waiting room did not stop runtime.');
+  check((await fixture.call('/lobby')).rooms.find(r=>r.roomId===humanRoom.roomId).members.length===0,'leaving releases the lobby seat');
+  await run(()=>document.getElementById('open-join').click());
+  await wait(()=>run(()=>document.querySelectorAll('#joinable-rooms button[data-room-id]').length>0),'Lobby did not reopen.');
+  await joinHuman();
+  const otherToken=issuedSecond;
+  const other=await fixture.call(`/lobby/${humanRoom.roomId}/join`,fixture.adminToken,{name:'Synthetic teammate',playerToken:otherToken});
+  await wait(()=>seatJs("document.querySelector('#members').textContent.includes('Synthetic teammate')"),'Player did not receive roster update.');
+  await fixture.call(`/rooms/${humanRoom.roomId}/ready`,otherToken,{ready:true,rosterVersion:other.rosterVersion});
+  check(await seatJs("document.querySelector('#ready').hidden"),'human seat confirms readiness automatically when the roster fills');
+  await wait(()=>seatJs("!document.querySelector('#start').disabled"),'All-ready did not enable start.');
+  await run(id=>{document.getElementById('manage-rooms').click();},humanRoom.roomId);
+  await wait(()=>run(()=>[...document.querySelectorAll('#room-panel button')].some(b=>b.textContent.includes('周日花火练习'))),'Manage rooms did not list the created room.');
+  await run(()=>[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent.includes('周日花火练习')).click());
+  await wait(()=>run(()=>document.getElementById('start-room')&&!document.getElementById('start-room').disabled),'Full ready roster did not enable creator start.');
+  check(await run(()=>document.getElementById('room-panel').textContent.includes('Synthetic teammate') && getComputedStyle(document.getElementById('start-room')).cursor!=='wait'), 'creator sees joined members and start button uses a normal cursor');
+  await capture('client-room-ready.png');
+  await run(()=>document.getElementById('start-room').click());
+  await wait(()=>run(()=>document.getElementById('room-open-replay')),'Creator start did not finish.');
+  await run(()=>document.getElementById('create-dialog').close());
+  await wait(()=>seatJs("!document.querySelector('#game').hidden"),'Started human game did not render.');
+  check(await seatJs("document.querySelector('#board').textContent.includes('只能看提示知识')"),'human board retains own hidden cards');
+  await seatJs("document.querySelector('#action-form').requestSubmit()");
+  await wait(()=>seatJs("document.querySelector('#board').textContent.includes('提示 7/8')"),'Human action was not reflected by runtime.');
+  await seatJs('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+  const picture=await player.window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});writeFileSync(join(dataDir,'client-human-game.png'),picture.toPNG());
+  const episode=player.runtime.room.episodeId,playerId=player.runtime.room.playerId;
+  check((await fixture.call(`/rollouts/${episode}`)).summary.name===humanRoom.name,'started room retains its name in saved records');
+  await seatJs("document.querySelector('#disconnect').click()");await wait(()=>Promise.resolve(!player.runtime),'Disconnect did not finish.');
+  await run(async roomId=>{try{await window.coopTransport.openPlayer({roomId,name:'Mistyped key',seatToken:'z'.repeat(43)});throw Error('Invalid active-seat key unexpectedly accepted');}catch(error){if(error.message==='Invalid active-seat key unexpectedly accepted')throw error;}},humanRoom.roomId);
+  check(player.credentials.playerToken===issuedFirst,'rejected pasted key preserves the previous recoverable seat');
+  await run(()=>{document.getElementById('open-join').click();document.getElementById('resume-player').click();});
+  await wait(()=>Promise.resolve(player.runtime?.room?.episodeId===episode),'Return to an active human seat failed.');
+  check(player.runtime.room.playerId===playerId,'returning to a started game restores the same private seat');
+  await run(()=>{document.getElementById('open-library').click();document.getElementById('refresh').click();});
+  await wait(()=>run(id=>Boolean(document.querySelector(`[data-episode="${id}"]`)),episode),'Active game missing from replay block.');
+  await run(id=>document.querySelector(`[data-episode="${id}"]`).click(),episode);
+  await wait(()=>run(()=>!document.getElementById('detail').hidden),'Active game replay did not open.');
+  check(await run(()=>document.getElementById('outcome-badge').textContent.includes('进行中')),'ongoing games can be replayed before completion');
+  await fixture.call(`/episodes/${episode}/truncate`,fixture.adminToken,{reason:'synthetic lobby test complete'});
+  await player.close();
+  await run(()=>{document.getElementById('join-dialog').close();document.getElementById('open-library').click();document.getElementById('refresh').click();});
+  await wait(()=>run(id=>Boolean(document.querySelector(`[data-episode="${id}"]`)),episode),'Named game did not appear in records.');
+  check(await run(id=>document.querySelector(`[data-episode="${id}"]`).textContent.includes('周日花火练习 <b>一起玩</b>'),episode),'records display the saved room name');
+  await run(id=>{document.querySelector(`[data-episode="${id}"]`).click();document.getElementById('library-dialog').close();},episode);
+  await wait(()=>run(()=>document.getElementById('episode-title').textContent==='周日花火练习 <b>一起玩</b>'),'Replay title lost the room name.');
+  checks.push('named rooms remain named in the lobby, player, saved records and replay');
+  checks.push('packaged lobby creates, discovers, joins, leaves, readies, starts and accepts a human action');
   if (remote.store.encryption.isEncryptionAvailable()) {
     await remote.connect({ apiUrl: fixture.apiUrl, token: fixture.adminToken, remember: true });
     const saved = readFileSync(join(dataDir, 'remote-connection.json'), 'utf8');

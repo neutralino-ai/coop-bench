@@ -40,7 +40,8 @@ function encryption(){
 }
 
 test('remote API URLs require HTTPS except loopback and human IPC routes stay restricted',()=>{
-  assert.equal(normalizeApiUrl('https://coop.neutrinophysics.cn:34935/'),DEFAULT_API);
+  assert.equal(normalizeApiUrl('https://coop.neutrinophysics.cn:34936/'),DEFAULT_API);
+  assert.equal(normalizeApiUrl('https://coop.neutrinophysics.cn:34935/'),'https://coop.neutrinophysics.cn:34935/api/v1');
   assert.equal(normalizeApiUrl('https://coop.neutrinophysics.cn/'),'https://coop.neutrinophysics.cn/api/v1');
   assert.equal(normalizeApiUrl('http://127.0.0.1:8888/api/v1/'),'http://127.0.0.1:8888/api/v1');
   for(const url of ['http://example.com','file:///api/v1','https://user:secret@example.com/api/v1','https://example.com/api/v1?x=1','https://example.com/#secret','https://example.com/else','https://example.com\\@else'])assert.throws(()=>normalizeApiUrl(url),url);

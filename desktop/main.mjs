@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ConnectionStore, RemoteSession, publicConnectionError } from './remote-session.mjs';
 import { UpdateClient } from './update-client.mjs';
+import { LobbyPlayer } from './lobby-player.mjs';
 
 // This public client contains no local game engine. All game decisions are
 // verified by the configured remote API. Synthetic smoke fixtures are UI-only.
@@ -15,7 +16,7 @@ import { UpdateClient } from './update-client.mjs';
   const dataDir = argument ? resolve(argument) : join(app.getPath('appData'), 'Coop Bench Client');
   if (smoke && !argument) throw new Error('Client smoke test requires an isolated --data-dir.');
   mkdirSync(dataDir, { recursive: true }); app.setPath('userData', dataDir); app.setName('Coop Bench');
-  let window, remote, fixture, copiedText, updater;
+  let window, remote, fixture, copiedText, updater, player, quitting=false;
   const report = value => writeFileSync(join(dataDir, 'client-smoke-result.json'), JSON.stringify(value, null, 2));
   const trusted = url => { try { const u = new URL(url); return u.protocol === 'coop:' && u.host === 'app' && !u.username && !u.password && ['/', '/index.html'].includes(u.pathname); } catch { return false; } };
   function validateSender(event) {
@@ -28,6 +29,8 @@ import { UpdateClient } from './update-client.mjs';
     await app.whenReady();
     const apiSession = session.fromPartition('coop-api');
     remote = new RemoteSession({ fetcher: (url, options) => apiSession.fetch(url, options), store: new ConnectionStore(join(dataDir, 'remote-connection.json'), safeStorage) });
+    player = new LobbyPlayer({remote,directory:join(dataDir,'lobby-seats'),preload:join(here,'player-preload.cjs'),show:!smoke});
+    Object.assign(assets,{'/lobby.js':'lobby.js','/player.html':'player.html','/player.js':'player.js','/player.css':'player.css'});
     if (smoke) {
       const { startClientFixture } = await import('./client-smoke.mjs');
       fixture = await startClientFixture(dataDir);
@@ -48,8 +51,9 @@ import { UpdateClient } from './update-client.mjs';
       'get-connection': () => remote.restore(),
       'update-info': () => updater.info(), 'update-check': () => updater.check(),
       'update-download': () => updater.download(), 'update-install': () => updater.install(),
-      connect: input => remote.connect(input), login: input => remote.login(input),
-      'set-password': input => remote.setPassword(input), 'get-account': () => remote.getAccount(), disconnect: () => remote.logout(),
+      'open-player': input => player.open(input),
+      connect: async input => {await player.close();return remote.connect(input);}, login: async input => {await player.close();return remote.login(input);},
+      'set-password': input => remote.setPassword(input), 'get-account': () => remote.getAccount(), disconnect: async () => {await player.close();return remote.logout();},
       request: input => remote.request(input), 'cancel-request': id => { if (typeof id === 'string') remote.cancel(id); },
       'copy-text': text => { if (typeof text !== 'string' || text.length > 65536) throw new Error('复制内容过大。'); if (smoke) copiedText = text; else clipboard.writeText(text); },
     })) ipcMain.handle(`coop:${name}`, async (event, input) => {
@@ -78,14 +82,14 @@ import { UpdateClient } from './update-client.mjs';
     await window.loadURL('coop://app/');
     if (smoke) {
       const { runClientSmoke } = await import('./client-smoke.mjs');
-      const result = await runClientSmoke({ window, fixture, remote, dataDir, getCopied: () => copiedText });
+      const result = await runClientSmoke({ window, fixture, remote, player, dataDir, getCopied: () => copiedText });
       report({ ...result, packaged: app.isPackaged, platform: process.platform, arch: process.arch, version: app.getVersion() });
       await fixture.close(); remote.invalidate(); app.quit();
     }
   }
   app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { remote?.invalidate(); updater?.stop(); });
+  app.on('before-quit', event => { remote?.invalidate(); updater?.stop();if(player?.runtime&&!quitting){event.preventDefault();quitting=true;player.close().finally(()=>app.quit());} });
   main().catch(async error => {
     if (smoke) report({ ok: false, error: String(error), stack: error.stack,
       ui: window ? await window.webContents.executeJavaScript(`Object.fromEntries(['message','episode-title','model-message-status','model-messages','artifacts'].map(id=>[id,document.getElementById(id)?.textContent?.slice(0,1000)]))`).catch(() => null) : null });

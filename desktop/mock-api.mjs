@@ -76,14 +76,16 @@ export async function startMockApi() {
   const isAdmin = credential => credential === adminToken || Boolean(sessionToken && credential === sessionToken);
   const memberFor = (room, credential) => room.members.find(m => m.token === credential);
   const roomView = (room, credential, invite = false) => ({ roomId: room.roomId, gameId: 'hanabi', scenarioId: 'base', playerCount: room.playerCount,
+    name:room.name,decisionTimeoutSeconds:room.decisionTimeoutSeconds,allowHumans:room.allowHumans,expiresAt:Date.now()+600000,
     status: room.status, episodeId: room.episodeId, rosterVersion: room.rosterVersion, hostPlayerId: room.members[0]?.playerId ?? null,
     ...(memberFor(room, credential) ? { playerId: memberFor(room, credential).playerId } : {}),
     members: room.members.map(({ token: _private, ...member }) => clone(member)), ...(invite ? { inviteToken: room.inviteToken } : {}) });
-  const makeEpisode = (count, credentials = new Map()) => {
+  const makeEpisode = (count, credentials = new Map(), name) => {
     const episodeId = randomUUID(), seats = Array.from({ length: count }, (_, i) => ({ playerId: `p${i + 1}`, token: token() }));
     if (!credentials.size) for (const seat of seats) credentials.set(seat.token, seat.playerId);
     const players = seats.map(s => s.playerId);
-    episodes.set(episodeId, { rollout: auditRollout(episodeId, players), players, step: 0, ended: false, messages: new Map(), completions: new Map(), credentials });
+    const rollout=auditRollout(episodeId,players);rollout.summary.status='active';rollout.frames=rollout.frames.filter(f=>f.kind!=='truncated');if(name)rollout.summary.name=name;
+    episodes.set(episodeId, { rollout, players, step: 0, ended: false, messages: new Map(), completions: new Map(), credentials });
     return { episodeId, gameId: 'hanabi', scenarioId: 'base', seats };
   };
   const server = createServer(async (req, res) => {
@@ -112,11 +114,30 @@ export async function startMockApi() {
         if (path === '/auth/password') { password = body.password; sessionToken = 'hs1_' + token(); return respond(res, { token: sessionToken, identity, expiresAt: new Date(Date.now() + 3600000).toISOString() }); }
         if (path === '/auth/logout') { sessionToken = undefined; return respond(res, { ok: true }); }
       }
+      if (path === '/lobby' && req.method === 'GET') {
+        if (!isAdmin(credential)) return fail(res,401,'UNAUTHORIZED');
+        return respond(res,{rooms:[...rooms.values()].filter(r=>r.allowHumans&&r.status==='waiting'&&r.members.length<r.playerCount).map(r=>roomView(r,credential))});
+      }
+      const lobbyJoin=path.match(/^\/lobby\/([^/]+)\/join$/);
+      if(lobbyJoin&&req.method==='POST'){
+        if(!isAdmin(credential))return fail(res,401,'UNAUTHORIZED');
+        const room=rooms.get(lobbyJoin[1]);if(!room)return fail(res,404,'NOT_FOUND');
+        let member=memberFor(room,body.playerToken);
+        if(!member){
+          if(!room.allowHumans)return fail(res,403,'FORBIDDEN');
+          if(room.status!=='waiting')return fail(res,409,'ROOM_CLOSED');
+          if(room.members.length>=room.playerCount)return fail(res,409,'ROOM_FULL');
+          const issued=room.seatTokens?.find(s=>s.seatToken===body.playerToken);if(!issued)return fail(res,409,'INVALID_SEAT_TOKEN');
+          member={playerId:issued.playerId,name:body.name,ready:false,token:body.playerToken};room.members.push(member);room.rosterVersion++;room.members.forEach(m=>m.ready=false);
+        }
+        return respond(res,roomView(room,body.playerToken));
+      }
       if (path === '/rooms') {
         if (!isAdmin(credential)) return fail(res, 401, 'UNAUTHORIZED');
         if (req.method === 'GET') return respond(res, { rooms: [...rooms.values()].map(r => roomView(r, credential)) });
-        const room = { roomId: randomUUID(), playerCount: body.playerCount, status: 'waiting', episodeId: null, rosterVersion: 0, members: [], inviteToken: token() };
-        rooms.set(room.roomId, room); return respond(res, roomView(room, credential, true));
+        const room = { roomId: randomUUID(), playerCount: body.playerCount, allowHumans:body.allowHumans===true, name:body.name,decisionTimeoutSeconds:body.decisionTimeoutSeconds??600,status: 'waiting', episodeId: null, rosterVersion: 0, members: [], inviteToken: token() };
+        room.seatTokens=room.allowHumans?Array.from({length:room.playerCount},(_,i)=>({playerId:`p${i+1}`,seatToken:token()})):[];
+        rooms.set(room.roomId, room); return respond(res, {...roomView(room, credential, true),...(room.allowHumans?{seatTokens:room.seatTokens}:{})});
       }
       let match = path.match(/^\/rooms\/([^/]+)(?:\/([^/]+))?$/);
       if (match) {
@@ -130,12 +151,14 @@ export async function startMockApi() {
         const member = memberFor(room, credential);
         if (!isAdmin(credential) && !member) return fail(res, 401, 'UNAUTHORIZED');
         if (operation?.startsWith('admin') && !isAdmin(credential)) return fail(res, 403, 'ADMIN_ONLY');
+        if(operation==='admin-seat-tokens'){const seatTokens=room.seatTokens.filter(s=>!room.members.some(m=>m.playerId===s.playerId)).map(s=>({...s,seatToken:token()}));room.seatTokens=room.seatTokens.map(s=>seatTokens.find(k=>k.playerId===s.playerId)??s);return respond(res,{roomId:room.roomId,seatTokens});}
         if (['invite', 'admin-invite'].includes(operation)) { room.inviteToken = token(); return respond(res, roomView(room, credential, true)); }
         if (operation === 'ready') member.ready = body.ready;
-        if (['start', 'admin-start'].includes(operation)) { const next = makeEpisode(room.playerCount, new Map(room.members.map(m => [m.token, m.playerId]))); room.episodeId = next.episodeId; room.status = 'active'; }
+        if (operation === 'leave'){room.members=room.members.filter(m=>m!==member);room.rosterVersion++;room.members.forEach(m=>m.ready=false);}
+        if (['start', 'admin-start'].includes(operation)) { const next = makeEpisode(room.playerCount, new Map(room.members.map(m => [m.token, m.playerId])),room.name); room.episodeId = next.episodeId; room.status = 'active'; }
         return respond(res, roomView(room, credential));
       }
-      if (path === '/episodes' && req.method === 'POST') return isAdmin(credential) ? respond(res, makeEpisode(body.playerCount)) : fail(res, 401, 'UNAUTHORIZED');
+      if (path === '/episodes' && req.method === 'POST') return isAdmin(credential) ? respond(res, makeEpisode(body.playerCount,new Map(),body.name)) : fail(res, 401, 'UNAUTHORIZED');
       if (path === '/rollouts') return isAdmin(credential) ? respond(res, { items: [...episodes.values()].map(e => e.rollout.summary), total: episodes.size }) : fail(res, 401, 'UNAUTHORIZED');
       match = path.match(/^\/(rollouts|episodes)\/([^/]+)(?:\/(.*))?$/);
       if (!match) return fail(res, 404, 'MOCK_ROUTE_NOT_FOUND');
@@ -157,7 +180,7 @@ export async function startMockApi() {
         if (operation === 'annotations') { episode.rollout.annotations.push({ ...body, source: 'admin', createdAt: stamp }); return respond(res, { ok: true }); }
       }
       if (operation === 'replay' && admin) return respond(res, { status: 'synthetic-no-engine', verified: null, note: 'Client response rendering only; no deterministic replay or scoring is performed.' });
-      if (operation === 'truncate' && admin) { episode.ended = true; episode.step++; return respond(res, { ok: true }); }
+      if (operation === 'truncate' && admin) { episode.ended = true; episode.rollout.summary.status='truncated'; episode.step++; return respond(res, { ok: true }); }
       if (operation === 'rules' && player) return respond(res, metadata);
       if (operation === 'messages' && player) { const messages = episode.messages.get(player) ?? []; messages.push({ ...body, playerId: player, createdAt: stamp }); episode.messages.set(player, messages); return respond(res, body); }
       if (operation === 'messages/complete' && player) { const complete = { ...body, lastSequence: (episode.messages.get(player)?.length ?? 0) - 1 }; episode.completions.set(player, complete); return respond(res, complete); }

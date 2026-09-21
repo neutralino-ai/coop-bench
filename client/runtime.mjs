@@ -192,7 +192,10 @@ export class PlayerRuntime extends EventEmitter {
       const obs=this.observation;if(!obs||obs.status!=='active'||obs.hasMore||this.#modelBusy||!obs.legalActions.length||this.get('pendingAction'))return;
       if(lastDecision===obs.observationId)return;lastDecision=obs.observationId;
       this.#modelBusy=true;this.#state('thinking');
-      const ms=Math.max(1,Math.min(60000,(obs.control?.deadlineAt??Date.now()+this.#clockOffset+60000)-Date.now()-this.#clockOffset));
+      // Use the remaining absolute server budget, including the episode cap.
+      // A reconnect or corrective decision must not start a new duration.
+      const deadlines=[obs.control?.deadlineAt,obs.control?.episodeDeadlineAt].filter(Number.isFinite);
+      const ms=Math.max(1,Math.floor(deadlines.length?Math.min(...deadlines)-Date.now()-this.#clockOffset:600000));
       try{
         const key=name=>{if(typeof name!=='string'||!/^[A-Za-z0-9_-]{1,64}$/.test(name))throw Error('Invalid strategy state key.');return `strategy:${name}`;};
         const facade=Object.freeze({get:name=>this.get(key(name)),put:(name,value)=>{if(JSON.stringify(value).length>8*1024*1024)throw Error('Strategy state exceeds 8 MiB.');this.put(key(name),value);},

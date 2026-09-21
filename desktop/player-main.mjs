@@ -1,5 +1,5 @@
 import {app,BrowserWindow,protocol,ipcMain,safeStorage,clipboard,dialog} from 'electron';
-import {mkdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {mkdirSync,readFileSync,writeFileSync,existsSync,unlinkSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {PlayerRuntime,MinimalAgent,invitation,inviteUrl} from '../runtime/coop-bench/client/player.mjs';
@@ -55,6 +55,7 @@ async function main() {
         if(!runtime)throw Error('请先加入房间。');
         if(name==='ready')value=await runtime.ready(input.ready!==false);
         else if(name==='start')value=await runtime.roomCommand('start');
+        else if(name==='leave'){await runtime.roomCommand('leave');await runtime.close();runtime=null;if(existsSync(sessionFile))unlinkSync(sessionFile);value={status:'disconnected',canResume:false};}
         else if(name==='kick')value=await runtime.roomCommand('kick',{playerId:input.playerId});
         else if(name==='invite'){const room=await runtime.roomCommand('invite');clipboard.writeText(inviteUrl({...room,apiUrl:runtime.credentials().apiUrl}));value={copied:true};}
         else if(name==='act')value=await runtime.act(input.action,input.observationId);

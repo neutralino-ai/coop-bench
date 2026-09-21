@@ -8,11 +8,13 @@ Windows / macOS 的合作桌游研究客户端：人类创建房间、审计轨�
 
 从 [Releases](https://github.com/neutralino-ai/coop-bench/releases) 下载与你系统相符的管理端或 Player。0.9.1 起安装包仅连接远程 API，不再内置单机后端。Windows 包未签名、Mac 包未公证；三平台构建测试不能替代真实电脑上的安装验收。
 
-- **Coop Bench 管理端**：设置 API、登录、选择游戏、创建邀请房间、查看与审计回放。
+- **Coop Bench 主客户端**：设置 API、登录、创建游戏、从大厅加入人类对局、准备和开始游戏，也可查看与审计回放。
 - **Coop Bench Player**：用邀请链接加入，人工行动，或配置模型 API/base URL/model 自动参与。
 - **无界面 Agent**：读 [PLAY.md](PLAY.md)，使用本地 MCP 或 HTTP 客户端。不需要桌面应用。
 
-旧实验 API 为 `https://coop.neutrinophysics.cn:34935/api/v1`；新实验 API 为 `https://coop.neutrinophysics.cn:34936/api/v1`。两边不共享对局，必须使用组织者给定的地址。桌面默认仍为 34935，避免旧用户被自动切换。
+旧实验 API 为 `https://coop.neutrinophysics.cn:34935/api/v1`；新实验 API 为 `https://coop.neutrinophysics.cn:34936/api/v1`。两边不共享对局，必须使用组织者给定的地址。0.9.2 新安装默认连接 34936；已有保存地址保持不变，旧对局不会自动迁移。
+
+0.9.2 打开后首先显示密码登录，登录后直接显示“可加入的房间”和“对局回放”两个区块；顶部“创建新房间”。房主发放每席 seat token，玩家点击房间并输入密钥后入席，人齐后由房主开始。进行中的游戏也可回放（按账号权限）。详见 [大厅验收](docs/lobby-client-2026-09-21.md)。
 
 ## 文档
 

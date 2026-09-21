@@ -9,6 +9,7 @@ async function invoke(channel, input) {
   return result.value;
 }
 contextBridge.exposeInMainWorld('coopDesktop', Object.freeze({
+  openPlayer: input => invoke('coop:open-player', input),
   updateInfo: () => invoke('coop:update-info'),
   checkUpdate: () => invoke('coop:update-check'),
   downloadUpdate: () => invoke('coop:update-download'),

@@ -10,15 +10,17 @@
     const close = node('button','icon-button','×'); close.type='button';close.setAttribute('aria-label','关闭');close.onclick=()=>box.close();heading.append(close);
     const content=node('div','drawer-content');box.append(heading,content);document.body.append(box);return {box,content};
   };
-  const library=dialog('library-dialog','选择对局'), create=dialog('create-dialog','创建对局'), evidence=dialog('evidence-dialog','完整记录与技术证据'), full=dialog('decision-dialog','本次决策的原始记录'), rules=dialog('rules-dialog','游戏规则'), recordingDialog=dialog('recording-dialog','本局轨迹收集状态');
-  library.content.append(document.querySelector('.library'));
+  const library=dialog('library-dialog','选择对局'), create=dialog('create-dialog','创建新房间'), evidence=dialog('evidence-dialog','完整记录与技术证据'), full=dialog('decision-dialog','本次决策的原始记录'), rules=dialog('rules-dialog','游戏规则'), recordingDialog=dialog('recording-dialog','本局轨迹收集状态');
+  $('home-replays').append(document.querySelector('.library'));
   create.content.append($('create-panel'));
+  document.querySelector('.brand').onclick=event=>{event.preventDefault();window.CoopLobby.home();};
   const detail=$('detail'), timeline=document.querySelector('.replay-panel');
   evidence.content.append($('episode-stats'),$('coverage-notice'),$('export-rollout'),$('copy-api'),document.querySelector('.audit-columns'));
   const toolbar=node('div','focus-toolbar');
   const addButton=(id,label,fn)=>{const b=node('button','button subtle',label);b.id=id;b.type='button';b.onclick=()=>{stopPlayback();fn();};toolbar.append(b);return b;};
-  addButton('open-library','对局记录',()=>library.box.showModal());
-  addButton('open-create','＋ 新对局',()=>{if(!state.token){$('auth-panel').hidden=false;return;}create.box.showModal();});
+  addButton('open-library','← 返回大厅',()=>window.CoopLobby.home());
+  addButton('open-create','＋ 创建新房间',()=>{if(!state.token){$('auth-panel').hidden=false;return;}window.CoopRooms.newRoom();create.box.showModal();});
+  addButton('open-join','加入房间',()=>window.CoopLobby.home());
   const openEvidence=()=>{evidence.box.showModal();if(!state.artifacts.length&&!state.artifactLoading)void loadArtifacts();if(!state.modelMessages.length&&!state.modelMessageLoading)void loadModelMessages();};
   addButton('open-evidence','完整记录',openEvidence);
   addButton('open-rules','游戏规则',showRules);
@@ -34,6 +36,7 @@
   const more=node('button','button subtle','读取更多消息');more.id='focus-load-more';more.hidden=true;more.onclick=()=>load(true);evidence.content.prepend(more);
 
   function clear() {
+    window.CoopLobby?.clear();
     controller?.abort();epoch++;episode='';seats={};busy=false;document.body.dataset.audit='false';
     recording=null;recordingError='';recordingBusy=false;recordingAt=0;recordingEpisode='';
     for(const box of [library.box,create.box,evidence.box,full.box,rules.box,recordingDialog.box])if(box.open)box.close();

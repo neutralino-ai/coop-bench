@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export const DEFAULT_API = 'https://coop.neutrinophysics.cn:34935/api/v1';
+export const DEFAULT_API = 'https://coop.neutrinophysics.cn:34936/api/v1';
 const MAX_RESPONSE = 64 * 1024 * 1024;
 export class ClientConnectionError extends Error {
   constructor(code, message, status) {
@@ -75,8 +75,8 @@ export function validateRequest(input) {
   const url = new URL(input.path, 'https://local.invalid');
   requireThat(url.origin === 'https://local.invalid' && url.pathname === path, 'API 路径无效。');
   const id = '[A-Za-z0-9_-]+';
-  const get = new RegExp(`^/api/v1/(health|identity|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
-  const post = new RegExp(`^/api/v1/(rooms|rooms/${id}/admin-(?:start|kick|invite)|episodes|episodes/${id}/truncate|rollouts/${id}/annotations)$`);
+  const get = new RegExp(`^/api/v1/(health|identity|lobby|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
+  const post = new RegExp(`^/api/v1/(lobby/${id}/join|rooms|rooms/${id}/admin-(?:start|kick|invite|seat-tokens)|episodes|episodes/${id}/truncate|rollouts/${id}/annotations)$`);
   requireThat((input.method === 'GET' ? get : post).test(path), '此接口不属于人类客户端；Agent 请使用独立座位 API。');
   requireThat(input.method !== 'GET' || input.body === undefined, 'GET 不能携带请求体。');
   requireThat(input.method !== 'POST' || (input.body && typeof input.body === 'object' && !Array.isArray(input.body)), 'POST 需要 JSON 对象。');
