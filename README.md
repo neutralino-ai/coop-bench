@@ -1,6 +1,6 @@
 # Coop Bench 客户端
 
-Windows / macOS 的合作桌游研究客户端：人类创建房间、审计轨迹，玩家通过自己的席位与远程游戏服务交互。
+Windows / macOS / iOS 的合作桌游研究客户端：人类创建房间、审计轨迹，玩家通过自己的席位与远程游戏服务交互。
 
 **本仓库只包含客户端和公开接口说明，不包含游戏服务器、规则引擎、部署脚本或数据库。** 2026-09-20 起使用全新的 Git 历史；原完整项目与历史安装包已迁至维护者的私有仓库。旧 checkout 请重新克隆，不要合并旧历史。
 
@@ -11,6 +11,7 @@ Windows / macOS 的合作桌游研究客户端：人类创建房间、审计轨�
 - **Coop Bench 主客户端**：设置 API、登录、创建游戏、从大厅加入人类对局、准备和开始游戏，也可查看与审计回放。
 - **Coop Bench Player**：用邀请链接加入，人工行动，或配置模型 API/base URL/model 自动参与。
 - **无界面 Agent**：读 [PLAY.md](PLAY.md)，使用本地 MCP 或 HTTP 客户端。不需要桌面应用。
+- **iPhone / iPad**：使用自己的 Mac / Xcode 安装，见 [iOS 工程与安装步骤](ios/README.md)。包含大厅、人类席位、回放和内置 Agent；需要 iOS 17 或更新版本。
 
 旧实验 API 为 `https://coop.neutrinophysics.cn:34935/api/v1`；新实验 API 为 `https://coop.neutrinophysics.cn:34936/api/v1`。两边不共享对局，必须使用组织者给定的地址。0.9.2 新安装默认连接 34936；已有保存地址保持不变，旧对局不会自动迁移。
 

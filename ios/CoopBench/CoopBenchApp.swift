@@ -6,6 +6,7 @@ import WebKit
     @Environment(\.scenePhase) private var phase
     var body: some Scene { WindowGroup {
         WebSurface(view:model.host.view)
+            .preferredColorScheme(.light)
             .fullScreenCover(isPresented:$model.playerShown) {
                 VStack(spacing:0) { HStack { Button("返回大厅") { model.playerShown=false }.padding();Spacer();Text("我的席位").padding() };WebSurface(view:model.player.view) }
             }

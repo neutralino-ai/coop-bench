@@ -14,6 +14,8 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
@@ -31,7 +33,7 @@ jobs:
           node --input-type=module <<'NODE'
           import {readFileSync,appendFileSync} from 'node:fs';
           const list=JSON.parse(readFileSync('artifacts/ios/devices.json'));
-          const phone=Object.values(list.devices).flat().find(d=>d.isAvailable&&d.name.startsWith('iPhone'));
+          const phone=Object.entries(list.devices).filter(([runtime])=>runtime.includes('iOS-26')).flatMap(([,devices])=>devices).find(d=>d.isAvailable&&d.name.startsWith('iPhone'));
           if(!phone)throw Error('No available iPhone simulator');
           appendFileSync(process.env.GITHUB_ENV,'IOS_DEVICE='+phone.udid+'\n');
           NODE
@@ -40,7 +42,7 @@ jobs:
           xcrun simctl boot "$IOS_DEVICE"
           xcrun simctl bootstatus "$IOS_DEVICE" -b
           set -o pipefail
-          xcodebuild test -project ios/CoopBench.xcodeproj -scheme CoopBench -destination "platform=iOS Simulator,id=$IOS_DEVICE" -derivedDataPath artifacts/ios-derived -resultBundlePath artifacts/ios/UnitTests.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee artifacts/ios/build.log
+          xcodebuild test -project ios/CoopBench.xcodeproj -scheme CoopBench -destination "platform=iOS Simulator,id=$IOS_DEVICE" -parallel-testing-enabled NO -derivedDataPath artifacts/ios-derived -resultBundlePath artifacts/ios/UnitTests.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee artifacts/ios/build.log
       - name: Verify iPhone login, human seat and model harness
         run: |
           node scripts/ios-smoke-api.mjs > artifacts/ios/fixture.log 2>&1 &
@@ -53,6 +55,7 @@ jobs:
           for i in {1..100}; do [ -f "$container/Documents/ios-smoke.json" ] && break; sleep 1; done
           xcrun simctl io "$IOS_DEVICE" screenshot artifacts/ios/player.png
           cp "$container/Documents/ios-smoke.json" artifacts/ios/ios-smoke.json
+          find "$container/Documents" -maxdepth 1 -name '*.png' -exec cp {} artifacts/ios/ \;
           node --input-type=module -e 'import fs from "node:fs";const r=JSON.parse(fs.readFileSync("artifacts/ios/ios-smoke.json"));console.log(r);if(!r.ok)process.exit(1)'
       - name: Compile for physical iPhone without signing
         run: |

@@ -4,7 +4,7 @@
 
 ## 用自己的 Mac / Xcode 安装
 
-1. 在 Mac 安装 Xcode（含 iOS 平台组件），打开一次完成初始化；在 Xcode → Settings → Accounts 登录自己的 Apple ID。
+1. 在 Mac 安装 Xcode 26.3 或更新正式版（含 iOS 平台组件），打开一次完成初始化；在 Xcode → Settings → Accounts 登录自己的 Apple ID。
 2. 安装 Node.js 24 或更新版本，以及 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。使用 Homebrew 时执行 `brew install node xcodegen`。
 3. 克隆公开仓库后，在仓库根目录运行：
 
@@ -20,7 +20,7 @@
 5. 连接 iPhone，在手机上信任 Mac，并根据 Xcode 的提示开启“设置 → 隐私与安全性 → 开发者模式”。选择该手机作为运行目标，点击 ▶ Run。
 6. 首次打开输入现有 Coop Bench 密码。默认服务器为 `https://coop.neutrinophysics.cn:34936/api/v1`；可在“账号与服务器设置”修改。
 
-个人 Apple ID 可用于个人设备开发测试，签名有效期和可安装数量由 Apple 控制。Xcode 若提示签名到期，重新连接手机运行即可。此流程不需要 TestFlight；CI 构建不包含你的签名，不能把模拟器产物直接装到手机。
+个人 Apple ID 可用于个人设备开发测试；Personal Team 的签名通常 7 天到期，需要重新构建安装，见 [Apple 说明](https://developer.apple.com/help/account/basics/about-your-developer-account)。此流程不需要 TestFlight；CI 构建不包含你的签名，不能把模拟器产物直接装到手机。
 
 ## 使用与边界
 
@@ -28,6 +28,7 @@
 - 房主发放 seat token；人类、外部 Agent 和内置 Agent 使用相同席位权限。邀请链接只预填房间信息，仍需本席密钥。
 - 内置 Agent 加入前须通过两轮 Responses 工具调用测试。模型 key 按服务器和账号隔离，保存在本机钥匙串，不交给玩家网页；默认 DeepSeek。
 - 人类席位可通过大厅“返回我的对局”恢复。断网后动作使用原 Idempotency-Key 重试；原始记录保留在手机并重试上传。
+- 选择保存模型 key 时，也会保存本账号的内置 Agent 席位配置。重新登录后验证模型连接并恢复；没有选择保存时，退出进程后不会保留模型凭证。每个席位只在一个客户端运行。
 - 参赛时保持应用前台。iOS 后台会暂停客户端运行，服务器的三分钟倒计时继续；超时策略由该对局服务端决定。回到前台重新读取本席观察。
 - 所有合法动作、规则和信息可见性均由服务端决定。玩家页面只能访问本席，不持有房主登录凭证或其他玩家的密钥。
 
