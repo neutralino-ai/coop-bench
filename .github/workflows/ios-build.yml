@@ -33,17 +33,20 @@ jobs:
           node --input-type=module <<'NODE'
           import {readFileSync,appendFileSync} from 'node:fs';
           const list=JSON.parse(readFileSync('artifacts/ios/devices.json'));
-          const phone=Object.entries(list.devices).filter(([runtime])=>runtime.includes('iOS-26')).flatMap(([,devices])=>devices).find(d=>d.isAvailable&&d.name.startsWith('iPhone'));
+          const phone=Object.entries(list.devices).filter(([runtime])=>runtime.endsWith('iOS-26-2')).flatMap(([,devices])=>devices).find(d=>d.isAvailable&&d.name.startsWith('iPhone'));
           if(!phone)throw Error('No available iPhone simulator');
           appendFileSync(process.env.GITHUB_ENV,'IOS_DEVICE='+phone.udid+'\n');
           NODE
       - name: Build and test on iPhone simulator
         timeout-minutes: 10
         run: |
-          xcrun simctl boot "$IOS_DEVICE"
-          xcrun simctl bootstatus "$IOS_DEVICE" -b
           set -o pipefail
           xcodebuild test -project ios/CoopBench.xcodeproj -scheme CoopBench -destination "platform=iOS Simulator,id=$IOS_DEVICE" -parallel-testing-enabled NO -derivedDataPath artifacts/ios-derived -resultBundlePath artifacts/ios/UnitTests.xcresult CODE_SIGN_IDENTITY=- 2>&1 | tee artifacts/ios/build.log
+      - name: Record simulator app signing
+        if: always()
+        run: |
+          app=artifacts/ios-derived/Build/Products/Debug-iphonesimulator/CoopBench.app
+          if [ -d "$app" ]; then codesign -d --entitlements - "$app" > artifacts/ios/simulator-entitlements.log 2>&1; fi
       - name: Verify iPhone login, human seat and model harness
         timeout-minutes: 5
         run: |
