@@ -1,5 +1,7 @@
 # 人类花火页面：动作历史与提示知识
 
+以下为开发阶段记录；这些客户端修改已进入桌面 0.9.6，正式发布与配套后端状态见 [交付记录](desktop-0.9.6-delivery-2026-09-21.md)。
+
 ## 问题与修复
 
 原 Player 花火牌面分支仅在自己的未知牌上显示 possibleColors / possibleValues，队友牌面虽然收到同样字段，却没有渲染。原历史入口是折叠的 JSON，且仅展示最近一批 observation.updates。
