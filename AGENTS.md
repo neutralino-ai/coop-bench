@@ -1,5 +1,7 @@
 # Coop Bench 公开客户端接手指南
 
+**0.9.4**：内置 Agent 默认 DeepSeek Responses，入席前两轮工具验证、系统加密保存 API key；有限重试/超时后明确停止。保留 reasoning/tool 历史，房主页开局后刷新模型错误。测试与边界见 docs/release-0.9.4.md，发布状态需查 GitHub CI/Release。
+
 **0.9.3**：房主页逐席提供 Claude 提示词 / 内置 Agent / seat token / 踢出；roomId + 房主 seat token 可直连，玩家指南为 /player.md。发布验收见 docs/release-0.9.3.md。
 
 **2026-09-21 / 0.9.2**：密码登录首屏、双区块大厅、房主发放 seat token、人类自动准备与进行中回放。运行器按服务器截止时间计算预算，支持新服务默认600秒。发布状态及测试见 docs/release-0.9.2.md 和 docs/lobby-client-2026-09-21.md。已有继承的修改须保留，不要 reset/clean。

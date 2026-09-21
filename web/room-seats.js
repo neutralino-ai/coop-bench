@@ -20,7 +20,7 @@ window.CoopRoomSeats={
    card.append(actions);grid.append(card);
   }
   panel.append(grid);
-  if(transport.hostSeat)void transport.hostSeat('status',{roomId:room.roomId}).then(statuses=>{for(const s of statuses){const card=grid.querySelector(`[data-player-id="${s.playerId}"]`);if(card)card.append(node('p','small muted',s.warning??`内置 Agent · ${s.status==='waiting'?'等待开局':s.status==='reconnecting'?'正在重连':'运行中'}`));}}).catch(()=>{});
+  if(transport.hostSeat)void transport.hostSeat('status',{roomId:room.roomId}).then(statuses=>{for(const s of statuses){const card=grid.querySelector(`[data-player-id="${s.playerId}"]`);if(card){const label=({'waiting':room.status==='waiting'?'等待开局':'等待其他玩家','thinking':'模型思考中','submitting':'正在提交动作','reconnecting':'正在重连','error':'运行失败','ended':'对局已结束'})[s.status]??'运行中';const note=node('p','small host-agent-status',s.warning??`内置 Agent · ${label}`);note.setAttribute('role','status');card.append(note);}}}).catch(()=>{});
  },
  prompt({apiUrl,roomId,playerId,seatToken}){
   const guide=new URL('/player.md',apiUrl).href;
@@ -36,16 +36,29 @@ seat token: ${seatToken}
 
 seat token 是私密凭证，只用于你自己的请求认证，不放进网址、公开输出或上传轨迹。只读取服务 API 的规则与本席可见信息，不搜索外部规则，不读取队友信息。准备后保持运行，等房主开始；不要回复“准备好了”就结束。规则缺失或认证失败时报告问题，不猜测或绕过。保存真实可见请求、响应与决策记录；不要编造隐藏 thinking。`;
  },
- modelDialog({roomId,playerId,onStarted}){
+ async modelDialog({roomId,playerId,onStarted}){
   const old=document.getElementById('host-agent-dialog');old?.remove();
   const dialog=document.createElement('dialog');dialog.id='host-agent-dialog';dialog.className='host-agent-dialog';
-  dialog.innerHTML='<form id="host-agent-form"><h2>启用内置 Agent</h2><p class="muted">由本机运行，使用你提供的模型 API。客户端需要保持打开。</p><label>模型 API 地址<input id="host-agent-url" type="url" required placeholder="https://provider.example/v1"></label><label>模型名称<input id="host-agent-model" required maxlength="200" placeholder="模型 ID"></label><label>API key<input id="host-agent-key" type="password" required autocomplete="off"></label><p class="small muted">兼容 Chat Completions 工具调用。密钥仅在本次进程中使用；实际模型请求和响应会记录到本席轨迹。</p><p id="host-agent-error" role="status"></p><div class="buttons"><button type="button" class="button subtle" id="host-agent-cancel">取消</button><button type="submit" class="button primary" id="host-agent-start">启用并加入席位</button></div></form>';
-  document.body.append(dialog);const $=id=>dialog.querySelector('#'+id);$('host-agent-url').value=this.providerUrl??'';$('host-agent-model').value=this.providerModel??'';
-  $('host-agent-cancel').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{ $('host-agent-key').value='';dialog.remove();});
-  $('host-agent-form').onsubmit=async event=>{event.preventDefault();const button=$('host-agent-start');if(button.disabled)return;button.disabled=true;$('host-agent-error').textContent='';
-   const baseUrl=$('host-agent-url').value.trim(),model=$('host-agent-model').value.trim(),apiKey=$('host-agent-key').value;
-   try{await window.coopTransport.hostSeat('start',{roomId,playerId,baseUrl,model,apiKey});this.providerUrl=baseUrl;this.providerModel=model;dialog.close();await onStarted();}
-   catch(error){if(dialog.isConnected){$('host-agent-key').value='';$('host-agent-error').textContent=error.message;button.disabled=false;}}
+  dialog.innerHTML='<form id="host-agent-form"><h2>启用内置 Agent</h2><p class="muted">先测试模型，成功后加入席位。客户端需要保持打开。</p><label>模型 API 地址<input id="host-agent-url" type="url" required value="https://api.deepseek.com"></label><label>模型名称<input id="host-agent-model" required maxlength="200" value="deepseek-flash"></label><label>API key<input id="host-agent-key" type="password" required autocomplete="off"></label><label><input id="host-agent-remember" type="checkbox" checked> 加密保存 API key，下次免输入</label><button type="button" class="button subtle" id="host-agent-forget" hidden>清除已保存的密钥</button><p class="small muted">使用 Responses API。测试会进行两次简短的工具调用，可能产生少量模型费用。游戏中实际模型请求和响应会保存到本席轨迹。</p><p id="host-agent-error" role="status"></p><div class="buttons"><button type="button" class="button subtle" id="host-agent-cancel">取消</button><button type="button" class="button subtle" id="host-agent-test">测试连接与工具调用</button><button type="submit" class="button primary" id="host-agent-start" disabled>加入席位</button></div></form>';
+  document.body.append(dialog);const $=id=>dialog.querySelector('#'+id),transport=window.coopTransport;
+  let verified=null,savedUrl='',hasSaved=false,busy=false,editVersion=0;
+  const invalidate=()=>{editVersion++;verified=null;$('host-agent-start').disabled=true;$('host-agent-error').textContent='';$('host-agent-key').required=!(hasSaved&&$('host-agent-url').value.trim().replace(/\/$/,'')===savedUrl);};
+  for(const id of ['host-agent-url','host-agent-model','host-agent-key','host-agent-remember'])$(id).oninput=invalidate;
+  const lock=value=>{busy=value;for(const id of ['host-agent-url','host-agent-model','host-agent-key','host-agent-remember','host-agent-test','host-agent-forget'])$(id).disabled=value;};
+  $('host-agent-cancel').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{ $('host-agent-key').value='';void transport.hostSeat('cancelModelTest',{}).catch(()=>{});dialog.remove();});
+  $('host-agent-test').onclick=async()=>{
+   if(busy||!$('host-agent-form').reportValidity())return;verified=null;$('host-agent-start').disabled=true;lock(true);$('host-agent-error').textContent='正在验证连接和连续工具调用（最多 60 秒）…';
+   const baseUrl=$('host-agent-url').value.trim(),model=$('host-agent-model').value.trim(),apiKey=$('host-agent-key').value,rememberKey=$('host-agent-remember').checked;
+   try{const result=await transport.hostSeat('testModel',{baseUrl,model,apiKey,rememberKey});if(!dialog.isConnected)return;verified=result.verificationId;$('host-agent-key').required=false;if(result.keySaved){savedUrl=baseUrl.replace(/\/$/,'');hasSaved=true;$('host-agent-forget').hidden=false;$('host-agent-key').placeholder='已加密保存；留空使用已保存密钥';$('host-agent-key').required=false;}$('host-agent-key').value='';$('host-agent-error').textContent='连接和连续工具调用通过，可以加入席位。';$('host-agent-start').disabled=false;}
+   catch(error){if(dialog.isConnected){$('host-agent-key').value='';$('host-agent-error').textContent=error.message;}}
+   finally{if(dialog.isConnected)lock(false);}
+  };
+  $('host-agent-forget').onclick=async()=>{await transport.hostSeat('forgetModel',{});hasSaved=false;savedUrl='';$('host-agent-key').value='';$('host-agent-key').placeholder='';$('host-agent-forget').hidden=true;invalidate();$('host-agent-error').textContent='已清除本地保存的密钥。';};
+  $('host-agent-form').onsubmit=async event=>{event.preventDefault();if(busy||!verified||$('host-agent-start').disabled)return;$('host-agent-start').disabled=true;lock(true);
+   try{await transport.hostSeat('start',{roomId,playerId,verificationId:verified});dialog.close();await onStarted();}
+   catch(error){if(dialog.isConnected){verified=null;$('host-agent-error').textContent=error.message;lock(false);}}
   };dialog.showModal();
+  const version=editVersion;
+  try{const config=await transport.hostSeat('modelConfig',{});if(!dialog.isConnected||editVersion!==version||busy)return;$('host-agent-url').value=config.baseUrl;$('host-agent-model').value=config.model;hasSaved=config.hasApiKey;savedUrl=config.baseUrl;$('host-agent-key').required=!hasSaved;$('host-agent-key').placeholder=hasSaved?'已加密保存；留空使用已保存密钥':'';$('host-agent-forget').hidden=!hasSaved;$('host-agent-remember').checked=config.canRememberKey;if(!config.canRememberKey)$('host-agent-error').textContent='系统加密暂不可用，本次仅在内存使用密钥。';}catch(error){if(dialog.isConnected)$('host-agent-error').textContent=error.message;}finally{dialog.dataset.loaded='true';}
  }
 };

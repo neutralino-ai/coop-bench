@@ -63,3 +63,8 @@ test('Take Time backs stay unknown during discussion and generic private hands u
  const p=R.snapshot(data,0).players[0];assert.equal(p.actual,null);assert.equal(p.exact,false);
  assert.equal(p.observation.view.cardBacks.p1.hand.length,2);
 });
+
+test('Responses plain reasoning appears as original reasoning rather than a summary',()=>{
+ const result=R.reasoning([{kind:'model-output',message:{raw:{output:[{type:'reasoning',content:[{type:'reasoning_text',text:'Synthetic Responses reasoning.'}]}]}}}]);
+ assert.equal(result.length,1);assert.equal(result[0].text,'Synthetic Responses reasoning.');assert.equal(result[0].label,'上传的 reasoning 原文');
+});

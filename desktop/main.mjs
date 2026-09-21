@@ -59,7 +59,7 @@ import { PlayerRuntime,MinimalAgent,invitation } from '../runtime/coop-bench/cli
       'update-download': () => updater.download(), 'update-install': () => updater.install(),
       'open-player': input => player.open(input),
       'incoming-invitation':()=>{const value=pendingInvitation;pendingInvitation='';return value;},
-      'host-seat': async ({name,input}={})=>{if(!['key','start','status'].includes(name)||JSON.stringify(input).length>65536)throw Error('无效席位操作。');return hostSeats[name](input);},
+      'host-seat': async ({name,input}={})=>{if(!['key','start','status','modelConfig','testModel','cancelModelTest','forgetModel'].includes(name)||JSON.stringify(input??{}).length>65536)throw Error('无效席位操作。');return hostSeats[name](input);},
       connect: async input => {await hostSeats.close();await player.close();return remote.connect(input);}, login: async input => {await hostSeats.close();await player.close();return remote.login(input);},
       'set-password': input => remote.setPassword(input), 'get-account': () => remote.getAccount(), disconnect: async () => {await hostSeats.close();await player.close();return remote.logout();},
       request: async input => {const epoch=remote.epoch,response=await remote.request(input);if(epoch===remote.epoch)await hostSeats.capture(input,response);return response;}, 'cancel-request': id => { if (typeof id === 'string') remote.cancel(id); },

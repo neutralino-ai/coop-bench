@@ -192,9 +192,9 @@ export class PlayerRuntime extends EventEmitter {
   }
   /** Strategy adapters are serial per seat. They may return wait without POST. */
   attachAgent(agent) {
-    let lastDecision='';
+    let lastDecision='',failed=false;
     const wake=async()=>{
-      const obs=this.observation;if(!obs||obs.status!=='active'||obs.hasMore||this.#modelBusy||!obs.legalActions.length||this.get('pendingAction'))return;
+      const obs=this.observation;if(failed||!obs||obs.status!=='active'||obs.hasMore||this.#modelBusy||!obs.legalActions.length||this.get('pendingAction'))return;
       if(lastDecision===obs.observationId)return;lastDecision=obs.observationId;
       this.#modelBusy=true;this.#state('thinking');
       // Use the remaining absolute server budget, including the episode cap.
@@ -206,6 +206,7 @@ export class PlayerRuntime extends EventEmitter {
         const facade=Object.freeze({get:name=>this.get(key(name)),put:(name,value)=>{if(JSON.stringify(value).length>8*1024*1024)throw Error('Strategy state exceeds 8 MiB.');this.put(key(name),value);},
           recordModelRequest:(raw,details)=>this.recordModelRequest(raw,details),recordModelResponse:(raw,details)=>this.recordModelResponse(raw,details),recordTransportResult:(raw,details)=>this.recordTransportResult(raw,details)});
         const context=this.context(),answer=await agent.decide(context,{signal:AbortSignal.any([this.#stop.signal,AbortSignal.timeout(ms)]),runtime:facade});
+        this.emit('agent-success');
         this.#ackContext(obs.observationId);
         if(answer?.action)await this.act(answer.action,obs.observationId,answer.decisionSummary);
       }catch(error){
@@ -223,6 +224,7 @@ export class PlayerRuntime extends EventEmitter {
           }
         }
         this.emit('agent-warning',error.code??'AGENT_DECISION_FAILED');
+        if(error.code?.startsWith('MODEL_')&&!this.#stop.signal.aborted){failed=true;this.emit('agent-stopped',error.code);}
       }
       finally{this.#modelBusy=false;if(this.observation?.status==='active')this.#state(this.observation.control?.required?'your-turn':'waiting');else this.#state('ended');
         if(this.observation&&this.observation.observationId!==lastDecision&&!this.#stop.signal.aborted)queueMicrotask(listener);}

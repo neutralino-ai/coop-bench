@@ -9,6 +9,17 @@ const roomId='01234567-0123-0123-0123-012345678901';
 const observation=(control:any)=>({episodeId:'fixture-episode',playerId:'p1',observationId:'fixture-observation',decisionToken:'fixture-decision',status:'active',
   view:{},legalActions:[{type:'play'}],outcome:null,updateCursor:0,updates:[],...(control===undefined?{}:{control:{required:true,...control}})});
 
+test('exhausted model failures stop automatic decisions instead of retrying each polled observation',async()=>{
+ const runtime=new PlayerRuntime({apiUrl:'http://127.0.0.1:8788/api/v1',roomId,directory:mkdtempSync(join(tmpdir(),'coop-stopped-model-'))});
+ let calls=0;const stopped=Promise.withResolvers<string>();runtime.on('agent-stopped',(code:string)=>stopped.resolve(code));
+ runtime.attachAgent({async decide(){calls++;throw Object.assign(Error('Synthetic failure'),{code:'MODEL_TOOL_FORMAT'});}});
+ try{
+  runtime.observation=observation({deadlineAt:Date.now()+600000});runtime.emit('observation');assert.equal(await stopped.promise,'MODEL_TOOL_FORMAT');
+  await new Promise(resolve=>setImmediate(resolve));runtime.observation={...runtime.observation,observationId:'new-poll'};runtime.emit('observation');
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,1);
+ }finally{await runtime.close();}
+});
+
 test('runner decision signals use remaining server deadlines, including legacy windows and the episode cap',async t=>{
   const start=1700000000000;let now=start;const timers:number[]=[];
   t.mock.method(Date,'now',()=>now);

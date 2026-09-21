@@ -287,10 +287,23 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   const prompt=getCopied(),agentRoomId=prompt.match(/roomId: ([a-f0-9-]{36})/)[1],originalKey=prompt.match(/seat token: ([A-Za-z0-9_-]+)/)[1];
   check(prompt.includes(fixture.baseUrl+'/player.md')&&prompt.includes('playerId: p1')&&!prompt.includes(fixture.adminToken),'Claude prompt carries exactly its own seat and same-origin player guide without organizer credentials');
   await capture('client-host-empty-seats.png');
+  let modelLaunches=0;
   const launchModel=async()=>{
     await run(()=>document.querySelector('[data-seat="p1"][data-action="agent"]').click());
-    await wait(()=>run(()=>document.querySelector('#host-agent-dialog')?.open),'Model configuration did not open.');
-    await run(base=>{document.getElementById('host-agent-url').value=base+'/model';document.getElementById('host-agent-model').value='synthetic-model';document.getElementById('host-agent-key').value='synthetic-provider-key';document.getElementById('host-agent-form').requestSubmit();},fixture.baseUrl);
+    await wait(()=>run(()=>document.querySelector('#host-agent-dialog')?.dataset.loaded==='true'),'Model configuration did not load.');
+    if(modelLaunches++===0){
+      check(await run(()=>document.getElementById('host-agent-url').value==='https://api.deepseek.com'&&document.getElementById('host-agent-model').value==='deepseek-flash'&&document.getElementById('host-agent-start').disabled),'built-in agent defaults to DeepSeek and cannot join before verification');
+      await run(base=>{document.getElementById('host-agent-url').value=base+'/model';document.getElementById('host-agent-model').value='synthetic-thinking-model';document.getElementById('host-agent-key').value='synthetic-wrong-key';document.getElementById('host-agent-test').click();},fixture.baseUrl);
+      await wait(()=>run(()=>document.getElementById('host-agent-error').textContent.includes('HTTP 401')),'Invalid provider key did not explain failure.');
+      check(await run(()=>document.getElementById('host-agent-start').disabled&&Boolean(document.querySelector('.host-seat[data-player-id="p1"].vacant'))),'failed model verification leaves the seat vacant');
+    }else if(remote.store.encryption.isEncryptionAvailable()){
+      check(await run(()=>document.getElementById('host-agent-key').value===''&&document.getElementById('host-agent-key').placeholder.includes('已加密保存')),'saved model key is reused without returning its plaintext to the renderer');
+      check(!readFileSync(hostSeats.modelFile()).includes(Buffer.from('synthetic-provider-key')),'native model credential file is encrypted');
+    }
+    await run(base=>{document.getElementById('host-agent-url').value=base+'/model';document.getElementById('host-agent-model').value='synthetic-thinking-model';if(!document.getElementById('host-agent-key').placeholder.includes('已加密保存'))document.getElementById('host-agent-key').value='synthetic-provider-key';document.getElementById('host-agent-test').click();},fixture.baseUrl);
+    await wait(()=>run(()=>!document.getElementById('host-agent-start').disabled),'Model tool verification did not pass.');
+    if(modelLaunches===1)await capture('client-host-model-verified.png');
+    await run(()=>document.getElementById('host-agent-start').click());
     await wait(()=>run(()=>document.querySelector('.host-seat[data-player-id="p1"].occupied')&&!document.querySelector('#host-agent-dialog')),'Built-in agent failed to occupy its seat.');
     check(await run(()=>!document.getElementById('host-agent-key')&&document.querySelector('.host-seat[data-player-id="p1"]').querySelectorAll('button').length===1&&document.querySelector('.host-seat[data-player-id="p1"] button').dataset.action==='kick'),'occupied seat only exposes kick and provider secret is cleared from UI');
   };
@@ -306,10 +319,15 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>run(()=>document.querySelector('#start-room')&&!document.querySelector('#start-room').disabled),'Built-in agent did not automatically ready with a complete roster.');
   await capture('client-host-agent-ready.png');
   await run(()=>document.querySelector('#start-room').click());
-  await wait(()=>Promise.resolve(fixture.requests.some(r=>r.path==='/model/chat/completions')),'Built-in harness did not call the model API.');
+  await wait(()=>Promise.resolve(fixture.requests.some(r=>r.path==='/model/responses'&&r.body.tools[0]?.name==='act')),'Built-in harness did not call the Responses API.');
   const builtInEpisode=(await fixture.call(`/rooms/${agentRoomId}/admin`)).episodeId;
   await wait(()=>Promise.resolve(fixture.requests.some(r=>r.path===`/api/v1/episodes/${builtInEpisode}/actions`)),'Built-in harness did not submit a model action.');
-  const modelRequest=fixture.requests.find(r=>r.path==='/model/chat/completions');check(!JSON.stringify(modelRequest).includes(another)&&!JSON.stringify(modelRequest).includes(fixture.adminToken),'provider receives only seat context, not teammate or organizer credentials');
+  const modelRequest=fixture.requests.find(r=>r.path==='/model/responses'&&r.body.tools[0]?.name==='act');check(!JSON.stringify(modelRequest).includes(another)&&!JSON.stringify(modelRequest).includes(fixture.adminToken),'provider receives only seat context, not teammate or organizer credentials');
+  check(!('tool_choice' in modelRequest.body),'packaged thinking harness omits incompatible tool_choice');
+  await wait(()=>run(()=>document.querySelector('.host-agent-status')?.textContent.includes('HTTP 401')),'Active room did not display the provider failure.');
+  check(await run(()=>document.querySelector('.host-agent-status').textContent.includes('API key')),'active host page refreshes and explains model errors');
+  check(await run(()=>document.querySelector('.host-agent-status').textContent.includes('停止自动调用')),'failed agent stops instead of silently waiting or flooding the provider');
+  await capture('client-host-model-error.png');
   check(await run(()=>document.querySelectorAll('#room-panel [data-action="kick"]').length===0),'started rooms never expose kick');
   await fixture.call(`/episodes/${builtInEpisode}/truncate`,fixture.adminToken,{reason:'synthetic host-agent smoke complete'});await hostSeats.close();
   await run(()=>document.querySelector('#create-dialog').close());

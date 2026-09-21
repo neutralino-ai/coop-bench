@@ -83,6 +83,7 @@ globalThis.CoopReplay = (() => {
           const text = textBlocks(b); if (text) sections.push({label:'上传的 thinking 原文',text});
         }
         for (const b of Array.isArray(m.output) ? m.output : []) if (b?.type === 'reasoning') {
+          const original = textBlocks(b.content); if (original) sections.push({label:'上传的 reasoning 原文',text:original});
           const text = textBlocks(b.summary); if (text) sections.push({label:'上传的推理摘要',text});
         }
       };
