@@ -75,7 +75,7 @@ export function validateRequest(input) {
   const url = new URL(input.path, 'https://local.invalid');
   requireThat(url.origin === 'https://local.invalid' && url.pathname === path, 'API 路径无效。');
   const id = '[A-Za-z0-9_-]+';
-  const get = new RegExp(`^/api/v1/(health|identity|lobby|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
+  const get = new RegExp(`^/api/v1/(health|identity|lobby|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:observations|messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
   const post = new RegExp(`^/api/v1/(lobby/${id}/join|rooms|rooms/${id}/admin-(?:start|kick|invite|seat-tokens)|episodes|episodes/${id}/truncate|rollouts/${id}/annotations)$`);
   requireThat((input.method === 'GET' ? get : post).test(path), '此接口不属于人类客户端；Agent 请使用独立座位 API。');
   requireThat(input.method !== 'GET' || input.body === undefined, 'GET 不能携带请求体。');

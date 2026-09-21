@@ -22,6 +22,9 @@ export class PlayerRuntime extends EventEmitter {
     const binding=createHash('sha256').update(JSON.stringify([this.#config.apiUrl,config.roomId,this.#config.playerToken])).digest('hex');
     const stored=this.get('binding');if(stored&&stored!==binding){this.#db.close();throw Error('This directory belongs to a different seat.');}this.put('binding',binding);
     this.observation=this.get('observation');
+    this.#db.exec('CREATE TABLE IF NOT EXISTS visible_history(seq INTEGER PRIMARY KEY,payload TEXT NOT NULL);');
+    // Seed existing human sessions without consuming pending model context.
+    this.#rememberHistory([...(this.get('pendingUpdates')??[]),...(this.observation?.updates??[])]);
   }
   static fromInvitation(text,config,deps) {return new PlayerRuntime({...invitation(text),...config},deps);}
   /** Host persists this privately; never expose it through the model or renderer. */
@@ -29,7 +32,11 @@ export class PlayerRuntime extends EventEmitter {
   get(key) {const v=this.#db.prepare('SELECT value FROM local_state WHERE key=?').get(key);return v?JSON.parse(v.value):null;}
   put(key,value) {this.#db.prepare('INSERT INTO local_state VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,JSON.stringify(value));}
   #state(status) {this.status=status;this.emit('state',this.snapshot());}
-  snapshot() {return {status:this.status,room:this.room,observation:this.observation?modelObservation(this.observation):null,rules:this.rules,trace:this.#recorder?.status()??null,clockOffsetMs:this.#clockOffset};}
+  snapshot() {return {status:this.status,room:this.room,observation:this.observation?modelObservation(this.observation):null,visibleHistory:this.#db.prepare('SELECT payload FROM visible_history ORDER BY seq').all().map(row=>JSON.parse(row.payload)),rules:this.rules,trace:this.#recorder?.status()??null,clockOffsetMs:this.#clockOffset};}
+  #rememberHistory(updates) {
+    const insert=this.#db.prepare('INSERT OR IGNORE INTO visible_history VALUES(?,?)');
+    for(const update of updates)insert.run(update.seq,JSON.stringify({seq:update.seq,preparedAt:update.preparedAt,status:update.status,event:update.view?.lastEvent??null}));
+  }
   async #request(path,body,token=this.#config.playerToken,key,timeoutMs=15000) {
     const response=await this.#fetch(this.#config.apiUrl+path,{method:body===undefined?'GET':'POST',redirect:'error',
       headers:{Authorization:`Bearer ${token}`,...(body===undefined?{}:{'Content-Type':'application/json'}),...(key?{'Idempotency-Key':key}:{})},
@@ -75,7 +82,7 @@ export class PlayerRuntime extends EventEmitter {
     const pending=new Map((this.get('pendingUpdates')??[]).map(u=>[u.seq,u]));
     for(const u of observation.updates??[])pending.set(u.seq,u);
     this.#db.exec('BEGIN IMMEDIATE');
-    try{this.put('pendingUpdates',[...pending.values()].sort((a,b)=>a.seq-b.seq));this.put('observation',observation);this.put('deliveredCursor',Math.max(this.get('deliveredCursor')??0,page.nextCursor));this.#db.exec('COMMIT');}catch(e){this.#db.exec('ROLLBACK');throw e;}
+    try{this.#rememberHistory(observation.updates??[]);this.put('pendingUpdates',[...pending.values()].sort((a,b)=>a.seq-b.seq));this.put('observation',observation);this.put('deliveredCursor',Math.max(this.get('deliveredCursor')??0,page.nextCursor));this.#db.exec('COMMIT');}catch(e){this.#db.exec('ROLLBACK');throw e;}
     this.observation=observation;this.#state(observation.status!=='active'?'ended':observation.control?.required?'your-turn':'waiting');
   }
   /** Includes every event not yet actually delivered to a decision adapter. */

@@ -21,23 +21,26 @@ const metadata = {
   implementation: { status: 'synthetic-ui-only', engine: false }, sources: [],
 };
 const actions = [{ type: 'hint', description: 'Synthetic remote hint schema for form acceptance.', schema: { type: 'object',
-  properties: { type: { const: 'hint' }, target: { enum: ['p2'] }, kind: { enum: ['color', 'value'] }, value: { enum: ['red', 1] } },
+  properties: { type: { const: 'hint' }, target: { enum: ['p2'] }, kind: { enum: ['color', 'value'] }, value: { anyOf:[{enum:colors},{enum:[1,2,3,4,5]}] } },
+  oneOf:[{properties:{kind:{const:'color'},value:{enum:colors}}},{properties:{kind:{const:'value'},value:{enum:[1,2,3,4,5]}}}],
   required: ['type', 'target', 'kind', 'value'] } }, { type: 'play', description: 'Synthetic card-index form.', schema: { type: 'object',
-  properties: { type: { const: 'play' }, index: { type: 'integer', minimum: 0, maximum: 4 } }, required: ['type', 'index'] } }];
+  properties: { type: { const: 'play' }, index: { enum:[0,1,2,3,4] } }, required: ['type', 'index'] } },{type:'discard',description:'Synthetic legacy numeric index form.',schema:{type:'object',properties:{type:{const:'discard'},index:{type:'integer',minimum:0,maximum:4}},required:['type','index']}}];
 
 // Each view is a canned HTTP response. There is no private authority state from
 // which a real game could be progressed. Hidden own-card fields are absent.
 function view(player, players, hints = 8) {
   return { phase: 'playing', current: hints === 7 ? 'p2' : 'p1', hints, errors: 0, deckCount: 35,
     fireworks: { red: 0, blue: 0, green: 0, yellow: 0, white: 0 }, discards: [],
-    hands: Object.fromEntries(players.map((seat, seatIndex) => [seat, colors.map((color, i) => seat === player
+    hands: Object.fromEntries(players.map((seat, seatIndex) => [seat, ['red','blue','red','yellow','white'].map((color, i) => seat === player
       ? { id: `${seat}-card-${i}`, possibleColors: colors, possibleValues: [1, 2, 3, 4, 5] }
-      : { id: `${seat}-card-${i}`, color, value: (seatIndex + i) % 5 + 1 })])) };
+      : { id: `${seat}-card-${i}`, color, value: i===4?2:(seatIndex + i) % 5 + 1,
+        possibleColors: hints===7&&seat==='p2'?(color==='red'?['red']:colors.filter(c=>c!=='red')):colors, possibleValues: [1,2,3,4,5] })])),
+    lastEvent: hints===7?{type:'hint',player:'p1',target:'p2',kind:'color',value:'red',touched:[0,2]}:null };
 }
 function observation(id, player, players, step = 0, ended = false) {
   return { episodeId: id, playerId: player, observationId: `${id}:${player}:${step}:${ended}`, status: ended ? 'truncated' : 'active',
     decisionToken: 'synthetic-decision-token-not-a-real-capability', updateCursor: step, nextCursor: step, hasMore: false,
-    legalActions: ended ? [] : clone(actions), view: view(player, players, step ? 7 : 8), updates: step ? [{ seq: step, kind: ended ? 'truncated' : 'accepted', playerId: 'p1', action: { type: 'hint', target: 'p2', kind: 'color', value: 'red' } }] : [],
+    legalActions: ended ? [] : clone(actions), view: view(player, players, step ? 7 : 8), updates: step ? [{ seq: step, preparedAt: stamp, status: ended?'truncated':'active', view: view(player,players,7) }] : [],
     control: { required: !ended && !step, deadlineAt: Date.now() + 180000, decisionTimeoutSeconds:180,timeoutPolicy:'default-action-v1',timeoutAction:!step?{type:'hint',target:'p2',kind:'color',value:'red'}:null, windowId: 'synthetic-window', ...(ended ? { endReason: 'synthetic-player-ui-test' } : {}) } };
 }
 function auditRollout(id, players) {
@@ -189,11 +192,16 @@ export async function startMockApi() {
       if (category === 'rollouts') {
         if (!admin) return fail(res, 403, 'AUDIT_FORBIDDEN');
         if (!operation) return respond(res, episode.rollout);
+        if (operation === 'observations') {
+          const playerId=url.searchParams.get('playerId'),{decisionToken,...raw}=observation(episodeId,playerId,episode.players,1);
+          return respond(res,{episodeId,playerId,source:'server-issued-observation',redactedFields:['decisionToken'],receiptVerified:false,
+            observations:[{observationId:raw.observationId,issuedAt:stamp,observation:raw}],hasMore:false,nextBefore:null});
+        }
         if (operation === 'messages') {
           const seat = url.searchParams.get('playerId');
-          if (!seat) return respond(res, { seats: episode.players.map(playerId => ({ playerId, messageCount: episode.messages.get(playerId)?.length ?? 0, completion: episode.completions.get(playerId) ?? null })) });
-          const messages = (episode.messages.get(seat) ?? []).filter(m => m.sequence > Number(url.searchParams.get('after') ?? -1));
-          return respond(res, { messages, nextAfter: messages.at(-1)?.sequence ?? -1, hasMore: false, completion: episode.completions.get(seat) ?? null });
+          if (!seat) return respond(res, { seats: episode.players.map(playerId => ({ playerId, messageCount: episode.messages.get(playerId)?.length ?? 0, lastSequence:episode.messages.get(playerId)?.at(-1)?.sequence??-1, lastInputSequence:episode.messages.get(playerId)?.filter(m=>m.kind==='model-input').at(-1)?.sequence??-1, completion: episode.completions.get(playerId) ?? null })) });
+          const messages = (episode.messages.get(seat) ?? []).filter(m => m.sequence > Number(url.searchParams.get('after') ?? -1)&&(!url.searchParams.has('kind')||m.kind===url.searchParams.get('kind')));
+          return respond(res, { messages, nextAfter: messages.at(-1)?.sequence ?? Number(url.searchParams.get('after')??-1), hasMore: false, completion: episode.completions.get(seat) ?? null });
         }
         if (operation === 'artifacts') return respond(res, { artifacts: episodeId === id ? [artifact] : [] });
         if (operation === `artifacts/${artifact.id}/content` && episodeId === id) { res.writeHead(200, { 'Content-Type': 'application/octet-stream' }); return res.end(bytes); }
@@ -206,8 +214,9 @@ export async function startMockApi() {
       if (operation === 'messages/complete' && player) { const complete = { ...body, lastSequence: (episode.messages.get(player)?.length ?? 0) - 1 }; episode.completions.set(player, complete); return respond(res, complete); }
       if (['observation', 'wait', 'actions'].includes(operation) && player) {
         if (operation === 'actions') {
-          // A single expected HTTP example, not legal-move validation.
-          assert.deepEqual(body.action, { type: 'hint', target: 'p2', kind: 'color', value: 'red' }); episode.step = 1;
+          // Fixed HTTP examples for form serialization, not legal-move validation.
+          const expected=body.action.type==='play'?{type:'play',index:4}:body.action.type==='discard'?{type:'discard',index:4}:body.action.kind==='value'?{type:'hint',target:'p2',kind:'value',value:5}:{type:'hint',target:'p2',kind:'color',value:'red'};
+          assert.deepEqual(body.action,expected);episode.step = 1;
         }
         if (operation === 'wait') await new Promise(resolve => setTimeout(resolve, 100));
         const snapshot = observation(episodeId, player, episode.players, episode.step, episode.ended);
@@ -219,6 +228,7 @@ export async function startMockApi() {
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const baseUrl = `http://127.0.0.1:${server.address().port}`, apiUrl = baseUrl + '/api/v1';
   return { backend: 'mock', baseUrl, apiUrl, adminToken, id, bytes, artifact, requests,
+    appendMonitorMessage(playerId,message){const records=initial.messages.get(playerId)??[],completion=initial.completions.get(playerId);records.push({sequence:(records.at(-1)?.sequence??-1)+1,playerId,kind:'model-input',createdAt:stamp,message});initial.messages.set(playerId,records);initial.completions.delete(playerId);return ()=>{records.pop();if(completion)initial.completions.set(playerId,completion);};},
     async call(path, credential = adminToken, body) { const response = await fetch(apiUrl + path, { method: body === undefined ? 'GET' : 'POST',
       headers: { Authorization: `Bearer ${credential}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
       const value = await response.json(); assert.ok(response.ok, `Mock HTTP ${response.status}: ${JSON.stringify(value)}`); return value; },
