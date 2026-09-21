@@ -1,5 +1,7 @@
 # Coop Bench 公开客户端接手指南
 
+**2026-09-21 新要求**：新房间默认行动时限 180 秒；新对局超时执行服务端确定性合法默认动作并继续。旧局保留已存期限和策略。客户端 0.9.5 同步倒计时及内置/外部 Agent 提示；交付状态见 docs/release-0.9.5.md。
+
 **0.9.4**：内置 Agent 默认 DeepSeek Responses，入席前两轮工具验证、系统加密保存 API key；有限重试/超时后明确停止。保留 reasoning/tool 历史，房主页开局后刷新模型错误。测试与边界见 docs/release-0.9.4.md，发布状态需查 GitHub CI/Release。
 
 **0.9.3**：房主页逐席提供 Claude 提示词 / 内置 Agent / seat token / 踢出；roomId + 房主 seat token 可直连，玩家指南为 /player.md。发布验收见 docs/release-0.9.3.md。

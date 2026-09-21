@@ -160,7 +160,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>run(()=>!document.getElementById('room-panel').hidden&&document.getElementById('room-panel').textContent.includes('复制邀请链接')),'Admin invitation room did not appear');
   await run(()=>[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent==='复制邀请链接').click());
   await wait(()=>Promise.resolve(getCopied()?.startsWith('coopbench://join#')),'Admin invitation copy failed');
-  check(await run(()=>document.getElementById('room-panel').textContent.includes('600 秒')&&[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent==='开始游戏').disabled),'admin creates invitation room and prevents starting without ready seats');
+  check(await run(()=>document.getElementById('room-panel').textContent.includes('180 秒')&&[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent==='开始游戏').disabled),'admin creates a three-minute invitation room and prevents starting without ready seats');
   await run(()=>document.getElementById('create-dialog').close());
   let screenshot;
   try { const picture = await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); assert.ok(!picture.isEmpty()); writeFileSync(join(dataDir, 'client-audit.png'), picture.toPNG()); screenshot = { saved: true }; }

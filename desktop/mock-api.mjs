@@ -38,7 +38,7 @@ function observation(id, player, players, step = 0, ended = false) {
   return { episodeId: id, playerId: player, observationId: `${id}:${player}:${step}:${ended}`, status: ended ? 'truncated' : 'active',
     decisionToken: 'synthetic-decision-token-not-a-real-capability', updateCursor: step, nextCursor: step, hasMore: false,
     legalActions: ended ? [] : clone(actions), view: view(player, players, step ? 7 : 8), updates: step ? [{ seq: step, kind: ended ? 'truncated' : 'accepted', playerId: 'p1', action: { type: 'hint', target: 'p2', kind: 'color', value: 'red' } }] : [],
-    control: { required: !ended && !step, deadlineAt: Date.now() + 60000, windowId: 'synthetic-window', ...(ended ? { endReason: 'synthetic-player-ui-test' } : {}) } };
+    control: { required: !ended && !step, deadlineAt: Date.now() + 180000, decisionTimeoutSeconds:180,timeoutPolicy:'default-action-v1',timeoutAction:!step?{type:'hint',target:'p2',kind:'color',value:'red'}:null, windowId: 'synthetic-window', ...(ended ? { endReason: 'synthetic-player-ui-test' } : {}) } };
 }
 function auditRollout(id, players) {
   const views = hints => Object.fromEntries(players.map(p => [p, { ...observation(id, p, players), view: view(p, players, hints) }]));
@@ -154,7 +154,7 @@ export async function startMockApi() {
       if (path === '/rooms') {
         if (!isAdmin(credential)) return fail(res, 401, 'UNAUTHORIZED');
         if (req.method === 'GET') return respond(res, { rooms: [...rooms.values()].map(r => roomView(r, credential)) });
-        const room = { roomId: randomUUID(), playerCount: body.playerCount, allowHumans:body.allowHumans===true, name:body.name,decisionTimeoutSeconds:body.decisionTimeoutSeconds??600,status: 'waiting', episodeId: null, rosterVersion: 0, members: [], inviteToken: token() };
+        const room = { roomId: randomUUID(), playerCount: body.playerCount, allowHumans:body.allowHumans===true, name:body.name,decisionTimeoutSeconds:body.decisionTimeoutSeconds??180,status: 'waiting', episodeId: null, rosterVersion: 0, members: [], inviteToken: token() };
         room.seatTokens=room.allowHumans?Array.from({length:room.playerCount},(_,i)=>({playerId:`p${i+1}`,seatToken:token()})):[];
         rooms.set(room.roomId, room); return respond(res, {...roomView(room, credential, true),...(room.allowHumans?{seatTokens:room.seatTokens}:{})});
       }

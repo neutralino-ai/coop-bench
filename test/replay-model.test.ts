@@ -5,6 +5,16 @@ import {readFileSync} from 'node:fs';
 const context=vm.createContext({});
 vm.runInContext(readFileSync(new URL('../web/replay-model.js',import.meta.url),'utf8'),context);
 const R=context.CoopReplay;
+test('automatic fallback is labeled as server action and has no invented player reasoning',()=>{
+ const frame={kind:'accepted',automatic:{source:'server-timeout'},action:{type:'discard',index:0}};
+ assert.equal(R.actionText(frame),'超时默认动作 · 弃掉第 1 张牌');
+ assert.deepEqual(Array.from(R.linkedMessages([{playerId:'p1',observationId:'old',sequence:0}],frame,'p1')),[]);
+});
+test('copied player prompt explains authoritative deadline, default action and stale action recovery',()=>{
+ const ctx=vm.createContext({window:{},URL});vm.runInContext(readFileSync(new URL('../web/room-seats.js',import.meta.url),'utf8'),ctx);
+ const prompt=ctx.window.CoopRoomSeats.prompt({apiUrl:'https://example.test/api/v1',roomId:'room',playerId:'p1',seatToken:'synthetic-secret'});
+ for(const part of ['3 分钟','control.timeoutAction','default-action-v1','超时后重新 wait','synthetic-secret','https://example.test/player.md'])assert.ok(prompt.includes(part),part);
+});
 const hidden={id:'old-card',index:0,possibleColors:['red','blue'],possibleValues:[1,2]};
 function fixture(){
  const own={view:{hands:{p1:[{...hidden}],p2:[{id:'peer-card',color:'red',value:2}]}}};

@@ -37,6 +37,7 @@ globalThis.CoopReplay = (() => {
     })};
   }
   function actionText(frame) {
+    if (frame?.automatic) return '超时默认动作 · ' + actionText({...frame,automatic:null});
     const a = frame?.action;
     if (!a) return ({created:'发牌 / 初始状态',truncated:'结束记录'})[frame?.kind] ?? '系统事件';
     const saved = frame.observed?.view?.hand?.find(c => c.id === a.cardId);
