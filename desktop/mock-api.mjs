@@ -202,7 +202,16 @@ export async function startMockApi() {
       if (operation === 'replay' && admin) return respond(res, { status: 'synthetic-no-engine', verified: null, note: 'Client response rendering only; no deterministic replay or scoring is performed.' });
       if (operation === 'truncate' && admin) { episode.ended = true; episode.rollout.summary.status='truncated'; episode.step++; return respond(res, { ok: true }); }
       if (operation === 'rules' && player) return respond(res, metadata);
-      if (operation === 'messages' && player) { const messages = episode.messages.get(player) ?? []; messages.push({ ...body, playerId: player, createdAt: stamp }); episode.messages.set(player, messages); return respond(res, body); }
+      if (operation === 'messages' && player) {
+        const messages = episode.messages.get(player) ?? [];
+        if(req.method==='GET'){
+          const page=messages.filter(m=>m.sequence>Number(url.searchParams.get('after')??-1));
+          return respond(res,{messages:page,nextAfter:page.at(-1)?.sequence??Number(url.searchParams.get('after')??-1),hasMore:false,completion:episode.completions.get(player)??null});
+        }
+        const existing=messages.find(m=>m.sequence===body.sequence);
+        if(!existing)messages.push({ ...body, playerId: player, createdAt: stamp });
+        episode.messages.set(player, messages); return respond(res, body);
+      }
       if (operation === 'messages/complete' && player) { const complete = { ...body, lastSequence: (episode.messages.get(player)?.length ?? 0) - 1 }; episode.completions.set(player, complete); return respond(res, complete); }
       if (['observation', 'wait', 'actions'].includes(operation) && player) {
         if (operation === 'actions') {

@@ -86,3 +86,13 @@ Thumbs.db
 desktop.ini
 .idea/
 .vscode/
+
+# iOS generated projects, bundles and signing output; source lives in ios/.
+ios/Web/
+ios/*.xcodeproj/
+ios/DerivedData/
+*.xcarchive/
+*.xcresult/
+*.ipa
+*.mobileprovision
+xcuserdata/
