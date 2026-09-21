@@ -8,7 +8,7 @@ import WebKit
         WebSurface(view:model.host.view)
             .preferredColorScheme(.light)
             .fullScreenCover(isPresented:$model.playerShown) {
-                VStack(spacing:0) { HStack { Button("返回大厅") { model.playerShown=false }.padding();Spacer();Text("我的席位").padding() };WebSurface(view:model.player.view) }
+                VStack(spacing:0) { HStack { Button("返回大厅") { Task { await model.session.returnToLobby() } }.padding();Spacer();Text("我的席位").padding() };WebSurface(view:model.player.view) }
             }
             .onOpenURL { model.invitation($0) }
             .onChange(of:phase) { _,value in model.session.foreground(value == .active) }
@@ -26,6 +26,7 @@ struct WebSurface: UIViewRepresentable {
     lazy var player=WebBridge(role:"player",session:session)
     init() {
         session.showPlayer={ [weak self] in self?.playerShown=true }
+        session.showLobby={ [weak self] in self?.playerShown=false }
         session.playerChanged={ [weak self] value in self?.player.emit("state",value) }
         #if DEBUG && targetEnvironment(simulator)
         Task { [weak self] in guard let self else { return };await IOSSmoke.run(self) }
@@ -89,6 +90,7 @@ struct WebSurface: UIViewRepresentable {
         switch name {
         case "getConnection":return await session.getConnection()
         case "login":return try await session.login(input)
+        case "register":return try await session.register(input)
         case "connect":return try await session.login(input,personal:true)
         case "getAccount":return try await session.account()
         case "setPassword":return try await session.password(input)
@@ -105,7 +107,7 @@ struct WebSurface: UIViewRepresentable {
     private func player(_ name: String,_ input: JSON) async throws -> Any {
         if name == "incoming-invitation" { return "" }
         if name == "status" { return session.player?.snapshot() ?? ["status":"disconnected","lobbyManaged":true,"mode":"human"] }
-        if name == "disconnect" { session.player?.suspend();session.player=nil;return ["status":"disconnected","lobbyManaged":true,"mode":"human"] }
+        if name == "disconnect" { await session.returnToLobby();return ["status":"disconnected","lobbyManaged":true,"mode":"human"] }
         guard let runtime=session.player else { throw ClientFailure("NO_SEAT","请返回大厅加入房间。") }
         switch name {
         case "act":_ = try await runtime.act(input["action"] as? JSON ?? [:],observationID:input["observationId"] as? String ?? "")

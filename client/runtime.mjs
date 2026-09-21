@@ -203,7 +203,7 @@ export class PlayerRuntime extends EventEmitter {
     const wake=async()=>{
       const obs=this.observation;if(failed||!obs||obs.status!=='active'||obs.hasMore||this.#modelBusy||!obs.legalActions.length||this.get('pendingAction'))return;
       if(lastDecision===obs.observationId)return;lastDecision=obs.observationId;
-      this.#modelBusy=true;this.#state('thinking');
+      this.#modelBusy=true;this.emit('agent-activity',{phase:'requesting',at:Date.now()});this.#state('thinking');
       // Use the remaining absolute server budget, including the episode cap.
       // A reconnect or corrective decision must not start a new duration.
       const deadlines=[obs.control?.deadlineAt,obs.control?.episodeDeadlineAt].filter(Number.isFinite);
@@ -233,7 +233,7 @@ export class PlayerRuntime extends EventEmitter {
         this.emit('agent-warning',error.code??'AGENT_DECISION_FAILED');
         if(error.code?.startsWith('MODEL_')&&!this.#stop.signal.aborted){failed=true;this.emit('agent-stopped',error.code);}
       }
-      finally{this.#modelBusy=false;if(this.observation?.status==='active')this.#state(this.observation.control?.required?'your-turn':'waiting');else this.#state('ended');
+      finally{this.#modelBusy=false;this.emit('agent-activity',{phase:failed?'failed':this.#stop.signal.aborted?'stopped':this.observation?.status==='active'?'waiting':'ended',at:Date.now()});if(this.observation?.status==='active')this.#state(this.observation.control?.required?'your-turn':'waiting');else this.#state('ended');
         if(this.observation&&this.observation.observationId!==lastDecision&&!this.#stop.signal.aborted)queueMicrotask(listener);}
     };
     const listener=()=>{if(!this.#modelBusy)this.#decisionTask=wake();};

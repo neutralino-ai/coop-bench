@@ -49,8 +49,8 @@ enum Endpoint {
         try require(["GET","POST"].contains(method),"不支持的请求方法。")
         if owner {
             let id="[A-Za-z0-9_-]+"
-            let get="^/api/v1/(health|identity|lobby|games(?:/\(id))?|rooms(?:/\(id)/admin)?|rollouts(?:/\(id)(?:/(?:observations|messages|artifacts(?:/\(id)/content)?))?)?|episodes/\(id)/(?:replay|training|audit))$"
-            let post="^/api/v1/(lobby/\(id)/join|rooms|rooms/\(id)/admin-(?:start|kick|invite|seat-tokens)|episodes|episodes/\(id)/truncate|rollouts/\(id)/annotations)$"
+            let get="^/api/v1/(health|identity|lobby(?:/mine)?|games(?:/\(id))?|rooms(?:/\(id)/admin)?|rollouts(?:/\(id)(?:/(?:observations|messages|artifacts(?:/\(id)/content)?))?)?|episodes/\(id)/(?:replay|training|audit))$"
+            let post="^/api/v1/(lobby/\(id)/(?:join|leave)|rooms|rooms/\(id)/admin-(?:start|kick|invite|seat-tokens|end)|episodes|episodes/\(id)/truncate|rollouts/\(id)/annotations)$"
             try require(matches(path,method == "GET" ? get : post),"此接口不属于大厅权限。")
         } else { try require(path.hasPrefix("/api/v1/"),"只能请求游戏 API。") }
         return value
@@ -63,12 +63,13 @@ final class HTTP: @unchecked Sendable {
     static let shared=HTTP()
     private let session: URLSession
     init() { let config=URLSessionConfiguration.ephemeral; config.httpCookieStorage=nil; config.urlCredentialStorage=nil; config.urlCache=nil; config.requestCachePolicy = .reloadIgnoringLocalCacheData; session=URLSession(configuration:config,delegate:NoRedirect(),delegateQueue:nil) }
-    func raw(_ url: String, token: String = "", body: JSON? = nil, method: String? = nil, key: String? = nil, timeout: Double = 35) async throws -> (Data,HTTPURLResponse) {
+    func raw(_ url: String, token: String = "", body: JSON? = nil, method: String? = nil, key: String? = nil, timeout: Double = 35, hostToken: String? = nil) async throws -> (Data,HTTPURLResponse) {
         guard let target=URL(string:url) else { throw ClientFailure("INVALID_URL","无效地址。") }
         var request=URLRequest(url:target);request.httpMethod=method ?? (body == nil ? "GET":"POST");request.timeoutInterval=timeout
         if !token.isEmpty { request.setValue("Bearer \(token)",forHTTPHeaderField:"Authorization") }
         if let body { request.httpBody=try jsonData(body);request.setValue("application/json",forHTTPHeaderField:"Content-Type") }
         if let key { request.setValue(key,forHTTPHeaderField:"Idempotency-Key") }
+        if let hostToken { request.setValue(hostToken,forHTTPHeaderField:"X-Room-Host-Token") }
         let (bytes,response)=try await withThrowingTaskGroup(of:(Data,URLResponse).self) { group in
             group.addTask { try await self.session.data(for:request) }
             group.addTask {
@@ -83,8 +84,8 @@ final class HTTP: @unchecked Sendable {
         try require(!(300..<400).contains(response.statusCode),"服务器返回了重定向，凭证未转发。","REDIRECT_REJECTED")
         return (bytes,response)
     }
-    func json(_ url: String, token: String = "", body: JSON? = nil, key: String? = nil, timeout: Double = 35) async throws -> JSON {
-        let (bytes,response)=try await raw(url,token:token,body:body,key:key,timeout:timeout)
+    func json(_ url: String, token: String = "", body: JSON? = nil, key: String? = nil, timeout: Double = 35,hostToken: String? = nil) async throws -> JSON {
+        let (bytes,response)=try await raw(url,token:token,body:body,key:key,timeout:timeout,hostToken:hostToken)
         guard let value=(try? JSONSerialization.jsonObject(with:bytes)) as? JSON else { throw ClientFailure("INVALID_RESPONSE","未收到有效 JSON 响应。",response.statusCode) }
         guard (200..<300).contains(response.statusCode) else {
             let code=(value["error"] as? JSON)?["code"] as? String ?? "HTTP_\(response.statusCode)"

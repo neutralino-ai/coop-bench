@@ -58,7 +58,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   const connecting = await run((apiUrl, token) => {
     document.getElementById('credential-mode').click();
     document.getElementById('api-address').value = apiUrl;
-    document.getElementById('admin-token').value = token;
+    document.getElementById('admin-token').value = token;document.getElementById('login-user-id').value='owner';document.getElementById('login-password').value='Synthetic registration password 7!';
     document.getElementById('login-form').requestSubmit();
     return {
       phase: document.getElementById('connection-status').className.split(' ').at(-1),
@@ -69,11 +69,11 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(connecting.phase === 'connecting' && connecting.disabled && connecting.color[0] > connecting.color[1] && connecting.color[1] > connecting.color[2] + 50, 'in-flight login immediately displays yellow and prevents duplicate submits');
   await wait(async () => ['failed', 'expired'].includes((await status()).phase), 'Invalid fixture credential did not produce a failed connection state.');
   const rejected = await status();
-  check(red(rejected) && rejected.reason.includes('凭证') && !remote.descriptor().connected, 'invalid credential displays a red light and authentication-specific explanation');
+  check(red(rejected) && /账号|密码|注册/.test(rejected.reason) && !remote.descriptor().connected, 'invalid credential displays a red light and authentication-specific explanation');
   await capture('client-connection-auth-failed.png');
   await run((apiUrl, token) => {
     document.getElementById('api-address').value = apiUrl;
-    document.getElementById('admin-token').value = token;
+    document.getElementById('admin-token').value = token;document.getElementById('login-user-id').value='owner';document.getElementById('login-password').value='Synthetic registration password 7!';
     document.getElementById('login-form').requestSubmit();
   }, fixture.apiUrl, fixture.adminToken);
   await wait(() => run(() => document.getElementById('create-game').options.length === 1 && !document.getElementById('disconnect').hidden), 'Login/game catalogue failed.');
@@ -177,7 +177,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   checks.push('remote replay response renders (synthetic status only; engine not tested)');
   await run(() => document.querySelector('[data-download-artifact]').click());
   await wait(() => Promise.resolve(existsSync(join(dataDir, fixture.artifact.name))), 'Attachment was not downloaded.');
-  await wait(() => Promise.resolve(readFileSync(join(dataDir, fixture.artifact.name)).equals(fixture.bytes)), 'Downloaded attachment differs.');
+  await wait(() => {try{return readFileSync(join(dataDir,fixture.artifact.name)).equals(fixture.bytes);}catch(error){if(['ENOENT','EBUSY','EPERM'].includes(error.code))return false;throw error;}}, 'Downloaded attachment differs.');
   check(artifactAttempts.length>=2&&artifactAttempts.slice(1).every(at=>at>=artifactRetryAt),'artifact download honors server Retry-After across packaged IPC before retrying');
   checks.push('attachment download preserves exact bytes and SHA-256');
   await run(() => document.getElementById('copy-api').click());
@@ -265,11 +265,11 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>run(()=>document.querySelectorAll('#joinable-rooms button[data-room-id]').length>0),'Lobby did not reopen.');
   await joinHuman();
   const otherToken=issuedSecond;
-  const other=await fixture.call(`/lobby/${humanRoom.roomId}/join`,fixture.adminToken,{name:'Synthetic teammate',playerToken:otherToken});
+  const other=await fixture.call(`/rooms/${humanRoom.roomId}/join`,otherToken,{name:'Synthetic teammate',playerToken:otherToken});
   await wait(()=>seatJs("document.querySelector('#members').textContent.includes('Synthetic teammate')"),'Player did not receive roster update.');
   await fixture.call(`/rooms/${humanRoom.roomId}/ready`,otherToken,{ready:true,rosterVersion:other.rosterVersion});
   check(await seatJs("document.querySelector('#ready').hidden"),'human seat confirms readiness automatically when the roster fills');
-  await wait(()=>seatJs("!document.querySelector('#start').disabled"),'All-ready did not enable start.');
+  check(await seatJs("document.querySelector('#start').hidden"),'human seat has no host start control');
   await run(id=>{document.getElementById('manage-rooms').click();},humanRoom.roomId);
   await wait(()=>run(()=>[...document.querySelectorAll('#room-panel button')].some(b=>b.textContent.includes('周日花火练习'))),'Manage rooms did not list the created room.');
   await run(()=>[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent.includes('周日花火练习')).click());
@@ -302,7 +302,9 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await seatJs("document.querySelector('#disconnect').click()");await wait(()=>Promise.resolve(!player.runtime),'Disconnect did not finish.');
   await run(async roomId=>{try{await window.coopTransport.openPlayer({roomId,name:'Mistyped key',seatToken:'z'.repeat(43)});throw Error('Invalid active-seat key unexpectedly accepted');}catch(error){if(error.message==='Invalid active-seat key unexpectedly accepted')throw error;}},humanRoom.roomId);
   check(player.credentials.playerToken===issuedFirst,'rejected pasted key preserves the previous recoverable seat');
-  await run(()=>{document.getElementById('open-join').click();document.getElementById('resume-player').click();});
+  await run(()=>document.getElementById('open-join').click());
+  await wait(()=>run(id=>Boolean(document.querySelector(`#my-participating-rooms [data-room-id="${id}"] button`)),humanRoom.roomId),'Account participation missing');
+  await run(id=>document.querySelector(`#my-participating-rooms [data-room-id="${id}"] button`).click(),humanRoom.roomId);
   await wait(()=>Promise.resolve(player.runtime?.room?.episodeId===episode),'Return to an active human seat failed.');
   check(player.runtime.room.playerId===playerId,'returning to a started game restores the same private seat');
   await run(()=>{document.getElementById('open-library').click();document.getElementById('refresh').click();});
@@ -369,13 +371,29 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(await run(()=>document.querySelector('.host-agent-status').textContent.includes('停止自动调用')),'failed agent stops instead of silently waiting or flooding the provider');
   await capture('client-host-model-error.png');
   check(await run(()=>document.querySelectorAll('#room-panel [data-action="kick"]').length===0),'started rooms never expose kick');
-  await fixture.call(`/episodes/${builtInEpisode}/truncate`,fixture.adminToken,{reason:'synthetic host-agent smoke complete'});await hostSeats.close();
+  const priorAgent=hostSeats.agents.get(agentRoomId+'/p1').runtime,priorContext=priorAgent.get('strategy:responsesHistory'),priorToken=priorAgent.credentials().playerToken;
+  await wait(()=>run(()=>Boolean(document.querySelector('[data-action="resume-agent"]'))),'Failed Agent has no recovery control');
+  await run(()=>document.querySelector('[data-action="resume-agent"]').click());
+  await run(()=>{document.getElementById('host-agent-model').value='synthetic-recovered-model';document.getElementById('host-agent-key').value='synthetic-provider-key';document.getElementById('host-agent-test').click();});
+  await wait(()=>run(()=>!document.getElementById('host-agent-start').disabled),'Recovery model preflight failed');
+  await run(()=>document.getElementById('host-agent-start').click());
+  await wait(()=>Promise.resolve(hostSeats.agents.get(agentRoomId+'/p1')?.runtime!==priorAgent&&!hostSeats.pending.size),'Agent recovery did not finish');
+  const recovered=hostSeats.agents.get(agentRoomId+'/p1').runtime;
+  check(recovered.credentials().playerToken===priorToken,'Agent recovery preserves the original seat token');
+  check(priorContext?.length>0&&JSON.stringify(recovered.get('strategy:responsesHistory')).includes(JSON.stringify(priorContext[0])),'Agent recovery preserves the durable model conversation');
+  check((await hostSeats.key({roomId:agentRoomId,playerId:'p1'})).seatToken===priorToken,'copying an active occupied seat retains its existing token');
+  await run(()=>document.getElementById('end-room').click());
+  check(await run(()=>document.querySelector('#confirm-end-room').closest('dialog').open),'host termination requires an explicit confirmation');
+  await run(()=>document.getElementById('confirm-end-room').click());
+  await wait(async()=>(await fixture.call(`/rooms/${agentRoomId}/admin`)).status==='truncated','Host termination failed');
+  check((await fixture.call(`/rollouts/${builtInEpisode}/messages?playerId=p1`)).messages.length>0,'host termination keeps original agent messages');
+  await hostSeats.close();
   await run(()=>document.querySelector('#create-dialog').close());
   checks.push('packaged host prompt, built-in model harness, token copy, kick, revoked key, rejoin, ready and action verified');
   if (remote.store.encryption.isEncryptionAvailable()) {
-    await remote.connect({ apiUrl: fixture.apiUrl, token: fixture.adminToken, remember: true });
+    const sessionKey=remote.token;await remote.connect({ apiUrl: fixture.apiUrl, token: sessionKey, remember: true });
     const saved = readFileSync(join(dataDir, 'remote-connection.json'), 'utf8');
-    check(saved.includes('encrypted') && !saved.includes(fixture.adminToken) && remote.store.load().token === fixture.adminToken, 'native secure storage encrypts and restores a server-bound credential');
+    check(saved.includes('encrypted') && !saved.includes(fixture.adminToken) && remote.store.load().token === sessionKey, 'native secure storage encrypts and restores a server-bound credential');
   } else checks.push('native secure storage unavailable on this test host; persistence remains disabled');
   await run(() => document.getElementById('settings-open').click());
   await wait(() => run(() => !document.getElementById('password-form').hidden && !document.getElementById('new-password').disabled), 'Password setup did not become available.');
@@ -388,7 +406,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   checks.push('settings uses the real update network stack across an HTTP 302, verifies bytes and opens only the synthetic installer');
   const syntheticPassword = '  合作bench Ａa9! password  ';
   await run(password => {
-    document.getElementById('new-password').value = password;
+    document.getElementById('current-password').value='Synthetic registration password 7!';document.getElementById('new-password').value = password;
     document.getElementById('new-password').dispatchEvent(new Event('input'));
     document.getElementById('show-new-password').click();
     if(document.getElementById('new-password').type!=='text'||!document.getElementById('hint-new-password').textContent.includes('首尾空格'))throw Error('Password input diagnostics failed.');

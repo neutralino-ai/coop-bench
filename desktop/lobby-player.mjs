@@ -18,7 +18,7 @@ export class LobbyPlayer {
         if(JSON.stringify(input).length>65536)throw Error('输入过大。');
         if(name==='incoming-invitation')return {ok:true,value:''};
         if(name==='status')return {ok:true,value:this.snapshot()};
-        if(name==='disconnect'){await this.stop();return {ok:true,value:this.snapshot()};}
+        if(name==='disconnect'){await this.stop();this.window?.close();return {ok:true,value:this.snapshot()};}
         if(name==='resume'){await this.open({});return {ok:true,value:this.snapshot()};}
         if(!this.runtime)throw Error('请回到大厅，选择“加入对局”或“返回我的对局”。');
         if(name==='ready')await this.runtime.ready(input.ready!==false);
@@ -38,26 +38,25 @@ export class LobbyPlayer {
   error(code){return ({INVALID_SEAT_TOKEN:'Seat token 无效或已被重新发放，请向房主索取当前席位密钥。',ROOM_FULL:'房间已满，请刷新大厅。',ROOM_CLOSED:'房间已经开始或已过期，请刷新大厅。',STALE_ROSTER:'成员已变化，请重新确认并准备。',NOT_READY:'需要所有玩家入席并准备后才能开始。',FORBIDDEN:'此房间未开放人类加入，或你没有此操作权限。',NOT_FOUND:'房间不存在，请刷新大厅。',BUILD_MISMATCH:'房间属于旧版服务，请创建新房间。'})[code]??'操作未完成，请检查连接并刷新本席状态。';}
   file(scope){return join(this.directory,scope+'.encrypted');}
   saved(scope){if(scope===this.scope&&this.credentials)return this.credentials;try{if(safeStorage.isEncryptionAvailable())return JSON.parse(safeStorage.decryptString(readFileSync(this.file(scope))));}catch{}return null;}
-  snapshot(){return this.runtime?{...this.runtime.snapshot(),mode:'human',autoReady:true}:{status:'disconnected',canResume:Boolean(this.credentials),mode:'human',lobbyManaged:true};}
+  snapshot(){return this.runtime?{...this.runtime.snapshot(),mode:'human',autoReady:true,lobbyManaged:true}:{status:'disconnected',canResume:Boolean(this.credentials),mode:'human',lobbyManaged:true};}
   async open(input={}) {
     const {remote}=this;
     if(!remote.token||!remote.identity)throw new ClientConnectionError('LOGIN_REQUIRED','请先登录大厅。');
     if(this.busy)throw new ClientConnectionError('PLAYER_BUSY','正在加入对局，请稍候。');
     const scope=createHash('sha256').update(JSON.stringify([remote.apiUrl,remote.identity.id])).digest('hex');
-    if(input.roomId&&!/^[A-Za-z0-9_-]{43,128}$/.test(input.seatToken??''))throw new ClientConnectionError('INVALID_SEAT_TOKEN','请输入 43–128 位有效 seat token。');
+    if(input.seatToken!==undefined&&!/^[A-Za-z0-9_-]{43,128}$/.test(input.seatToken))throw new ClientConnectionError('INVALID_SEAT_TOKEN','请输入 43–128 位有效 seat token。');
     if(this.runtime){
-      if(this.scope!==scope||input.roomId&&this.credentials.roomId!==input.roomId)throw new ClientConnectionError('PLAYER_BUSY','你已加入另一场对局，请先在参赛窗口离开或断开。');
-      if(input.roomId&&input.seatToken!==this.credentials.playerToken)throw new ClientConnectionError('SEAT_MISMATCH','此窗口已有席位，请使用原 seat token 或先离开房间。');
-      if(this.show){this.window?.show();this.window?.focus();}return {opened:true};
+      if(this.scope!==scope||input.roomId&&this.credentials.roomId!==input.roomId){this.busy=true;const epoch=remote.epoch;try{await this.stop();if(epoch!==remote.epoch)throw new ClientConnectionError('CANCELLED','登录已改变，请重新打开大厅。');}finally{this.busy=false;}}
+      else {if(input.seatToken&&input.seatToken!==this.credentials.playerToken)throw new ClientConnectionError('SEAT_MISMATCH','此窗口已有席位，请使用原 seat token。');if(this.show){this.window?.show();this.window?.focus();}return {opened:true};}
     }
     if(input.roomId!==undefined&&!/^[a-f0-9-]{36}$/.test(input.roomId))throw new ClientConnectionError('INVALID_ROOM','无效房间。');
     const prior=this.saved(scope);
-    const config=input.roomId?{apiUrl:remote.apiUrl,roomId:input.roomId,name:String(input.name??'玩家').trim(),playerToken:input.seatToken}:prior;
-    if(!config)throw new ClientConnectionError('NO_SEAT','没有可恢复的席位，请从大厅加入对局。');
-    if(!config.name||config.name.length>60)throw new ClientConnectionError('INVALID_NAME','请输入 1–60 字的玩家名字。');
+    let config=input.seatToken?{apiUrl:remote.apiUrl,roomId:input.roomId,name:String(input.name??remote.identity.id).trim(),playerToken:input.seatToken}:null;
     this.busy=true;const epoch=remote.epoch;let next;
     try {
-      if(input.roomId){
+      if(!config){const roomId=input.roomId??prior?.roomId;if(!roomId)throw new ClientConnectionError('NO_SEAT','请在“我参与的”选择要继续的对局。');const restored=await remote.roomCredential(roomId,'resume');config={apiUrl:remote.apiUrl,roomId,name:restored.name,playerToken:restored.playerToken};}
+      if(!config.name||config.name.length>60)throw new ClientConnectionError('INVALID_NAME','请输入 1–60 字的玩家名字。');
+      if(input.seatToken){
         const response=await remote.request({id:randomUUID(),path:`/api/v1/lobby/${config.roomId}/join`,method:'POST',body:{name:config.name,playerToken:config.playerToken}});
         let result;try{result=JSON.parse(Buffer.from(response.bytes).toString());}catch{throw new ClientConnectionError('LOBBY_UNAVAILABLE','服务器尚未提供大厅功能，请更新服务端。');}
         if(response.status!==200)throw new ClientConnectionError('JOIN_FAILED',response.status===404?'服务器尚未提供大厅功能，或房间已不存在。':this.error(result?.error?.code));

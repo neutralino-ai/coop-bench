@@ -2,6 +2,9 @@ import {mkdir,readFile,writeFile,copyFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {webFiles} from './client-files.mjs';
 const root=new URL('../',import.meta.url),out=new URL('../ios/Web/',import.meta.url);
+const version=JSON.parse(await readFile(new URL('package.json',root))).version;
+const project=new URL('ios/project.yml',root),source=await readFile(project,'utf8');
+await writeFile(project,source.replace(/MARKETING_VERSION: '[^']+'/,`MARKETING_VERSION: '${version}'`));
 await mkdir(out,{recursive:true});
 for(const name of webFiles){
  let content=await readFile(new URL('web/'+name,root),'utf8');

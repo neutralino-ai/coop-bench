@@ -4,6 +4,7 @@ import Foundation
     let config: JSON, store: SeatFile;let agent: ModelAgent?
     var room: JSON?,rules: JSON?,observation: JSON?,status="disconnected",warning: String?,changed: ((JSON)->Void)?
     var data: JSON, clockOffset: Double=0
+    var agentPhase="waiting",lastActivityAt=Date().timeIntervalSince1970*1000,requestStartedAt:Double?
     private var loop: Task<Void,Never>?,decision: Task<Void,Never>?,upload: Task<Void,Never>?
     private var running=UUID(),uploadGeneration=UUID(),actionBusy=false,lastDecision="",agentFailed=false
     var api: String { config["apiUrl"] as! String };var token: String { config["playerToken"] as! String };var roomID: String { config["roomId"] as! String }
@@ -22,7 +23,7 @@ import Foundation
         return ["status":status,"room":room as Any? ?? null,"observation":safe as Any? ?? null,"visibleHistory":data["visibleHistory"] ?? [],"rules":displayRules,"mode":agent == nil ? "human":"model","autoReady":true,"lobbyManaged":true,"canResume":true,"clockOffsetMs":clockOffset,"warning":warning as Any? ?? null,
           "trace":["acknowledgedThrough":(data["traceBase"] as? Int ?? 0)+(data["acked"] as? Int ?? 0)-1,"pendingMessages":(data["messages"] as? [JSON] ?? []).count-(data["acked"] as? Int ?? 0),"sealed":data["sealed"] as? Bool ?? false,"completeness":"partial"]]
     }
-    func notify(_ state: String? = nil) { if let state { status=state };changed?(snapshot()) }
+    func notify(_ state: String? = nil) { if let state { status=state };lastActivityAt=Date().timeIntervalSince1970*1000;changed?(snapshot()) }
     func request(_ path: String,_ body: JSON? = nil,key: String? = nil,timeout: Double=35) async throws -> JSON { try await HTTP.shared.json(api+path,token:token,body:body,key:key,timeout:timeout) }
     func connect() async throws {
         notify("connecting")
@@ -87,6 +88,7 @@ import Foundation
         }
     }
     func suspend() { running=UUID();uploadGeneration=UUID();loop?.cancel();loop=nil;decision?.cancel();decision=nil;upload?.cancel();upload=nil;notify("disconnected") }
+    func suspendAndWait() async { let pending=[loop,decision,upload];suspend();for task in pending { await task?.value };agentPhase="stopped" }
     private func accept(_ packet: JSON) throws {
         var next=packet["observation"] as? JSON ?? packet
         guard let id=next["observationId"] as? String else { throw ClientFailure("INVALID_RESPONSE","观察响应无效。") }
@@ -204,6 +206,8 @@ import Foundation
         }
     }
     private func runDecision(_ agent: ModelAgent,observation: JSON,id: String,generation: UUID) async {
+        agentPhase="requesting";requestStartedAt=Date().timeIntervalSince1970*1000
+        defer { if running == generation { agentPhase=agentFailed ? "failed":"waiting";notify() } }
         do {
             notify("thinking")
             var safe=observation;safe.removeValue(forKey:"decisionToken");safe["updates"]=data["updates"] ?? []

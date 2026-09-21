@@ -46,11 +46,15 @@ function jsonResponse(result) {
 // Authentication responses are consumed only in the main process. In particular,
 // adding these routes to the generic renderer request allowlist would leak tokens.
 function authRequest(input) {
-  requireThat(/^\/api\/v1\/auth\/(?:login|password|logout)$/.test(input.path) && input.method === 'POST' ||
+  requireThat(/^\/api\/v1\/auth\/(?:login|register|password|logout)$/.test(input.path) && input.method === 'POST' ||
     /^\/api\/v1\/auth\/(?:status|account)$/.test(input.path) && input.method === 'GET', '认证请求无效。');
   const body = input.body === undefined ? undefined : JSON.stringify(input.body);
   requireThat(body === undefined || Buffer.byteLength(body) <= 4096, '认证请求过大。');
   return { path: input.path, method: input.method, body };
+}
+function roomCredentialRequest(input) {
+  requireThat(input.method==='GET'&&/^\/api\/v1\/rooms\/[a-f0-9-]{36}\/host$/.test(input.path)||input.method==='POST'&&/^\/api\/v1\/lobby\/[a-f0-9-]{36}\/resume$/.test(input.path),'无效席位恢复请求。');
+  return {path:input.path,method:input.method,body:input.method==='POST'?'{}':undefined};
 }
 export function normalizeApiUrl(value) {
   requireThat(typeof value === 'string' && value.length <= 2048, '请输入 API 地址。');
@@ -75,8 +79,8 @@ export function validateRequest(input) {
   const url = new URL(input.path, 'https://local.invalid');
   requireThat(url.origin === 'https://local.invalid' && url.pathname === path, 'API 路径无效。');
   const id = '[A-Za-z0-9_-]+';
-  const get = new RegExp(`^/api/v1/(health|identity|lobby|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:observations|messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
-  const post = new RegExp(`^/api/v1/(lobby/${id}/join|rooms|rooms/${id}/admin-(?:start|kick|invite|seat-tokens)|episodes|episodes/${id}/truncate|rollouts/${id}/annotations)$`);
+  const get = new RegExp(`^/api/v1/(health|identity|lobby(?:/mine)?|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:observations|messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
+  const post = new RegExp(`^/api/v1/(lobby/${id}/(?:join|leave)|rooms|rooms/${id}/admin-(?:start|kick|invite|seat-tokens|end)|episodes|episodes/${id}/truncate|rollouts/${id}/annotations)$`);
   requireThat((input.method === 'GET' ? get : post).test(path), '此接口不属于人类客户端；Agent 请使用独立座位 API。');
   requireThat(input.method !== 'GET' || input.body === undefined, 'GET 不能携带请求体。');
   requireThat(input.method !== 'POST' || (input.body && typeof input.body === 'object' && !Array.isArray(input.body)), 'POST 需要 JSON 对象。');
@@ -121,10 +125,10 @@ export class RemoteSession {
     this.fetcher = fetcher; this.store = store; this.timeoutMs = timeoutMs; this.maxResponse = maxResponse;
     const saved = store.load(); this.apiUrl = saved.apiUrl; this.saved = saved;
     this.token = ''; this.identity = null; this.remembered = Boolean(saved.token);
-    this.epoch = 0; this.pending = new Map(); this.restorePromise = null; this.passwordEpoch = null;
+    this.epoch = 0; this.pending = new Map(); this.restorePromise = null; this.passwordEpoch = null;this.hostTokens=new Map();
   }
   descriptor() { return { mode: 'remote', apiUrl: this.apiUrl, connected: Boolean(this.token && this.identity), identity: this.identity ? structuredClone(this.identity) : null, remembered: this.remembered }; }
-  invalidate() { this.epoch++; for (const controller of this.pending.values()) controller.abort(); this.pending.clear(); this.token = ''; this.identity = null; this.passwordEpoch = null; }
+  invalidate() { this.epoch++; for (const controller of this.pending.values()) controller.abort(); this.pending.clear(); this.token = ''; this.identity = null; this.passwordEpoch = null;this.hostTokens.clear(); }
   disconnect() { this.invalidate(); this.saved = null; this.remembered = false; this.store.save(this.apiUrl, '', false); return this.descriptor(); }
   cancel(id) { this.pending.get(id)?.abort(); }
   async restore() {
@@ -140,11 +144,11 @@ export class RemoteSession {
     const restored = await this.restorePromise;
     return { ...this.descriptor(), ...(restored?.epoch === this.epoch ? { connectionError: restored.connectionError } : {}) };
   }
-  async wire(apiUrl, token, input, epoch = this.epoch, authentication = false) {
+  async wire(apiUrl, token, input, epoch = this.epoch, authentication = false,hostToken) {
     requireThat(epoch === this.epoch, '连接已更换或请求已取消，旧请求已丢弃。', 'CANCELLED');
     requireThat(this.pending.size < 8, '请求过多，请稍后重试。');
     requireThat(!this.pending.has(input.id), '请求 ID 重复。');
-    const request = authentication ? authRequest(input) : validateRequest(input), controller = new AbortController();
+    const request = authentication==='room'?roomCredentialRequest(input):authentication ? authRequest(input) : validateRequest(input), controller = new AbortController();
     this.pending.set(input.id, controller);
     const binary = request.path.split('?')[0].endsWith('/content');
     let timedOut = false;
@@ -152,7 +156,7 @@ export class RemoteSession {
     try {
       const response = await this.fetcher(new URL(request.path, apiUrl).href, {
         method: request.method, headers: { Accept: binary ? 'application/octet-stream' : 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(request.body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),...(hostToken?{'X-Room-Host-Token':hostToken}:{}), ...(request.body === undefined ? {} : { 'Content-Type': 'application/json' }) },
         ...(request.body === undefined ? {} : { body: request.body }), credentials: 'omit', redirect: 'error', signal: controller.signal,
       });
       requireThat(!response.redirected && (response.status < 300 || response.status >= 400), 'API 重定向被拒绝，请填写最终 HTTPS 地址。', 'INVALID_API_RESPONSE', response.status);
@@ -203,7 +207,7 @@ export class RemoteSession {
     const result = await this.wire(apiUrl, token, { id: randomUUID(), path: '/api/v1/identity', method: 'GET' }, epoch);
     requireLoginStatus(result.status);
     const identity = json(result);
-    requireThat(typeof identity.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(identity.id) && ['coordinator', 'operator', 'auditor'].includes(identity.role), '服务返回的身份无效。', 'INVALID_API_RESPONSE');
+    requireThat(typeof identity.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(identity.id) && ['coordinator', 'operator', 'auditor','member'].includes(identity.role), '服务返回的身份无效。', 'INVALID_API_RESPONSE');
     requireThat(epoch === this.epoch, '连接已更换，登录结果已丢弃。', 'CANCELLED');
     this.store.save(apiUrl, token, input.remember === true);
     this.token = token; this.identity = { id: identity.id, role: identity.role,
@@ -221,7 +225,7 @@ export class RemoteSession {
   async acceptSession(result, apiUrl, remember, epoch) {
     const value = jsonResponse(result), expiry = Date.parse(value.expiresAt);
     requireThat(validToken(value.token) && value.token.startsWith('hs1_') && Number.isFinite(expiry) && expiry > Date.now() &&
-      validUser(value.identity?.id) && ['operator', 'auditor'].includes(value.identity?.role), '服务器返回的登录会话无效。', 'INVALID_API_RESPONSE');
+      validUser(value.identity?.id) && ['operator', 'auditor','member'].includes(value.identity?.role), '服务器返回的登录会话无效。', 'INVALID_API_RESPONSE');
     const verified = await this.wire(apiUrl, value.token, { id: randomUUID(), path: '/api/v1/identity', method: 'GET' }, epoch);
     requireLoginStatus(verified.status);
     const identity = jsonResponse(verified);
@@ -240,10 +244,27 @@ export class RemoteSession {
     const epoch = this.epoch;
     await this.checkHealth(apiUrl, epoch);
     const result = await this.wire(apiUrl, '', { id: randomUUID(), path: '/api/v1/auth/login', method: 'POST', body: { userId, password: input.password } }, epoch, true);
-    if (result.status === 401) throw new ClientConnectionError('AUTH_REJECTED', '账号或密码不正确，或账号已失效。首次使用请先用个人凭证连接，再到设置中设置密码。', 401);
-    if ([404, 503].includes(result.status)) throw new ClientConnectionError('PASSWORD_UNAVAILABLE', '服务器尚未启用账号密码登录，请使用个人凭证连接或联系管理员。', result.status);
+    if (result.status === 401) throw new ClientConnectionError('AUTH_REJECTED', '用户名或密码不正确。首次使用请用注册 token 创建账号。', 401);
+    if ([404, 503].includes(result.status)) throw new ClientConnectionError('PASSWORD_UNAVAILABLE', '服务器尚未启用账号密码登录，请联系管理员。', result.status);
     requireLoginStatus(result.status);
     return this.acceptSession(result, apiUrl, input.remember === true, epoch);
+  }
+  async register(input) {
+    requireThat(input&&typeof input==='object'&&Object.keys(input).every(key=>['apiUrl','userId','password','registrationToken','remember'].includes(key)),'注册参数无效。');
+    const apiUrl=normalizeApiUrl(input.apiUrl),userId=typeof input.userId==='string'?input.userId.trim():'';
+    requireThat(validUser(userId)&&userId.length>=3&&validPassword(input.password,true)&&validToken(input.registrationToken),'用户名需要3–64个字母、数字或 ._-，密码需要12–128字符，并提供有效注册 token。');
+    this.invalidate();this.apiUrl=apiUrl;this.saved=null;this.remembered=false;this.store.save(apiUrl,'',false);const epoch=this.epoch;await this.checkHealth(apiUrl,epoch);
+    const result=await this.wire(apiUrl,'',{id:randomUUID(),path:'/api/v1/auth/register',method:'POST',body:{userId,password:input.password,registrationToken:input.registrationToken}},epoch,true);
+    if(result.status===409)throw new ClientConnectionError('USERNAME_TAKEN','用户名已被使用，请换一个。',409);
+    if(result.status===401||result.status===403)throw new ClientConnectionError('REGISTRATION_REJECTED','注册 token 无效、已使用或已失效。',result.status);
+    requireThat(result.status===201,'注册失败，请检查填写内容或联系管理员。','REGISTRATION_FAILED',result.status);
+    try{return await this.acceptSession(result,apiUrl,input.remember===true,epoch);}catch{throw new ClientConnectionError('REGISTERED_RELOGIN','账号已创建，请使用刚设置的用户名和密码登录。');}
+  }
+  async roomCredential(roomId,operation) {
+    requireThat(/^[a-f0-9-]{36}$/.test(roomId??'')&&['host','resume'].includes(operation)&&this.token&&this.identity,'请登录后选择房间。');const epoch=this.epoch;
+    const result=await this.wire(this.apiUrl,this.token,{id:randomUUID(),path:operation==='host'?`/api/v1/rooms/${roomId}/host`:`/api/v1/lobby/${roomId}/resume`,method:operation==='host'?'GET':'POST'},epoch,'room');
+    requireThat(epoch===this.epoch,'登录已改变，请重试。','CANCELLED');requireThat(result.status===200,'没有本房间的管理权限或可恢复席位。','ROOM_ACCESS_DENIED',result.status);const value=jsonResponse(result);
+    requireThat(validToken(value[operation==='host'?'hostToken':'playerToken']),'服务器返回的房间凭证无效。');return value;
   }
   async getAccount() {
     requireThat(this.passwordEpoch === null, '密码正在更新，请稍后读取账号。', 'CANCELLED');
@@ -255,7 +276,7 @@ export class RemoteSession {
     if ([404, 503].includes(result.status)) throw new ClientConnectionError('PASSWORD_UNAVAILABLE', '此服务器尚未启用个人密码设置。', result.status);
     requireLoginStatus(result.status);
     const value = jsonResponse(result);
-    requireThat(value.userId === this.identity.id && ['operator', 'auditor'].includes(value.role) && typeof value.passwordConfigured === 'boolean' &&
+    requireThat(value.userId === this.identity.id && ['operator', 'auditor','member'].includes(value.role) && typeof value.passwordConfigured === 'boolean' &&
       ['personal-token', 'password-session'].includes(value.authentication), '服务器返回的账号信息无效。', 'INVALID_API_RESPONSE');
     this.identity.role = value.role;
     return { userId: value.userId, role: value.role, passwordConfigured: value.passwordConfigured, authentication: value.authentication,
@@ -299,7 +320,9 @@ export class RemoteSession {
     const publicRead = input.method === 'GET' && /^\/api\/v1\/(?:health|games(?:\/[^?]+)?)(?:\?|$)/.test(request.path);
     requireThat(publicRead || this.passwordEpoch === null, '密码正在更新，旧会话请求已取消。', 'CANCELLED');
     requireThat(publicRead || this.token && this.identity, '请先连接 API。');
-    const epoch = this.epoch, result = await this.wire(this.apiUrl, publicRead ? '' : this.token, input, epoch);
+    const epoch = this.epoch,room=input.method==='POST'&&/^\/api\/v1\/rooms\/([a-f0-9-]{36})\/admin-/.exec(request.path)?.[1];let hostToken;
+    if(room){hostToken=this.hostTokens.get(room);if(!hostToken){hostToken=(await this.roomCredential(room,'host')).hostToken;this.hostTokens.set(room,hostToken);}}
+    const result = await this.wire(this.apiUrl, publicRead ? '' : this.token, input, epoch,false,hostToken);
     requireThat(epoch === this.epoch, '连接已更换或请求已取消，旧响应已丢弃。', 'CANCELLED');
     if (result.status === 401 && !publicRead) this.disconnect();
     return result;

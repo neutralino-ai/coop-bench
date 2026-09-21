@@ -32,7 +32,7 @@ test('room-only links contain no credential and still parse old invitations',()=
  assert.throws(()=>invitation('coopbench://join#api=http://evil.example&room='+roomId));
 });
 
-test('host harnesses keep independent seat credentials, reserve once, reject occupied keys and stop on kick/logout',async()=>{
+test('host harnesses keep independent seat credentials, reserve once, copy occupied keys and stop on kick/logout',async()=>{
  const fixture=await startMockApi(),directory=mkdtempSync(join(tmpdir(),'coop-host-test-')),encryption={isEncryptionAvailable:()=>false};
  const remote=new RemoteSession({fetcher:fetch,store:new ConnectionStore(join(directory,'connection.json'),encryption)});
  await remote.connect({apiUrl:fixture.apiUrl,token:fixture.adminToken});
@@ -51,7 +51,7 @@ test('host harnesses keep independent seat credentials, reserve once, reject occ
   const verifiedSecond=await host.testModel(config);await host.start({...config,playerId:'p2',verificationId:verifiedSecond.verificationId});assert.equal(host.agents.size,2);
   const credentials=[...host.agents.values()].map(a=>a.runtime.credentials());assert.notEqual(credentials[0].playerToken,credentials[1].playerToken);
   assert.ok(credentials.every(c=>!JSON.stringify(c).includes(fixture.adminToken)));
-  await assert.rejects(host.key({roomId:created.roomId,playerId:'p1'}),/已经有人/);
+  assert.equal((await host.key({roomId:created.roomId,playerId:'p1'})).seatToken,first.seatToken);
   const state=JSON.stringify(host.status({roomId:created.roomId}));assert.ok(!state.includes(first.seatToken)&&!state.includes(config.apiKey));
   const firstRuntime=host.agents.get(created.roomId+'/p1').runtime;
   firstRuntime.emit('agent-warning','MODEL_API_HTTP_400');

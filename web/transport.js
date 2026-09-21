@@ -16,11 +16,11 @@ if(typeof document!=='undefined'){
  const defaultApi=desktop?'https://coop.neutrinophysics.cn:34936/api/v1':`${location.origin}/api/v1`;
  let info={mode:desktop?'remote':'browser',apiUrl:defaultApi,connected:false,identity:null,remembered:false};
  let browserToken='',browserSession=false,generation=0;
- const pending=new Map();
+ const pending=new Map(),hostTokens=new Map();
  const abortError=()=>new DOMException('连接已更换或请求已取消。','AbortError');
  function unwrapBridge(value){if(value&&typeof value==='object'&&value.__coopClientError){const detail=value.__coopClientError,error=Error(String(detail.message??'桌面连接请求失败。'));if(typeof detail.code==='string')error.code=detail.code;if(Number.isInteger(detail.status))error.status=detail.status;throw error;}return value;}
  const publicInfo=()=>({...info,identity:info.identity?{...info.identity}:null});
- function invalidate(){generation++;for(const cancel of pending.values())cancel();pending.clear();}
+ function invalidate(){generation++;for(const cancel of pending.values())cancel();pending.clear();hostTokens.clear();}
  function apiPath(value){
   if(typeof value!=='string'||!value.startsWith('/api/v1/')||value.includes('\\')||value.includes('#'))throw Error('只允许当前服务器的 API 路径。');
   const parsed=new URL(value,'https://api.invalid');
@@ -48,7 +48,10 @@ if(typeof document!=='undefined'){
   const controller=new AbortController(),cancel=()=>controller.abort();pending.set(id,cancel);signal?.addEventListener('abort',cancel,{once:true});
   try{
    const token=seatToken===undefined?browserToken:seatToken;
-   const response=await fetch(`${location.origin}${path}`,{method,signal:controller.signal,credentials:'omit',redirect:'error',headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(body!==undefined?{'Content-Type':'application/json'}:{}),...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});
+   const room=method==='POST'&&seatToken===undefined?path.match(/^\/api\/v1\/rooms\/([a-f0-9-]{36})\/admin-/)?.[1]:null;
+   let hostToken;
+   if(room){hostToken=hostTokens.get(room);if(!hostToken){const response=await requestOnce(`/api/v1/rooms/${room}/host`,{signal});if(!response.ok)return response;const value=await response.json();if(typeof value.hostToken!=='string'||value.hostToken.length<24)throw authError(200);if(version!==generation)throw abortError();hostToken=value.hostToken;hostTokens.set(room,hostToken);}}
+   const response=await fetch(`${location.origin}${path}`,{method,signal:controller.signal,credentials:'omit',redirect:'error',headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(hostToken?{'X-Room-Host-Token':hostToken}:{}),...(body!==undefined?{'Content-Type':'application/json'}:{}),...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});
    if(version!==generation)throw abortError();return response;
   }finally{pending.delete(id);signal?.removeEventListener('abort',cancel);}
  }
@@ -86,7 +89,7 @@ if(typeof document!=='undefined'){
   catch(error){if(version===generation)browserToken='';throw error;}
  }
  function authError(status,code){
-  const labels={AUTH_REJECTED:'账号或密码不正确，或会话已失效。',PERMISSION_DENIED:'当前账号无权执行此操作。',AUTH_CONFLICT:'密码已被其他会话修改，请重新登录后再试。',INVALID_REQUEST:'输入不符合要求，请检查账号或密码格式。',RATE_LIMITED:'操作过于频繁，请稍后重试。',API_UNAVAILABLE:'服务器暂不可用，请稍后检查连接。',AUTH_UNAVAILABLE:'此服务器尚未启用账号密码功能，可先使用个人凭证登录。',INVALID_API_RESPONSE:'未收到有效的账号 API 响应，请检查服务器地址。'};
+  const labels={AUTH_REJECTED:'账号或密码不正确，或会话已失效。',PERMISSION_DENIED:'当前账号无权执行此操作。',AUTH_CONFLICT:'密码已被其他会话修改，请重新登录后再试。',INVALID_REQUEST:'输入不符合要求，请检查账号或密码格式。',RATE_LIMITED:'操作过于频繁，请稍后重试。',API_UNAVAILABLE:'服务器暂不可用，请稍后检查连接。',AUTH_UNAVAILABLE:'此服务器尚未启用账号功能，请联系组织者更新后端。',INVALID_API_RESPONSE:'未收到有效的账号 API 响应，请检查服务器地址。'};
   const key=code==='INVALID_API_RESPONSE'?'INVALID_API_RESPONSE':code==='AUTH_CONFLICT'?'AUTH_CONFLICT':status===401?'AUTH_REJECTED':status===403?'PERMISSION_DENIED':status===404?'AUTH_UNAVAILABLE':status===429?'RATE_LIMITED':status>=500?'API_UNAVAILABLE':status===400?'INVALID_REQUEST':'INVALID_API_RESPONSE';
   return Object.assign(Error(labels[key]),{code:key,status});
  }
@@ -107,6 +110,14 @@ if(typeof document!=='undefined'){
   catch(error){if(version===generation){browserToken='';browserSession=false;}if(error?.name==='TypeError')throw Object.assign(Error('无法连接服务器，尚未验证账号密码。'),{code:'NETWORK_UNREACHABLE'});throw error;}
  }
  async function getAccount(){const version=generation;const received=desktop?(bridge.getAccount?unwrapBridge(await bridge.getAccount()):(()=>{throw authError(404);})()):await authJson('/auth/account');if(version!==generation)throw abortError();return {userId:received.userId,role:received.role,passwordConfigured:Boolean(received.passwordConfigured),authentication:received.authentication,...(typeof received.sessionExpiresAt==='string'?{sessionExpiresAt:received.sessionExpiresAt}:{})};}
+ async function register({apiUrl=defaultApi,userId,password,registrationToken,remember=false}){
+  invalidate();const version=generation;browserToken='';browserSession=false;
+  if(!validPassword(password,12)||typeof userId!=='string'||userId.trim().length<3)throw authError(400);
+  if(desktop){if(!bridge.register)throw authError(404);const result=unwrapBridge(await bridge.register({apiUrl,userId:userId.trim(),password,registrationToken,remember:Boolean(remember)}));if(version!==generation)throw abortError();return accept(result);}
+  if(apiUrl.replace(/\/$/,'')!==defaultApi)throw Error('浏览器注册使用当前页面的同源 API。');
+  const result=await authJson('/auth/register',{userId:userId.trim(),password,registrationToken},'');if(version!==generation)throw abortError();browserToken=result.token;browserSession=true;
+  const identity=await authJson('/identity');if(version!==generation)throw abortError();return accept({apiUrl:defaultApi,connected:true,identity,remembered:false});
+ }
  async function setPassword({password,currentPassword,remember=false}){
   let version=generation;if(!validPassword(password,12)||currentPassword!==undefined&&!validPassword(currentPassword))throw authError(400);
   if(desktop){if(!bridge.setPassword)throw authError(404);const received=await bridge.setPassword({password,...(currentPassword===undefined?{}:{currentPassword}),remember:Boolean(remember)});if(version!==generation)throw abortError();const next=unwrapBridge(received);invalidate();return accept(next);}
@@ -114,6 +125,5 @@ if(typeof document!=='undefined'){
  }
  async function disconnect(){const oldToken=browserToken,revoke=browserSession;invalidate();const version=generation;browserToken='';browserSession=false;info={...info,connected:false,identity:null,remembered:false,connectionError:undefined};if(desktop){const result=unwrapBridge(await bridge.disconnect());if(result?.logoutWarning)throw Object.assign(Error('本机已退出，但尚未确认服务器撤销会话；请稍后重新连接确认。'),{code:'LOGOUT_UNCONFIRMED'});}else if(revoke){try{await authJson('/auth/logout',{},oldToken);}catch(error){if(version===generation&&error.status!==401)throw error;}}}
  const updates=bridge?.updateInfo?Object.fromEntries(['updateInfo','checkUpdate','downloadUpdate','installUpdate'].map(name=>[name,()=>Promise.resolve(bridge[name]()).then(unwrapBridge)])):{};
- window.coopTransport=Object.freeze({...updates,...(bridge?.hostSeat?{hostSeat:(name,input)=>Promise.resolve(bridge.hostSeat(name,input)).then(unwrapBridge)}:{}),...(bridge?.openPlayer?{openPlayer:input=>Promise.resolve(bridge.openPlayer(input)).then(unwrapBridge)}:{}),desktop,defaultApi,getConnection,connect,login,getAccount,setPassword,disconnect,request,copyText:text=>bridge?.copyText?Promise.resolve(bridge.copyText(String(text))).then(unwrapBridge):navigator.clipboard.writeText(String(text))});
+ window.coopTransport=Object.freeze({...updates,...(bridge?.hostSeat?{hostSeat:(name,input)=>Promise.resolve(bridge.hostSeat(name,input)).then(unwrapBridge)}:{}),...(bridge?.openPlayer?{openPlayer:input=>Promise.resolve(bridge.openPlayer(input)).then(unwrapBridge)}:{}),desktop,defaultApi,getConnection,connect,login,register,getAccount,setPassword,disconnect,request,copyText:text=>bridge?.copyText?Promise.resolve(bridge.copyText(String(text))).then(unwrapBridge):navigator.clipboard.writeText(String(text))});
 })();
-

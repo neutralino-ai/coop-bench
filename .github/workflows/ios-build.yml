@@ -1,5 +1,6 @@
 name: iOS client
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches: [main, codex/ios-client]
@@ -9,7 +10,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ios-${{ github.ref }}
+  group: ios-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   ios:
@@ -79,11 +80,13 @@ jobs:
           set -o pipefail
           xcodebuild build -project ios/CoopBench.xcodeproj -scheme CoopBench -configuration Release -destination 'generic/platform=iOS' -derivedDataPath artifacts/ios-device CODE_SIGNING_ALLOWED=NO 2>&1 | tee artifacts/ios/device-build.log
       - name: Package ready-to-open Xcode source project
-        run: zip -r artifacts/Coop-Bench-iOS-Xcode.zip ios/CoopBench ios/Tests ios/Web ios/CoopBench.xcodeproj ios/README.md -x '*xcuserdata*'
+        run: |
+          version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')
+          zip -r "artifacts/Coop-Bench-${version}-iOS-Xcode.zip" ios/CoopBench ios/Tests ios/Web ios/CoopBench.xcodeproj ios/README.md -x '*xcuserdata*'
       - uses: actions/upload-artifact@v6
         with:
           name: ios-xcode-project
-          path: artifacts/Coop-Bench-iOS-Xcode.zip
+          path: artifacts/Coop-Bench-*-iOS-Xcode.zip
           retention-days: 30
       - uses: actions/upload-artifact@v6
         if: always()

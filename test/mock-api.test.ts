@@ -29,7 +29,7 @@ test('scripted room flow returns one private seat and echoes actual trace upload
     assert.equal(roster.playerId, 'p1'); assert.ok(roster.members.every(member => !('token' in member)));
     await mock.call(`/rooms/${room.roomId}/ready`, a, { ready: true });
     await mock.call(`/rooms/${room.roomId}/ready`, b, { ready: true });
-    const started = await mock.call(`/rooms/${room.roomId}/start`, a, {}), id = started.episodeId;
+    const started = await mock.call(`/rooms/${room.roomId}/admin-start`, undefined, {}), id = started.episodeId;
     const before = await mock.call(`/episodes/${id}/wait`, a); assert.equal(before.observation.view.hints, 8);
     const after = await mock.call(`/episodes/${id}/actions`, a, { action: { type: 'hint', target: 'p2', kind: 'color', value: 'red' } });
     assert.equal(after.observation.view.hints, 7); assert.equal(after.nextCursor, 1);

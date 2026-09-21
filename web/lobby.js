@@ -8,17 +8,19 @@
  const controls=node('div','lobby-controls'),resume=node('button','button subtle','返回我的对局'),manage=node('button','button subtle','管理房间');resume.id='resume-player';resume.type='button';manage.id='manage-rooms';manage.type='button';manage.onclick=()=>{$('create-dialog').showModal();$('list-rooms').click();};controls.append(resume,manage);
  const status=node('p','small muted');status.id='lobby-status';status.setAttribute('role','status');
  const list=node('div','lobby-rooms');list.id='joinable-rooms';rooms.append(roomHeading,status,list,controls);blocks.append(rooms,replays);home.append(heading,blocks);document.querySelector('.workspace').prepend(home);
+ const personal=node('div','home-blocks personal-rooms'),created=node('section','home-block'),participating=node('section','home-block'),createdList=node('div','lobby-rooms'),participatingList=node('div','lobby-rooms');
+ createdList.id='my-created-rooms';participatingList.id='my-participating-rooms';created.append(node('h2','','我创建的'),createdList);participating.append(node('h2','','我参与的'),participatingList);personal.append(created,participating);heading.after(personal);
  const box=node('dialog','audit-dialog seat-dialog');box.id='join-dialog';
  const header=node('header','drawer-heading'),title=node('h2','','加入房间'),close=node('button','icon-button','×');close.type='button';close.setAttribute('aria-label','关闭');close.onclick=()=>box.close();header.append(title,close);
  const form=node('form','drawer-content'),intro=node('p','muted','输入你的名字和 seat token，确认后坐入席位。');
  const nameLabel=node('label','','玩家名字'),name=node('input');name.id='lobby-player-name';name.maxLength=60;name.required=true;name.value='玩家';nameLabel.append(name);
  const tokenLabel=node('label','','Seat token'),token=node('input');token.id='lobby-seat-token';token.type='password';token.required=true;token.minLength=43;token.maxLength=128;token.pattern='[A-Za-z0-9_-]{43,128}';token.autocomplete='off';token.placeholder='输入你的席位密钥';tokenLabel.append(token);
- const hint=node('p','small muted','Seat token 由房主单独发给你。返回原席位时请使用同一密钥。');
+ const hint=node('p','small muted','首次入席需要房主发放的 seat token。以后在“我参与的”直接继续。');
  const joinStatus=node('p','small');joinStatus.id='join-status';joinStatus.setAttribute('role','status');
  const submit=node('button','button primary full','确认入席');submit.id='join-seat';submit.type='submit';const roomLabel=node('label','','房间 ID'),roomInput=node('input');roomInput.id='lobby-room-id';roomInput.required=true;roomInput.pattern='[a-f0-9-]{36}';roomLabel.append(roomInput);form.append(intro,roomLabel,nameLabel,tokenLabel,hint,joinStatus,submit);box.append(header,form);document.body.append(box);
  let serial=0,loading=false,joining=false,selectedRoom=null;
  const issue=error=>error.status===404?'当前服务器尚未提供大厅功能，请更新服务端后重试。':error.message;
- function reset(){serial++;loading=false;joining=false;selectedRoom=null;list.replaceChildren();status.textContent='';token.value='';box.close();document.body.dataset.view='login';}
+ function reset(){serial++;loading=false;joining=false;selectedRoom=null;list.replaceChildren();createdList.replaceChildren();participatingList.replaceChildren();status.textContent='';token.value='';box.close();document.body.dataset.view='login';}
  function showHome(){if(!state.token)return;message('');stopPlayback();detailController?.abort();clearInterval(detailTimer);state.detailRequest++;document.body.dataset.audit='false';document.body.dataset.view='home';$('detail').hidden=true;$('replay-loading').hidden=true;history.replaceState(null,'',location.pathname);manage.hidden=state.identity?.role==='auditor';void load();if(incoming&&incoming.apiUrl===apiUrl){choose(incoming);incoming=null;}}
  function choose(room){selectedRoom=room;title.textContent=room.name||'加入房间';roomInput.value=room.roomId??'';token.value='';token.type='password';joinStatus.textContent='';if(!box.open)box.showModal();name.focus();}
  async function openPlayer(input){
@@ -34,7 +36,15 @@
  async function load(){
   if(loading||!state.token)return;loading=true;const session=state.session,version=++serial;renderBusy();
   try{
-   const result=await request('/lobby');if(version!==serial||session!==state.session)return;
+   const [result,mine]=await Promise.all([request('/lobby'),request('/lobby/mine')]);if(version!==serial||session!==state.session)return;
+   for(const [target,values,owned] of [[createdList,mine.created,true],[participatingList,mine.participating,false]]){
+    target.replaceChildren();if(!values?.length)target.append(node('p','muted',owned?'创建房间后，在这里管理。':'加入房间后，在这里继续。'));
+    for(const room of values??[]){const card=node('article','lobby-room personal-room');card.dataset.roomId=room.roomId;const row=node('div','section-heading');row.append(node('h3','',room.name),node('span','badge neutral',({waiting:'等待开始',active:'进行中',completed:'已结束',truncated:'已中止',cancelled:'已取消',expired:'已过期'})[room.status]??room.status));card.append(row);
+     const open=node('button','button subtle',owned?'管理房间':['waiting','active'].includes(room.status)?'继续对局':'查看回放');open.type='button';open.onclick=()=>{if(owned)void window.CoopRooms?.open(room.roomId);else if(['waiting','active'].includes(room.status))void openPlayer({roomId:room.roomId});else if(room.episodeId)void selectEpisode(room.episodeId);};card.append(open);
+     if(!owned&&room.status==='waiting'){const release=node('button','button ghost','释放席位');release.type='button';release.onclick=async()=>{release.disabled=true;try{await request(`/lobby/${room.roomId}/leave`,{});await load();}catch(error){status.textContent=issue(error);}finally{release.disabled=false;}};card.append(release);}
+     target.append(card);
+    }
+   }
    if(!Array.isArray(result.rooms))throw Error('大厅响应无效，请更新服务端后重试。');
    list.replaceChildren();status.textContent=`${result.rooms.length} 个可加入房间 · 自动刷新`;
    if(!result.rooms.length){const empty=node('div','home-empty');empty.append(node('strong','','还没有等待加入的房间'),node('p','','点击顶部「创建新房间」，邀请大家一起玩。'));list.append(empty);}

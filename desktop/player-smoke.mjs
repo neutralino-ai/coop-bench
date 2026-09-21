@@ -12,8 +12,7 @@ export async function runPlayerSmoke({window,directory}) {
   const js=code=>window.webContents.executeJavaScript(code).catch(error=>{throw Error(`Player UI script failed: ${code.slice(0,500)}`,{cause:error});});
   const until=async code=>{for(let i=0;i<160;i++){if(await js(code))return;await wait(100);}throw Error('Player UI condition failed: '+code);};
   const call=async(path,token=local.adminToken,body)=>{
-    const res=await fetch(local.apiUrl+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
-    const data=await res.json();assert.ok(res.ok,JSON.stringify(data));return data;
+    return local.call(path,token,body);
   };
   try{
     await until("document.querySelector('#status').textContent==='尚未连接'");checks.push('visible startup and disconnected status');
@@ -41,7 +40,7 @@ export async function runPlayerSmoke({window,directory}) {
     const peer=randomBytes(32).toString('base64url');await call(`/rooms/${room.roomId}/join`,activeInvite.inviteToken,{name:'Synthetic peer',playerToken:peer});
     await until("document.querySelectorAll('.member').length===2");await js("document.querySelector('#ready').click()");
     const roster=await call(`/rooms/${room.roomId}`,peer);await call(`/rooms/${room.roomId}/ready`,peer,{ready:true,rosterVersion:roster.rosterVersion});
-    await until("!document.querySelector('#start').disabled");await js("document.querySelector('#start').click()");await until("!document.querySelector('#game').hidden");checks.push('roster readiness and host start');
+    await call(`/rooms/${room.roomId}/admin-start`,undefined,{});await until("!document.querySelector('#game').hidden");checks.push('roster readiness and host start');
     const snapshot=await js("window.coopPlayer.command('status')");assert.equal(snapshot.observation.playerId,'p1');assert.equal(snapshot.observation.decisionToken,undefined);assert.ok(snapshot.observation.view.hands.p1.every(c=>c.value===undefined));checks.push('renderer receives only projected own seat, no decision credentials');
     assert.equal(await js("document.querySelectorAll('.hint-counter .token-dot.filled').length"),8);assert.equal(await js("document.querySelectorAll('.hint-counter .token-dot').length"),8);assert.match(await js("document.querySelector('#deadline').getAttribute('aria-label')"),/剩余 \d+ 秒/);assert.match(await js("document.querySelector('#deadline').textContent"),/^\d{2}:\d{2}$/);assert.match(await js("document.querySelector('#timeout-policy').textContent"),/超时后自动行动/);checks.push('filled and hollow hint counters, countdown and automatic timeout action visible');
     assert.equal(await js("document.querySelector('#turn-label').textContent"),'轮到你了');

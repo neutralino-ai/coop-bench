@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('coopDesktop', Object.freeze({
   getConnection: () => invoke('coop:get-connection'),
   connect: input => invoke('coop:connect', input),
   login: input => invoke('coop:login', input),
+  register: input => invoke('coop:register', input),
   setPassword: input => invoke('coop:set-password', input),
   getAccount: () => invoke('coop:get-account'),
   disconnect: () => invoke('coop:disconnect'),

@@ -70,7 +70,7 @@ export async function startMockApi() {
         reasoning_content: '合成布局测试：这是用于检验长文本展示的虚构内容，没有调用真实模型。'.repeat(25) + '原文结束标记', content: '<img src=x onerror="window.__thinkingXss=1">' } },
   ]);
   episodes.set(id, initial);
-  let password, sessionToken, updateOpened = false, closed = false;
+  let password, sessionToken, registered = false, updateOpened = false, closed = false;
   const identity = { id: 'owner', role: 'operator', retention: { policy: 'synthetic-only' } };
   const updateBytes = Buffer.from('Synthetic updater fixture; never execute.'), updateDigest = createHash('sha256').update(updateBytes).digest('hex');
   const suffix = process.platform === 'darwin' ? `mac-${process.arch}.dmg` : 'win-x64.exe', updateName = `Coop-Bench-99.0.0-${suffix}`;
@@ -80,9 +80,9 @@ export async function startMockApi() {
   const memberFor = (room, credential) => room.members.find(m => m.token === credential);
   const roomView = (room, credential, invite = false) => ({ roomId: room.roomId, gameId: 'hanabi', scenarioId: 'base', playerCount: room.playerCount,
     name:room.name,decisionTimeoutSeconds:room.decisionTimeoutSeconds,allowHumans:room.allowHumans,expiresAt:Date.now()+600000,
-    status: room.status, episodeId: room.episodeId, rosterVersion: room.rosterVersion, hostPlayerId: room.members[0]?.playerId ?? null,
+    status: room.status, episodeId: room.episodeId, rosterVersion: room.rosterVersion, hostPlayerId: null, ownerId:'owner', accountOwned:true,
     ...(memberFor(room, credential) ? { playerId: memberFor(room, credential).playerId } : {}),
-    members: room.members.map(({ token: _private, ...member }) => clone(member)), ...(invite ? { inviteToken: room.inviteToken } : {}) });
+    members: room.members.map(({ token: _private, accountId: _account, ...member }) => clone(member)), ...(invite ? { inviteToken: room.inviteToken } : {}) });
   const makeEpisode = (count, credentials = new Map(), name) => {
     const episodeId = randomUUID(), seats = Array.from({ length: count }, (_, i) => ({ playerId: `p${i + 1}`, token: token() }));
     if (!credentials.size) for (const seat of seats) credentials.set(seat.token, seat.playerId);
@@ -125,6 +125,11 @@ export async function startMockApi() {
       if (path === '/health') return respond(res, { ok: true, service: 'coop-bench', apiVersion: 'v1', backend: 'mock' });
       if (path === '/games') return respond(res, { games: [metadata] });
       if (path === '/games/hanabi') return respond(res, metadata);
+      if(path==='/auth/register'&&req.method==='POST'){
+        if(body.registrationToken!==adminToken||registered)return fail(res,401,'UNAUTHORIZED');
+        registered=true;password=body.password;sessionToken='hs1_'+token();
+        return respond(res,{token:sessionToken,identity,expiresAt:new Date(Date.now()+3600000).toISOString()},201);
+      }
       if (path === '/auth/login' && req.method === 'POST') {
         if (!password || body?.userId !== 'owner' || body.password !== password) return fail(res, 401, 'INVALID_PASSWORD');
         sessionToken = 'hs1_' + token(); return respond(res, { token: sessionToken, identity, expiresAt: new Date(Date.now() + 3600000).toISOString() });
@@ -140,11 +145,25 @@ export async function startMockApi() {
         if (!isAdmin(credential)) return fail(res,401,'UNAUTHORIZED');
         return respond(res,{rooms:[...rooms.values()].filter(r=>r.allowHumans&&r.status==='waiting'&&r.members.length<r.playerCount).map(r=>roomView(r,credential))});
       }
+      if(path==='/lobby/mine'){
+        if(!isAdmin(credential))return fail(res,401,'UNAUTHORIZED');
+        return respond(res,{created:[...rooms.values()].map(r=>roomView(r,credential)),participating:[...rooms.values()].filter(r=>r.members.some(m=>m.accountId==='owner')).map(r=>roomView(r,r.members.find(m=>m.accountId==='owner').token))});
+      }
+      const lobbyCommand=path.match(/^\/lobby\/([^/]+)\/(resume|leave)$/);
+      if(lobbyCommand){
+        if(!isAdmin(credential))return fail(res,401,'UNAUTHORIZED');
+        const room=rooms.get(lobbyCommand[1]),member=room?.members.find(m=>m.accountId==='owner');
+        if(!member)return fail(res,403,'FORBIDDEN');
+        if(lobbyCommand[2]==='resume')return respond(res,{roomId:room.roomId,playerId:member.playerId,name:member.name,playerToken:member.token,room:roomView(room,member.token)});
+        if(room.status!=='waiting')return fail(res,409,'ROOM_CLOSED');
+        room.members=room.members.filter(m=>m!==member);room.rosterVersion++;room.members.forEach(m=>m.ready=false);return respond(res,roomView(room,credential));
+      }
       const lobbyJoin=path.match(/^\/lobby\/([^/]+)\/join$/);
       if(lobbyJoin&&req.method==='POST'){
         if(!isAdmin(credential))return fail(res,401,'UNAUTHORIZED');
         const room=rooms.get(lobbyJoin[1]);if(!room)return fail(res,404,'NOT_FOUND');
         let member=memberFor(room,body.playerToken);
+        if(room.members.some(m=>m.accountId==='owner'&&m!==member))return fail(res,409,'SEAT_CONFLICT');
         if(!member){
           if(!room.allowHumans)return fail(res,403,'FORBIDDEN');
           if(room.status!=='waiting')return fail(res,409,'ROOM_CLOSED');
@@ -152,18 +171,19 @@ export async function startMockApi() {
           const issued=room.seatTokens?.find(s=>s.seatToken===body.playerToken);if(!issued)return fail(res,409,'INVALID_SEAT_TOKEN');
           member={playerId:issued.playerId,name:body.name,ready:false,token:body.playerToken};room.members.push(member);room.rosterVersion++;room.members.forEach(m=>m.ready=false);
         }
-        return respond(res,roomView(room,body.playerToken));
+        member.accountId='owner';return respond(res,roomView(room,body.playerToken));
       }
       if (path === '/rooms') {
         if (!isAdmin(credential)) return fail(res, 401, 'UNAUTHORIZED');
         if (req.method === 'GET') return respond(res, { rooms: [...rooms.values()].map(r => roomView(r, credential)) });
-        const room = { roomId: randomUUID(), playerCount: body.playerCount, allowHumans:body.allowHumans===true, name:body.name,decisionTimeoutSeconds:body.decisionTimeoutSeconds??180,status: 'waiting', episodeId: null, rosterVersion: 0, members: [], inviteToken: token() };
+        const room = { roomId: randomUUID(), hostToken:token(), playerCount: body.playerCount, allowHumans:body.allowHumans===true, name:body.name,decisionTimeoutSeconds:body.decisionTimeoutSeconds??180,status: 'waiting', episodeId: null, rosterVersion: 0, members: [], inviteToken: token() };
         room.seatTokens=room.allowHumans?Array.from({length:room.playerCount},(_,i)=>({playerId:`p${i+1}`,seatToken:token()})):[];
-        rooms.set(room.roomId, room); return respond(res, {...roomView(room, credential, true),...(room.allowHumans?{seatTokens:room.seatTokens}:{})});
+        rooms.set(room.roomId, room); return respond(res, {...roomView(room, credential, true),hostToken:room.hostToken,...(room.allowHumans?{seatTokens:room.seatTokens}:{})},201);
       }
       let match = path.match(/^\/rooms\/([^/]+)(?:\/([^/]+))?$/);
       if (match) {
         const room = rooms.get(match[1]), operation = match[2]; if (!room) return fail(res, 404, 'UNKNOWN_ROOM');
+        if(operation==='host')return isAdmin(credential)?respond(res,{roomId:room.roomId,hostToken:room.hostToken}):fail(res,403,'FORBIDDEN');
         if (operation === 'join') {
           if (credential !== room.inviteToken && !(room.allowHumans&&credential===body.playerToken)) return fail(res, 401, 'INVALID_INVITE');
           let member = memberFor(room, body.playerToken);
@@ -173,7 +193,10 @@ export async function startMockApi() {
         const member = memberFor(room, credential);
         if (!isAdmin(credential) && !member) return fail(res, 401, 'UNAUTHORIZED');
         if (operation?.startsWith('admin') && !isAdmin(credential)) return fail(res, 403, 'ADMIN_ONLY');
-        if(operation==='admin-seat-tokens'){const seatTokens=room.seatTokens.filter(s=>!room.members.some(m=>m.playerId===s.playerId)&&(!body.playerId||body.playerId===s.playerId)).map(s=>({...s,seatToken:token()}));room.seatTokens=room.seatTokens.map(s=>seatTokens.find(k=>k.playerId===s.playerId)??s);return respond(res,{roomId:room.roomId,seatTokens});}
+        if(operation?.startsWith('admin-')&&req.headers['x-room-host-token']!==room.hostToken)return fail(res,403,'HOST_TOKEN_REQUIRED');
+        if(operation==='admin-seat-tokens'){const seatTokens=room.seatTokens.filter(s=>!body.playerId||body.playerId===s.playerId).map(s=>({...s,seatToken:s.seatToken??token()}));room.seatTokens=room.seatTokens.map(s=>seatTokens.find(k=>k.playerId===s.playerId)??s);return respond(res,{roomId:room.roomId,seatTokens});}
+        if(operation==='admin-end'){room.status=room.episodeId?'truncated':'cancelled';const episode=episodes.get(room.episodeId);if(episode){episode.ended=true;episode.rollout.summary.status='truncated';episode.rollout.summary.endReason='host_ended';}return respond(res,roomView(room,credential));}
+        if(['start','invite','kick'].includes(operation))return fail(res,403,'HOST_ACCOUNT_REQUIRED');
         if (['invite', 'admin-invite'].includes(operation)) { room.inviteToken = token(); return respond(res, roomView(room, credential, true)); }
         if (operation === 'ready') member.ready = body.ready;
         if(operation==='admin-kick'){room.members=room.members.filter(m=>m.playerId!==body.playerId);room.seatTokens=room.seatTokens.map(s=>s.playerId===body.playerId?{...s,seatToken:null}:s);room.rosterVersion++;room.members.forEach(m=>m.ready=false);}
@@ -239,7 +262,7 @@ export async function startMockApi() {
   return { backend: 'mock', baseUrl, apiUrl, adminToken, id, bytes, artifact, requests,
     appendMonitorMessage(playerId,message){const records=initial.messages.get(playerId)??[],completion=initial.completions.get(playerId);records.push({sequence:(records.at(-1)?.sequence??-1)+1,playerId,kind:'model-input',createdAt:stamp,message});initial.messages.set(playerId,records);initial.completions.delete(playerId);return ()=>{records.pop();if(completion)initial.completions.set(playerId,completion);};},
     async call(path, credential = adminToken, body) { const response = await fetch(apiUrl + path, { method: body === undefined ? 'GET' : 'POST',
-      headers: { Authorization: `Bearer ${credential}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      headers: { Authorization: `Bearer ${credential}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),...(path.includes('/admin-')?{'X-Room-Host-Token':rooms.get(path.split('/')[2])?.hostToken}:{}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
       const value = await response.json(); assert.ok(response.ok, `Mock HTTP ${response.status}: ${JSON.stringify(value)}`); return value; },
     wrapUpdateFetch: fetcher => (url, options) => { const host = new URL(url).hostname, route = host === 'api.github.com' ? 'release' : host === 'github.com' ? 'redirect' : host === 'release-assets.githubusercontent.com' ? 'content' : null;
       assert.ok(route, 'Unexpected updater host'); return fetcher(`${baseUrl}/_mock/update/${route}`, options); },

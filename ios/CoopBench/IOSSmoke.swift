@@ -33,8 +33,8 @@ import WebKit
             catch { try check(publicFailure(error).code == "REDIRECT_REJECTED","redirect-rejected") }
             try await wait("login-page",{try await js("return Boolean(window.CoopLobby && document.querySelector('#connect-button') && !document.querySelector('#connect-button').disabled)",app.host) as? Bool == true})
             try await snapshot("login",app.host)
-            _=try await js("document.querySelector('#api-address').value=\(jsonString(base));document.querySelector('#login-password').value=\(jsonString(config["password"] ?? ""));document.querySelector('#login-form').requestSubmit();return true",app.host)
-            try await wait("password-login",{app.session.identity != nil})
+            _=try await js("document.querySelector('#credential-mode').click();document.querySelector('#api-address').value=\(jsonString(base));document.querySelector('#admin-token').value=\(jsonString(config["registrationToken"] ?? ""));document.querySelector('#login-user-id').value='owner';document.querySelector('#login-password').value=\(jsonString(config["password"] ?? ""));document.querySelector('#login-form').requestSubmit();return true",app.host)
+            try await wait("registration-and-password-session",{app.session.identity != nil && app.session.token.hasPrefix("hs1_")})
             try await wait("lobby-and-replays",{try await js("return !!document.querySelector('.lobby-home') && document.querySelectorAll('#episode-list button').length>0",app.host) as? Bool == true})
             try await snapshot("lobby",app.host)
             _=try await js("document.querySelector('#episode-list button').click();return true",app.host)
@@ -98,6 +98,23 @@ import WebKit
             _=try await js("document.querySelector('#rules-button').click();return true",app.player)
             try check(try await js("return document.querySelector('#rules-dialog').open && document.querySelector('#rules-content').textContent.includes('Synthetic')",app.player) as? Bool == true,"player-rules-open")
             _=try await js("document.querySelector('#close-rules').click();return true",app.player)
+            await app.session.returnToLobby()
+            try check(app.session.player == nil,"return-to-lobby-stops-only-local-player")
+            _=try await app.session.openPlayer(["roomId":roomID])
+            try await wait("account-restores-original-seat",{app.session.player?.observation != nil})
+            try check(app.session.player?.config["playerToken"] as? String == key,"human-recovery-keeps-original-seat-token")
+            let membership=try await app.session.owner("/lobby/mine")
+            try check((membership["participating"] as? [JSON] ?? []).contains{$0["roomId"] as? String == roomID},"account-lists-participating-room")
+            let oldAgent=app.session.agents[roomID+"/p2"]!,oldHistory=oldAgent.data["modelHistory"] as? [JSON] ?? []
+            let recoveredProof=try await app.session.hostSeat("testModel",["baseUrl":modelBase,"model":"synthetic-recovered-model","apiKey":"synthetic-provider-key"]) as! JSON
+            _=try await app.session.hostSeat("resume",["roomId":roomID,"playerId":"p2","verificationId":recoveredProof["verificationId"]!])
+            let recovered=app.session.agents[roomID+"/p2"]!
+            try check(recovered !== oldAgent && recovered.config["playerToken"] as? String == oldAgent.config["playerToken"] as? String,"agent-recovery-keeps-original-seat")
+            try check(!oldHistory.isEmpty && (recovered.data["modelHistory"] as? [JSON] ?? []).count >= oldHistory.count,"agent-recovery-keeps-model-context")
+            try check(try await app.session.seatKey(roomID,"p1") == key,"copy-occupied-seat-after-start")
+            _=try await app.session.owner("/rooms/\(roomID)/admin-end",["reason":"synthetic iPhone acceptance"])
+            let ended=try await app.session.owner("/rooms/\(roomID)/admin")
+            try check(ended["status"] as? String == "truncated","host-can-end-with-preserved-records")
             report=["ok":true,"checks":checks,"evidence":"iPhone simulator, synthetic HTTP/model fixture; no real game engine or model"]
         } catch { report=["ok":false,"checks":checks,"error":publicFailure(error).record] }
         try? jsonData(report).write(to:directory.appendingPathComponent("ios-smoke.json"),options:.atomic)
