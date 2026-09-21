@@ -15,6 +15,7 @@ final class BoundaryTests: XCTestCase {
             XCTAssertThrowsError(try Endpoint.path(path,method:"POST",owner:true))
         }
         XCTAssertEqual(try Endpoint.path("/api/v1/rollouts?limit=20",method:"GET",owner:true),"/api/v1/rollouts?limit=20")
+        XCTAssertEqual(try Endpoint.path("/api/v1/rollouts/game/observations?playerId=p1",method:"GET",owner:true),"/api/v1/rollouts/game/observations?playerId=p1")
     }
     func testKeychainAndSeatStorageBindings() throws {
         let id="unit-"+UUID().uuidString

@@ -49,7 +49,7 @@ enum Endpoint {
         try require(["GET","POST"].contains(method),"不支持的请求方法。")
         if owner {
             let id="[A-Za-z0-9_-]+"
-            let get="^/api/v1/(health|identity|lobby|games(?:/\(id))?|rooms(?:/\(id)/admin)?|rollouts(?:/\(id)(?:/(?:messages|artifacts(?:/\(id)/content)?))?)?|episodes/\(id)/(?:replay|training|audit))$"
+            let get="^/api/v1/(health|identity|lobby|games(?:/\(id))?|rooms(?:/\(id)/admin)?|rollouts(?:/\(id)(?:/(?:observations|messages|artifacts(?:/\(id)/content)?))?)?|episodes/\(id)/(?:replay|training|audit))$"
             let post="^/api/v1/(lobby/\(id)/join|rooms|rooms/\(id)/admin-(?:start|kick|invite|seat-tokens)|episodes|episodes/\(id)/truncate|rollouts/\(id)/annotations)$"
             try require(matches(path,method == "GET" ? get : post),"此接口不属于大厅权限。")
         } else { try require(path.hasPrefix("/api/v1/"),"只能请求游戏 API。") }

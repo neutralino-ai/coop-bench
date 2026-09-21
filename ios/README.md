@@ -4,6 +4,8 @@
 
 ## 用自己的 Mac / Xcode 安装
 
+也可从 [iOS 构建记录](https://github.com/neutralino-ai/coop-bench/actions/workflows/ios-build.yml) 中成功的运行下载 `ios-xcode-project`，解压其中 `Coop-Bench-iOS-Xcode.zip`，直接打开 `ios/CoopBench.xcodeproj`，然后从下面第 4 步继续。该压缩包包含已准备好的网页资源，首次安装无需 Node 或 XcodeGen。
+
 1. 在 Mac 安装 Xcode 26.3 或更新正式版（含 iOS 平台组件），打开一次完成初始化；在 Xcode → Settings → Accounts 登录自己的 Apple ID。
 2. 安装 Node.js 24 或更新版本，以及 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。使用 Homebrew 时执行 `brew install node xcodegen`。
 3. 克隆公开仓库后，在仓库根目录运行：

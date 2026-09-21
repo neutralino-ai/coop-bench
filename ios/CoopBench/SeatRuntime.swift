@@ -72,7 +72,7 @@ import Foundation
                         let members=room["members"] as? [JSON] ?? [],me=members.first{ $0["playerId"] as? String == room["playerId"] as? String }
                         if members.count == room["playerCount"] as? Int && me?["ready"] as? Bool != true { do { try await self.ready() } catch { if (error as? ClientFailure)?.code != "STALE_ROSTER" { throw error } } }
                     }
-                    failures=0
+                    if failures>0 && !self.agentFailed { self.warning=nil;self.notify() };failures=0
                 } catch {
                     if Task.isCancelled { return }
                     let failure=publicFailure(error);self.warning=failure.message

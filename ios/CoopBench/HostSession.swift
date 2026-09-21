@@ -9,6 +9,10 @@ import UIKit
     private var probe: Task<ModelAgent,Error>?
     private var restoring: Task<Void,Never>?,restoreWarnings:[String:String]=[:]
     private var restorationGeneration=UUID()
+    private var foregroundActive=true
+    private func updateScreenAwake() {
+        UIApplication.shared.isIdleTimerDisabled=foregroundActive && (Array(agents.values)+(player.map{[$0]} ?? [])).contains{!["ended","disconnected","room-closed","access-denied"].contains($0.status)}
+    }
     var incoming=""
     func info() -> JSON { ["apiUrl":api,"connected":identity != nil,"identity":identity as Any? ?? null,"remembered":remembered] }
     func scope() throws -> String { guard let id=identity?["id"] as? String, !token.isEmpty else { throw ClientFailure("LOGIN_REQUIRED","请先登录。") };return hashID(api+"\n"+id) }
@@ -24,7 +28,7 @@ import UIKit
     }
     private func stop() {
         epoch=UUID();restorationGeneration=UUID();probe?.cancel();probe=nil;restoring?.cancel();restoring=nil;restoreWarnings.removeAll();verified.removeAll();starting.removeAll()
-        player?.suspend();player=nil;for agent in agents.values { agent.suspend() };agents.removeAll();identity=nil;token="";remembered=false
+        player?.suspend();player=nil;for agent in agents.values { agent.suspend() };agents.removeAll();identity=nil;token="";remembered=false;updateScreenAwake()
     }
     private func accept(_ id: JSON,key: String,remember: Bool) throws {
         try require(id["id"] is String && ["operator","coordinator","auditor"].contains(id["role"] as? String ?? ""),"身份验证响应格式不正确。")
@@ -121,7 +125,7 @@ import UIKit
         guard let config else { throw ClientFailure("NO_SEAT","没有可恢复的席位，请从大厅加入房间。") }
         let runtime=try SeatRuntime(config:config);try await runtime.connect()
         try require(generation == epoch,"登录已改变。","CANCELLED")
-        try Vault.save("human-"+binding,config);player=runtime;runtime.changed={ [weak self] value in self?.playerChanged?(value) };runtime.start();showPlayer?();return ["opened":true]
+        try Vault.save("human-"+binding,config);player=runtime;runtime.changed={ [weak self] value in self?.playerChanged?(value);self?.updateScreenAwake() };runtime.start();showPlayer?();return ["opened":true]
     }
     func hostSeat(_ name: String,_ input: JSON) async throws -> Any {
         let binding=try scope()
@@ -151,7 +155,7 @@ import UIKit
             let key=try await seatKey(room,player),runtime=try SeatRuntime(config:["apiUrl":api,"roomId":room,"playerToken":key,"name":"AI · \(proof.0.model)"],agent:proof.0)
             try await runtime.connect();try require(generation == epoch,"登录已改变。","CANCELLED")
             if proof.3 { var saved=try Vault.load("agents-"+binding) ?? [:];saved[id]=["seat":runtime.config,"model":proof.0.persistedConfiguration];try Vault.save("agents-"+binding,saved) }
-            agents[id]=runtime;restoreWarnings.removeValue(forKey:id);runtime.start();return ["started":true]
+            agents[id]=runtime;restoreWarnings.removeValue(forKey:id);runtime.changed={ [weak self] _ in self?.updateScreenAwake() };runtime.start();return ["started":true]
         }
         throw ClientFailure("UNKNOWN_COMMAND","不支持的房主操作。")
     }
@@ -167,13 +171,15 @@ import UIKit
                     let runtime=try SeatRuntime(config:config,agent:agent);try await runtime.connect()
                     if runtime.data["sealed"] as? Bool == true { self.restoreWarnings.removeValue(forKey:id);continue }
                     try await agent.test();try Task.checkCancellation();try require(self.epoch == generation && self.restorationGeneration == restoration,"登录已改变。","CANCELLED")
-                    self.agents[id]=runtime;self.restoreWarnings.removeValue(forKey:id);runtime.start()
+                    self.agents[id]=runtime;self.restoreWarnings.removeValue(forKey:id);runtime.changed={ [weak self] _ in self?.updateScreenAwake() };runtime.start()
                 } catch { if Task.isCancelled || self.epoch != generation { return };self.restoreWarnings[id]="内置 Agent 恢复失败："+publicFailure(error).message }
             }
         }
     }
     func foreground(_ active: Bool) {
+        foregroundActive=active
         if active { restoreAgents() } else { restorationGeneration=UUID();restoring?.cancel();restoring=nil }
         for runtime in Array(agents.values)+(player.map{[$0]} ?? []) { if active { runtime.start() } else { runtime.suspend() } }
+        updateScreenAwake()
     }
 }
