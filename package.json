@@ -15,6 +15,7 @@
     "postinstall": "node node_modules/electron/install.js",
     "start": "node scripts/build.mjs && electron .",
     "build": "node scripts/build.mjs",
+    "build:ios": "node scripts/build-ios.mjs",
     "desktop": "node scripts/build.mjs && electron .",
     "desktop:player": "node scripts/build.mjs && electron desktop/player-main.mjs",
     "agent": "node scripts/player.mjs",
