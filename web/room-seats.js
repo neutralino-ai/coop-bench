@@ -61,8 +61,8 @@ seat token 是私密凭证，只用于你自己的请求认证，不放进网址
   $('host-agent-form').onsubmit=async event=>{event.preventDefault();if(busy||!verified||$('host-agent-start').disabled)return;$('host-agent-start').disabled=true;lock(true);
    try{await transport.hostSeat(resume?'resume':'start',{roomId,playerId,verificationId:verified});dialog.close();await onStarted();}
    catch(error){if(dialog.isConnected){verified=null;$('host-agent-error').textContent=error.message;lock(false);}}
-  };dialog.showModal();
+  };dialog.showModal();lock(true);$('host-agent-error').textContent='正在读取模型配置…';
   const version=editVersion;
-  try{const config=await transport.hostSeat('modelConfig',{});if(!dialog.isConnected||editVersion!==version||busy)return;$('host-agent-url').value=config.baseUrl;$('host-agent-model').value=config.model;hasSaved=config.hasApiKey;savedUrl=config.baseUrl;$('host-agent-key').required=!hasSaved;$('host-agent-key').placeholder=hasSaved?'已加密保存；留空使用已保存密钥':'';$('host-agent-forget').hidden=!hasSaved;$('host-agent-remember').checked=config.canRememberKey;if(!config.canRememberKey)$('host-agent-error').textContent='系统加密暂不可用，本次仅在内存使用密钥。';}catch(error){if(dialog.isConnected)$('host-agent-error').textContent=error.message;}finally{dialog.dataset.loaded='true';}
+  try{const config=await transport.hostSeat('modelConfig',{});if(!dialog.isConnected||editVersion!==version)return;$('host-agent-url').value=config.baseUrl;$('host-agent-model').value=config.model;hasSaved=config.hasApiKey;savedUrl=config.baseUrl;$('host-agent-key').required=!hasSaved;$('host-agent-key').placeholder=hasSaved?'已加密保存；留空使用已保存密钥':'';$('host-agent-forget').hidden=!hasSaved;$('host-agent-remember').checked=config.canRememberKey;$('host-agent-error').textContent=config.canRememberKey?'':'系统加密暂不可用，本次仅在内存使用密钥。';}catch(error){if(dialog.isConnected)$('host-agent-error').textContent=error.message;}finally{dialog.dataset.loaded='true';if(dialog.isConnected)lock(false);}
  }
 };

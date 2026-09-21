@@ -374,6 +374,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   const priorAgent=hostSeats.agents.get(agentRoomId+'/p1').runtime,priorContext=priorAgent.get('strategy:responsesHistory'),priorToken=priorAgent.credentials().playerToken;
   await wait(()=>run(()=>Boolean(document.querySelector('[data-action="resume-agent"]'))),'Failed Agent has no recovery control');
   await run(()=>document.querySelector('[data-action="resume-agent"]').click());
+  await wait(()=>run(()=>document.querySelector('#host-agent-dialog')?.dataset.loaded==='true'),'Recovery model configuration did not load');
   await run(()=>{document.getElementById('host-agent-model').value='synthetic-recovered-model';document.getElementById('host-agent-key').value='synthetic-provider-key';document.getElementById('host-agent-test').click();});
   await wait(()=>run(()=>!document.getElementById('host-agent-start').disabled),'Recovery model preflight failed');
   await run(()=>document.getElementById('host-agent-start').click());
