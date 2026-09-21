@@ -2,9 +2,10 @@ import Foundation
 
 @MainActor final class ModelAgent {
     let base: String,model: String;private let key: String
+    var persistedConfiguration: JSON { ["baseUrl":base,"model":model,"apiKey":key] }
     init(base: String,key: String,model: String) throws {
         self.base=try Endpoint.base(base,model:true)
-        try require(!key.isEmpty && key.utf8.count<=4096 && !model.isEmpty && model.count<=200,"请输入模型地址、模型名称和 API key。")
+        try require(!key.isEmpty && key.utf8.count<=4096 && !model.isEmpty && model.count<=200 && base.count<=200,"请输入模型地址、模型名称和 API key（地址与模型名称不超过200字符）。")
         self.key=key;self.model=model
     }
     private func complete(_ input: [JSON],tools: [JSON],deadline: Date,runtime: SeatRuntime?=nil,id: String?=nil,probe: Bool=false) async throws -> JSON {
@@ -18,7 +19,8 @@ import Foundation
                 let parsed=try? JSONSerialization.jsonObject(with:bytes),raw=parsed as? JSON
                 let output=raw?["output"] as? [JSON] ?? []
                 let reasoning=output.contains{ item in (item["content"] as? [JSON] ?? []).contains{ $0["type"] as? String == "reasoning_text" } }
-                try runtime?.record("model-output",raw ?? ["httpStatus":response.statusCode,"bodyText":String(decoding:bytes,as:UTF8.self)],observationID:id,reasoning:reasoning ? "provided":"not-provided")
+                let summary=output.contains{ $0["type"] as? String == "reasoning" && !(($0["summary"] as? [Any] ?? []).isEmpty) }
+                try runtime?.record("model-output",raw ?? ["httpStatus":response.statusCode,"bodyText":String(decoding:bytes,as:UTF8.self)],observationID:id,reasoning:reasoning ? "provided":summary ? "summary-only":"not-provided")
                 try require((200..<300).contains(response.statusCode),"模型接口返回 HTTP \(response.statusCode)，请检查地址、密钥、模型和额度。","MODEL_HTTP_\(response.statusCode)")
                 guard let raw else { throw ClientFailure("MODEL_FORMAT","模型接口未返回有效 JSON。") }
                 try require(raw["status"] as? String == "completed","模型未完成响应，可能达到输出限制。","MODEL_INCOMPLETE")

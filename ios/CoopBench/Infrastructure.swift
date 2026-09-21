@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import CryptoKit
+import JavaScriptCore
 
 typealias JSON = [String: Any]
 let apiDefault = "https://coop.neutrinophysics.cn:34936/api/v1"
@@ -8,6 +9,16 @@ let null = NSNull()
 func jsonData(_ value: Any) throws -> Data { try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed]) }
 func jsonString(_ value: Any) throws -> String { String(decoding: try jsonData(value), as: UTF8.self) }
 func hashID(_ value: String) -> String { SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined() }
+func hashBytes(_ value: Data) -> String { SHA256.hash(data:value).map { String(format:"%02x",$0) }.joined() }
+// Use the same JSON number/string/key ordering as the existing JS recorder.
+// This isolated context evaluates a fixed function, never provider-supplied code.
+func canonicalData(_ value: Any) throws -> Data {
+    guard let context=JSContext() else { throw ClientFailure("CAPTURE_ERROR","无法序列化原始记录。") }
+    context.setObject(try jsonString(value),forKeyedSubscript:"captureJSON" as NSString)
+    let script="const canonical=v=>Array.isArray(v)?'['+v.map(canonical).join(',')+']':v&&typeof v==='object'?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}':JSON.stringify(v);canonical(JSON.parse(captureJSON));"
+    guard let text=context.evaluateScript(script)?.toString(),context.exception == nil else { throw ClientFailure("CAPTURE_ERROR","无法序列化原始记录。") }
+    return Data(text.utf8)
+}
 func matches(_ value: String, _ pattern: String) -> Bool { value.range(of: pattern, options: .regularExpression) != nil }
 func require(_ condition: Bool, _ message: String, _ code: String = "INVALID_REQUEST") throws { if !condition { throw ClientFailure(code, message) } }
 struct ClientFailure: Error {

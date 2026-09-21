@@ -2,6 +2,10 @@ import XCTest
 @testable import CoopBench
 
 final class BoundaryTests: XCTestCase {
+    func testCanonicalCaptureMatchesJavaScript() throws {
+        let actual=String(decoding:try canonicalData(["z":[1e-7,1.0],"a":"中文/\n"]),as:UTF8.self)
+        XCTAssertEqual(actual,"{\"a\":\"中文/\\n\",\"z\":[1e-7,1]}")
+    }
     func testOriginAndOwnerRoutes() throws {
         XCTAssertEqual(try Endpoint.base("https://example.test/"),"https://example.test/api/v1")
         for url in ["http://example.test", "https://user:password@example.test", "https://example.test/?key=secret", "https://example.test/other"] {

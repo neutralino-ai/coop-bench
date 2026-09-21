@@ -5,8 +5,10 @@ import UIKit
     var api=apiDefault, token="", identity: JSON?; var remembered=false; var epoch=UUID()
     var player: SeatRuntime?; var agents: [String:SeatRuntime]=[:]
     var showPlayer: (()->Void)?; var playerChanged: ((JSON)->Void)?
-    private var verified: [String:(ModelAgent,Date,UUID)]=[:], starting=Set<String>()
+    private var verified: [String:(ModelAgent,Date,UUID,Bool)]=[:], starting=Set<String>()
     private var probe: Task<ModelAgent,Error>?
+    private var restoring: Task<Void,Never>?,restoreWarnings:[String:String]=[:]
+    private var restorationGeneration=UUID()
     var incoming=""
     func info() -> JSON { ["apiUrl":api,"connected":identity != nil,"identity":identity as Any? ?? null,"remembered":remembered] }
     func scope() throws -> String { guard let id=identity?["id"] as? String, !token.isEmpty else { throw ClientFailure("LOGIN_REQUIRED","请先登录。") };return hashID(api+"\n"+id) }
@@ -21,13 +23,14 @@ import UIKit
         return info()
     }
     private func stop() {
-        epoch=UUID();probe?.cancel();probe=nil;verified.removeAll();starting.removeAll()
+        epoch=UUID();restorationGeneration=UUID();probe?.cancel();probe=nil;restoring?.cancel();restoring=nil;restoreWarnings.removeAll();verified.removeAll();starting.removeAll()
         player?.suspend();player=nil;for agent in agents.values { agent.suspend() };agents.removeAll();identity=nil;token="";remembered=false
     }
     private func accept(_ id: JSON,key: String,remember: Bool) throws {
         try require(id["id"] is String && ["operator","coordinator","auditor"].contains(id["role"] as? String ?? ""),"身份验证响应格式不正确。")
         if remember { try Vault.save("connection",["apiUrl":api,"token":key]) } else { try Vault.save("connection",nil) }
         token=key;identity=id;remembered=remember
+        restoreAgents()
     }
     func login(_ input: JSON, personal: Bool = false) async throws -> JSON {
         stop();try Vault.save("connection",nil);api=try Endpoint.base(input["apiUrl"] as? String ?? apiDefault);let generation=epoch
@@ -91,6 +94,7 @@ import UIKit
         }
         if path.hasSuffix("/admin-kick"),let room=value["roomId"] as? String,let player=input["playerId"] as? String {
             let id=room+"/"+player;agents.removeValue(forKey:id)?.suspend();keys.removeValue(forKey:id);try Vault.save("seats-"+binding,keys)
+            var saved=try Vault.load("agents-"+binding) ?? [:];saved.removeValue(forKey:id);try Vault.save("agents-"+binding,saved);restoreWarnings.removeValue(forKey:id)
         }
     }
     func seatKey(_ room: String,_ player: String) async throws -> String {
@@ -121,10 +125,14 @@ import UIKit
     }
     func hostSeat(_ name: String,_ input: JSON) async throws -> Any {
         let binding=try scope()
-        if name == "status" { return agents.values.filter{ $0.config["roomId"] as? String == input["roomId"] as? String }.map{ ["playerId":$0.room?["playerId"] as Any? ?? null,"status":$0.status,"warning":$0.warning as Any? ?? null] as JSON } }
+        if name == "status" {
+            let room=input["roomId"] as? String ?? ""
+            let live=agents.values.filter{ $0.config["roomId"] as? String == room }.map{ ["playerId":$0.room?["playerId"] as Any? ?? null,"status":$0.status,"warning":$0.warning as Any? ?? null] as JSON }
+            return live+restoreWarnings.filter{$0.key.hasPrefix(room+"/")}.map{["playerId":String($0.key.split(separator:"/").last ?? ""),"status":"error","warning":$0.value] as JSON}
+        }
         if name == "modelConfig" { let saved=try Vault.load("model-"+binding) ?? [:];return ["baseUrl":saved["baseUrl"] ?? "https://api.deepseek.com","model":saved["model"] ?? "deepseek-flash","hasApiKey":saved["apiKey"] != nil,"canRememberKey":true] }
         if name == "cancelModelTest" { probe?.cancel();probe=nil;verified.removeAll();return [:] }
-        if name == "forgetModel" { probe?.cancel();verified.removeAll();try Vault.save("model-"+binding,nil);return ["forgotten":true] }
+        if name == "forgetModel" { probe?.cancel();verified.removeAll();restorationGeneration=UUID();restoring?.cancel();restoring=nil;try Vault.save("model-"+binding,nil);try Vault.save("agents-"+binding,nil);return ["forgotten":true] }
         if name == "testModel" {
             probe?.cancel();verified.removeAll();let generation=epoch
             let url=try Endpoint.base(input["baseUrl"] as? String ?? "",model:true),model=input["model"] as? String ?? "",saved=try Vault.load("model-"+binding)
@@ -133,7 +141,7 @@ import UIKit
             let task=Task { try await agent.test();return agent };probe=task
             let tested=try await task.value;try require(generation == epoch && !task.isCancelled,"测试已取消，请重新测试。","CANCELLED")
             if input["rememberKey"] as? Bool != false { try Vault.save("model-"+binding,["baseUrl":url,"apiKey":key,"model":model]) }
-            let id=UUID().uuidString;verified[id]=(tested,Date(),epoch);probe=nil;return ["verificationId":id,"keySaved":input["rememberKey"] as? Bool != false,"ok":true]
+            let remember=input["rememberKey"] as? Bool != false,id=UUID().uuidString;verified[id]=(tested,Date(),epoch,remember);probe=nil;return ["verificationId":id,"keySaved":remember,"ok":true]
         }
         let room=input["roomId"] as? String ?? "",player=input["playerId"] as? String ?? "",id=room+"/"+player
         if name == "key" { return ["seatToken":try await seatKey(room,player)] }
@@ -141,9 +149,31 @@ import UIKit
             guard let proof=verified.removeValue(forKey:input["verificationId"] as? String ?? ""),proof.1.timeIntervalSinceNow > -300,proof.2 == epoch else { throw ClientFailure("MODEL_TEST_REQUIRED","先测试模型连接与连续工具调用，再加入席位。") }
             try require(agents[id] == nil && !starting.contains(id),"本席已有内置Agent。");starting.insert(id);defer { starting.remove(id) };let generation=epoch
             let key=try await seatKey(room,player),runtime=try SeatRuntime(config:["apiUrl":api,"roomId":room,"playerToken":key,"name":"AI · \(proof.0.model)"],agent:proof.0)
-            try await runtime.connect();try require(generation == epoch,"登录已改变。","CANCELLED");agents[id]=runtime;runtime.start();return ["started":true]
+            try await runtime.connect();try require(generation == epoch,"登录已改变。","CANCELLED")
+            if proof.3 { var saved=try Vault.load("agents-"+binding) ?? [:];saved[id]=["seat":runtime.config,"model":proof.0.persistedConfiguration];try Vault.save("agents-"+binding,saved) }
+            agents[id]=runtime;restoreWarnings.removeValue(forKey:id);runtime.start();return ["started":true]
         }
         throw ClientFailure("UNKNOWN_COMMAND","不支持的房主操作。")
     }
-    func foreground(_ active: Bool) { for runtime in Array(agents.values)+(player.map{[$0]} ?? []) { if active { runtime.start() } else { runtime.suspend() } } }
+    private func restoreAgents() {
+        guard restoring == nil,identity?["role"] as? String == "operator",let binding=try? scope(),let saved=try? Vault.load("agents-"+binding),!saved.isEmpty else { return }
+        let generation=epoch,restoration=UUID();restorationGeneration=restoration
+        restoring=Task { [weak self] in guard let self else { return };defer { if self.restorationGeneration == restoration { self.restoring=nil } }
+            for (id,value) in saved where self.agents[id] == nil && !self.starting.contains(id) {
+                do {
+                    try Task.checkCancellation();guard let entry=value as? JSON,let config=entry["seat"] as? JSON,let model=entry["model"] as? JSON,config["apiUrl"] as? String == self.api else { continue }
+                    self.restoreWarnings[id]="正在恢复内置 Agent 并重新测试模型连接…"
+                    let agent=try ModelAgent(base:model["baseUrl"] as? String ?? "",key:model["apiKey"] as? String ?? "",model:model["model"] as? String ?? "")
+                    let runtime=try SeatRuntime(config:config,agent:agent);try await runtime.connect()
+                    if runtime.data["sealed"] as? Bool == true { self.restoreWarnings.removeValue(forKey:id);continue }
+                    try await agent.test();try Task.checkCancellation();try require(self.epoch == generation && self.restorationGeneration == restoration,"登录已改变。","CANCELLED")
+                    self.agents[id]=runtime;self.restoreWarnings.removeValue(forKey:id);runtime.start()
+                } catch { if Task.isCancelled || self.epoch != generation { return };self.restoreWarnings[id]="内置 Agent 恢复失败："+publicFailure(error).message }
+            }
+        }
+    }
+    func foreground(_ active: Bool) {
+        if active { restoreAgents() } else { restorationGeneration=UUID();restoring?.cancel();restoring=nil }
+        for runtime in Array(agents.values)+(player.map{[$0]} ?? []) { if active { runtime.start() } else { runtime.suspend() } }
+    }
 }

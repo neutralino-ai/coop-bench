@@ -5,7 +5,7 @@ import Foundation
     var room: JSON?,rules: JSON?,observation: JSON?,status="disconnected",warning: String?,changed: ((JSON)->Void)?
     var data: JSON, clockOffset: Double=0
     private var loop: Task<Void,Never>?,decision: Task<Void,Never>?,upload: Task<Void,Never>?
-    private var running=UUID(),actionBusy=false,lastDecision="",agentFailed=false
+    private var running=UUID(),uploadGeneration=UUID(),actionBusy=false,lastDecision="",agentFailed=false
     var api: String { config["apiUrl"] as! String };var token: String { config["playerToken"] as! String };var roomID: String { config["roomId"] as! String }
     var episode: String? { room?["episodeId"] as? String };var cursor: Int { data["cursor"] as? Int ?? 0 }
     init(config: JSON,agent: ModelAgent? = nil) throws {
@@ -38,6 +38,7 @@ import Foundation
     func start() {
         guard loop == nil else { return };let generation=UUID();running=generation;agentFailed=false;lastDecision=""
         loop=Task { [weak self] in guard let self else { return };defer { if self.running == generation { self.loop=nil } }
+            var failures=0
             while !Task.isCancelled && self.running == generation {
                 do {
                     if self.episode == nil { self.room=try await self.request("/rooms/"+self.roomID);self.notify("waiting") }
@@ -60,24 +61,29 @@ import Foundation
                             try Task.checkCancellation();try self.accept(packet);more=self.observation?["hasMore"] as? Bool ?? false
                         }
                         self.flushSoon()
-                        if self.observation?["status"] as? String != "active" { self.decision?.cancel();self.decision=nil;self.notify("ended");return }
+                        if self.observation?["status"] as? String != "active" {
+                            self.decision?.cancel();await self.decision?.value;self.decision=nil
+                            self.data["terminal"]=true;try self.save();self.notify("ended");self.flushSoon();return
+                        }
                         self.wakeAgent()
                     } else if let room=self.room {
                         if ["expired","cancelled"].contains(room["status"] as? String ?? "") { self.notify("room-closed");return }
                         let members=room["members"] as? [JSON] ?? [],me=members.first{ $0["playerId"] as? String == room["playerId"] as? String }
                         if members.count == room["playerCount"] as? Int && me?["ready"] as? Bool != true { do { try await self.ready() } catch { if (error as? ClientFailure)?.code != "STALE_ROSTER" { throw error } } }
                     }
+                    failures=0
                 } catch {
                     if Task.isCancelled { return }
                     let failure=publicFailure(error);self.warning=failure.message
                     if [401,403,404].contains(failure.status ?? 0) || ["TRACE_SEALED","STORAGE_LIMIT"].contains(failure.code) { self.notify("access-denied");return }
-                    self.notify("reconnecting")
+                    failures=min(failures+1,5);self.notify("reconnecting")
                 }
-                try? await Task.sleep(nanoseconds:self.episode == nil ? 1_000_000_000:300_000_000)
+                let delay=failures>0 ? min(10,pow(2,Double(failures-1))) : self.episode == nil ? 1:0.3
+                try? await Task.sleep(nanoseconds:UInt64(delay*1_000_000_000))
             }
         }
     }
-    func suspend() { running=UUID();loop?.cancel();loop=nil;decision?.cancel();decision=nil;upload?.cancel();upload=nil;notify("disconnected") }
+    func suspend() { running=UUID();uploadGeneration=UUID();loop?.cancel();loop=nil;decision?.cancel();decision=nil;upload?.cancel();upload=nil;notify("disconnected") }
     private func accept(_ packet: JSON) throws {
         var next=packet["observation"] as? JSON ?? packet
         guard let id=next["observationId"] as? String else { throw ClientFailure("INVALID_RESPONSE","观察响应无效。") }
@@ -128,51 +134,81 @@ import Foundation
             if let dict=value as? JSON { return dict.reduce(into:JSON()){ result,pair in if !["authorization","apikey","token","playertoken","seattoken","invitetoken","decisiontoken","password"].contains(pair.key.lowercased()) { result[pair.key]=redact(pair.value) } } }
             if let array=value as? [Any] { return array.map(redact) };return value
         }
-        let clean=redact(raw),bytes=try jsonData(clean),logical=UUID().uuidString
+        try require(data["sealed"] as? Bool != true,"本席轨迹已经封存。","TRACE_SEALED")
+        let clean=redact(raw),bytes=try canonicalData(clean),logical=UUID().uuidString
         var messages=data["messages"] as? [JSON] ?? []
-        let count=max(1,Int(ceil(Double(bytes.count)/24000)))
+        func fits(_ value: Any,_ depth: Int=0) -> Bool {
+            if depth>24 { return false }
+            if let dict=value as? JSON { return dict.allSatisfy{!["__proto__","constructor","prototype"].contains($0.key) && fits($0.value,depth+1)} }
+            if let array=value as? [Any] { return array.allSatisfy{fits($0,depth+1)} }
+            return true
+        }
+        let inline=bytes.count<=24000 && fits(clean),fragmentBytes=16384
+        let count=inline ? 1:max(1,Int(ceil(Double(bytes.count)/Double(fragmentBytes))))
+        let capture: JSON=["schema":"coop-agent-capture/v1","logicalId":logical,"serialization":"canonical-json/v1","event":kind,"totalBytes":bytes.count,"sha256":hashBytes(bytes)]
         for index in 0..<count {
             var item: JSON=["sequence":(data["traceBase"] as? Int ?? 0)+messages.count,"messageId":"\(logical):\(index)","kind":kind,"clientAt":ISO8601DateFormatter().string(from:Date()),"reasoningAvailability":reasoning]
             if let observationID { item["observationId"]=observationID };if let requestID { item["requestId"]=requestID }
             if let agent { item["model"]=agent.model;item["provider"]=agent.base }
             let role=kind == "model-input" ? "model-request":kind == "tool-result" ? "tool":"assistant"
-            if count == 1 { item["message"]=["role":role,"raw":clean] }
-            else { item["message"]=["role":role,"capture":["schema":"coop-agent-capture/v1","logicalId":logical,"encoding":"base64","serialization":"json/v1","fragment":true,"index":index,"count":count,"totalBytes":bytes.count],"dataBase64":bytes.subdata(in:index*24000..<min((index+1)*24000,bytes.count)).base64EncodedString()] }
+            if inline { item["message"]=["role":role,"capture":capture.merging(["encoding":"json"]){_,new in new},"raw":clean] }
+            else { item["message"]=["role":role,"capture":capture.merging(["encoding":"base64","fragment":true,"index":index,"count":count]){_,new in new},"dataBase64":bytes.subdata(in:index*fragmentBytes..<min((index+1)*fragmentBytes,bytes.count)).base64EncodedString()] }
             messages.append(item)
         }
-        data["messages"]=messages;try save()
+        data["messages"]=messages;if ["provided","summary-only"].contains(reasoning) { data["reasoningAvailability"]=reasoning };try save()
     }
     private func flushSoon() {
-        guard upload == nil,let episode else { return }
-        upload=Task { [weak self] in guard let self else { return };defer { self.upload=nil }
-            do {
+        guard upload == nil,data["sealed"] as? Bool != true,let episode else { return }
+        let generation=UUID();uploadGeneration=generation
+        upload=Task { [weak self] in guard let self else { return };defer { if self.uploadGeneration == generation { self.upload=nil } }
+            for attempt in 0..<3 { do {
                 while !Task.isCancelled {
                     let messages=self.data["messages"] as? [JSON] ?? [],acked=self.data["acked"] as? Int ?? 0
-                    if acked>=messages.count { break }
+                    if acked>=messages.count {
+                        if self.data["terminal"] as? Bool == true {
+                            let completion: JSON=["scope":"iOS seat-visible HTTP tools and actual Responses requests/replies. Credentials are excluded.","completeness":"partial","reasoningAvailability":self.data["reasoningAvailability"] ?? "not-provided","unavailable":["Provider hidden reasoning and external-agent internals are not available."]]
+                            let receipt=try await self.request("/episodes/\(episode)/messages/complete",completion,timeout:8)
+                            try require(receipt["lastSequence"] as? Int == (self.data["traceBase"] as? Int ?? 0)+messages.count-1,"轨迹封存回执不匹配。")
+                            self.data["sealed"]=true;try self.save()
+                        }
+                        return
+                    }
                     _=try await self.request("/episodes/\(episode)/messages",messages[acked],timeout:8)
+                    try Task.checkCancellation()
                     self.data["acked"]=acked+1;try self.save()
                 }
-            } catch { if !Task.isCancelled { self.warning="轨迹上传待重试，原记录已保留在手机。";self.notify() } }
+            } catch {
+                if Task.isCancelled { return }
+                self.warning="轨迹上传待重试，原记录已保留在手机。";self.notify()
+                if attempt<2 { try? await Task.sleep(nanoseconds:2_000_000_000) }
+            } }
         }
     }
     private func wakeAgent() {
         guard let agent,let observation,decision == nil,!agentFailed,!actionBusy,data["pendingAction"] == nil,observation["hasMore"] as? Bool != true,!(observation["legalActions"] as? [JSON] ?? []).isEmpty,let id=observation["observationId"] as? String,id != lastDecision else { return }
         lastDecision=id;let generation=running
         decision=Task { [weak self] in guard let self else { return };defer { if self.running == generation { self.decision=nil } }
-            do {
-                self.notify("thinking");var safe=observation;safe.removeValue(forKey:"decisionToken");safe["updates"]=self.data["updates"] ?? []
-                let context: JSON=["protocol":"coop-player/v1","rules":self.rules ?? [:],"observation":safe,"lastActionResult":self.data["lastActionResult"] ?? null]
-                let control=observation["control"] as? JSON ?? [:],deadlines=[control["deadlineAt"],control["episodeDeadlineAt"]].compactMap{ $0 as? Double }
-                let remaining=min(120,((deadlines.min() ?? (Date().timeIntervalSince1970*1000+self.clockOffset+180000))-Date().timeIntervalSince1970*1000-self.clockOffset)/1000)
-                let answer=try await agent.decide(context,runtime:self,timeout:max(0.1,remaining))
-                try Task.checkCancellation();try require(self.running == generation,"运行已暂停。","CANCELLED")
-                if let action=answer["action"] as? JSON { _=try await self.act(action,observationID:id) }
-            } catch {
-                if !Task.isCancelled {
-                    let failure=publicFailure(error);self.warning=failure.message
-                    if !["STALE_OBSERVATION","STALE_DECISION"].contains(failure.code) { self.agentFailed=true;self.warning="内置 Agent 已停止：\(failure.message) 超时将由服务器执行默认动作。" }
-                    self.notify("waiting")
-                }
+            await self.runDecision(agent,observation:observation,id:id,generation:generation)
+        }
+    }
+    private func runDecision(_ agent: ModelAgent,observation: JSON,id: String,generation: UUID) async {
+        do {
+            notify("thinking")
+            var safe=observation;safe.removeValue(forKey:"decisionToken");safe["updates"]=data["updates"] ?? []
+            let context: JSON=["protocol":"coop-player/v1","rules":rules ?? [:],"observation":safe,"lastActionResult":data["lastActionResult"] ?? null]
+            let control=observation["control"] as? JSON ?? [:]
+            let deadlines:[Double]=[control["deadlineAt"],control["episodeDeadlineAt"]].compactMap{ $0 as? Double }
+            let now=Date().timeIntervalSince1970*1000+clockOffset
+            let timeoutAt=deadlines.min() ?? (now+180000)
+            let remaining: Double=min(120,(timeoutAt-now)/1000)
+            let answer=try await agent.decide(context,runtime:self,timeout:max(0.1,remaining))
+            try Task.checkCancellation();try require(running == generation,"运行已暂停。","CANCELLED")
+            if let action=answer["action"] as? JSON { _=try await act(action,observationID:id) }
+        } catch {
+            if !Task.isCancelled {
+                let failure=publicFailure(error);warning=failure.message
+                if !["STALE_OBSERVATION","STALE_DECISION"].contains(failure.code) { agentFailed=true;warning="内置 Agent 已停止：\(failure.message) 超时将由服务器执行默认动作。" }
+                notify("waiting")
             }
         }
     }
