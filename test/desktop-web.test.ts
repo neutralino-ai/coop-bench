@@ -91,6 +91,19 @@ test('a long Retry-After pauses other audit readers without disabling connection
  await clock.advance(120000);const response=await api.request('/api/v1/rollouts/e/messages');assert.equal(response.status,200);assert.equal(response.coopRequestStartedAt,120000);
 });
 
+test('artifact download can legitimately exceed 18 seconds when audit queue precedes Retry-After',async()=>{
+ const clock=auditClock(),attempts:number[]=[];
+ const api=transportContext({connect:async()=>connection,cancelRequest:async()=>{},request:async({path}:any)=>{
+  if(path.endsWith('/content')){attempts.push(clock.now());if(attempts.length===1)return {status:429,headers:{'retry-after':'5'},bytes:new Uint8Array()};}
+  return {status:200,headers:{},bytes:new Uint8Array([1,2,3])};
+ }},undefined,clock.timers);
+ for(let i=0;i<3;i++)await api.request('/api/v1/rollouts/e');
+ const readers=Promise.all(['p1','p2','p3'].map(player=>api.request('/api/v1/rollouts/e/messages?playerId='+player)));
+ let completed=false;const download=api.request('/api/v1/rollouts/e/artifacts/a/content').then(r=>{completed=true;return r;});
+ await clock.advance(18000);assert.equal(completed,false);
+ await clock.advance(2000);await readers;const response=await download;assert.deepEqual(attempts,[14000,19000]);assert.deepEqual([...new Uint8Array(await response.arrayBuffer())],[1,2,3]);
+});
+
 test('switching server cancels rate-limited artifact backoff instead of replaying it with the new session',async()=>{
  const entered=deferred();let calls=0;
  const api=transportContext({request:async()=>{calls++;return {status:429,headers:{'retry-after':'5'},bytes:new Uint8Array()};},connect:async()=>({...connection,apiUrl:'https://new.example.test/api/v1'}),cancelRequest:async()=>{}},undefined,{setTimeout:(fn:any)=>{entered.resolve();return setTimeout(fn,30000);},clearTimeout});

@@ -24,7 +24,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   const checks = [], check = (value, name) => { assert.ok(value, name); checks.push(name); };
   const run = (fn, ...args) => window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`, true)
     .catch(error=>{throw Error(`Synthetic UI check failed: ${fn.toString().slice(0,300)}: ${error.message}`);});
-  const wait = async (fn, message) => { const deadline = Date.now() + 18000; while (!await fn()) { if (Date.now() > deadline) throw new Error(message); await new Promise(r => setTimeout(r, 50)); } };
+  const wait = async (fn, message, timeoutMs=18000) => { const deadline = Date.now() + timeoutMs; while (!await fn()) { if (Date.now() > deadline) throw new Error(message); await new Promise(r => setTimeout(r, 50)); } };
   const screenshots = {};
   const capture = async name => {
     // DOM state changes precede the compositor frame. Wait for rendering so a
@@ -219,7 +219,9 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await run(()=>document.getElementById('open-evidence').click());
   await wait(()=>run(()=>Boolean(document.querySelector('[data-download-artifact]'))),'Reloaded replay attachment did not render');
   await run(() => document.querySelector('[data-download-artifact]').click());
-  await wait(() => Promise.resolve(existsSync(join(dataDir, fixture.artifact.name))), 'Attachment was not downloaded.');
+  // A download can queue behind audit reads, receive the fixture's 5-second
+  // Retry-After, then queue again. Keep the product pacing enabled throughout.
+  await wait(() => Promise.resolve(existsSync(join(dataDir, fixture.artifact.name))), 'Attachment was not downloaded.',40000);
   await wait(() => {try{return readFileSync(join(dataDir,fixture.artifact.name)).equals(fixture.bytes);}catch(error){if(['ENOENT','EBUSY','EPERM'].includes(error.code))return false;throw error;}}, 'Downloaded attachment differs.');
   check(artifactAttempts.length>=2&&artifactAttempts.slice(1).every(at=>at>=artifactRetryAt),'artifact download honors server Retry-After across packaged IPC before retrying');
   checks.push('attachment download preserves exact bytes and SHA-256');
