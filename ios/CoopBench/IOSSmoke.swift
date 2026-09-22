@@ -73,7 +73,8 @@ import WebKit
             _=try await js("document.querySelector('#create-dialog').showModal();return true",app.host)
             try await wait("start-enabled-in-ui",{try await js("return !!document.querySelector('#start-room') && !document.querySelector('#start-room').disabled",app.host) as? Bool == true})
             _=try await js("document.querySelector('#start-room').click();return true",app.host)
-            try await wait("game-started-in-ui",{try await js("return !!document.querySelector('#room-open-replay')",app.host) as? Bool == true})
+            try await wait("game-started-in-ui",{try await js("return document.querySelector('#end-room')?.textContent==='强制结束游戏'",app.host) as? Bool == true})
+            try check(try await js("return !document.querySelector('#room-open-replay') && !document.querySelector('#room-open-messages')",app.host) as? Bool == true,"room-only-manages-seats")
             let started=try await app.session.owner("/rooms/\(roomID)/admin")
             try check(started["episodeId"] is String,"owner-starts-game")
             _=try await js("document.querySelector('#create-dialog').close();return true",app.host);app.playerShown=true
@@ -84,6 +85,8 @@ import WebKit
             try check(runtime.snapshot()["decisionToken"] == nil && (runtime.snapshot()["observation"] as? JSON)?["decisionToken"] == nil,"snapshot-hides-decision-capability")
             _=try await runtime.act(["type":"hint","target":"p2","kind":"color","value":"red"],observationID:runtime.observation!["observationId"] as! String,decisionSummary:"合成 iOS 理由：提示红色。")
             try check(runtime.data["pendingAction"] == nil,"human-action-acknowledged")
+            try check(try await js("return !document.querySelector('#dictate-reason').hidden && !!document.querySelector('#decision-reason')",app.player) as? Bool == true,"human-reason-and-native-dictation-visible")
+            try check((runtime.data["messages"] as? [JSON] ?? []).contains { (($0["message"] as? JSON)?["raw"] as? JSON)?["decisionSummary"] as? String == "合成 iOS 理由：提示红色。" },"human-reason-preserved-in-action-trace")
             runtime.suspend();runtime.start()
             try await wait("resume-refreshes-seat",{runtime.status != "disconnected"})
             try await wait("trace-upload",{(runtime.data["acked"] as? Int ?? 0)>0})
