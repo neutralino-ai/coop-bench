@@ -9,3 +9,5 @@
 本地验证：103 项客户端测试全部通过；`pnpm build`、`pnpm build:ios` 及 `git diff --check` 通过。Windows 沙箱下 esbuild 无法读取父目录，使用正常本地权限重试后构建成功。
 
 交付边界：分支 codex/member-login，独立工作树 artifacts/member-login。尚未运行新版 macOS/iOS CI、原生包内验收或发布；iPhone 上的 0.10.2 不会因本地源码变化自动修复。后续需统一版本完成四平台验收、Apple 签名及 TestFlight 上传，遵守 AGENTS.md 的发布要求。没有重启后端或修改任何真实账号。
+
+最终随 0.11.0 正式发布，iOS 0.11.0 (20.1) 已在内部 TestFlight；58 项模拟器流程覆盖 member 注册/密码登录。详见 [交付记录](operator-member-delivery-2026-09-22.md)。

@@ -1,5 +1,8 @@
 # Coop Bench 公开客户端接手指南
 
+**2026-09-22 / 0.11.0 已正式发布**：operator/member 两种角色、管理员用户/邀请码/批量对局操作、member 登录修复及任意对局回放导出，移除客户端审阅批注。删除账号保留历史署名，删除对局只允许终局。版本/tag `e9d4bd7`，四平台签名 CI `35690859160` 全成功；每平台管理端120/Player25、iOS模拟器58项通过，12个公开附件与0.10.3更新器真实下载校验通过。iOS `0.11.0 (20.1)` 为 VALID / IN_BETA_TESTING，实体设备未验收。详见 [交付记录](docs/operator-member-delivery-2026-09-22.md)。
+
+
 **2026-09-22 / 0.10.3 已正式发布**：“可加入的房间”移除重复的“返回我的对局”和“管理房间”，继续从“我参与的”“我创建的”进入对应功能。版本/tag 提交 `2e1d19c`；四平台、macOS 签名公证、iOS TestFlight 上传及发布 CI `35687709879` 全成功。公开 Release 12 个附件，0.10.2 更新器已实际发现新版并完成 Windows/iOS 下载校验。iOS `0.10.3 (19.1)` 已上传 TestFlight；Apple 后续处理状态和实体设备安装另行确认。详见 [交付记录](docs/desktop-0.10.3-delivery-2026-09-22.md)。
 
 **2026-09-22 / 0.10.2 已签名发布**：macOS Intel/Apple Silicon 的管理端和 Player 均为 Developer ID 签名、公证并附票据，最终 ZIP/DMG Gatekeeper 全通过。版本提交 `2be7407`，四平台及 TestFlight 上传 CI `35683963977` 成功；GitHub 12 个附件与旧版更新器下载校验通过。iOS `0.10.2 (17.1)` 已经 Apple 处理，内部 TestFlight 可测，仅持有人获邀；后续安装/更新优先 TestFlight，无需自己的 Mac。真机安装与麦克风仍待用户验收。详见 [交付记录](docs/apple-signing-delivery-2026-09-22.md)。
