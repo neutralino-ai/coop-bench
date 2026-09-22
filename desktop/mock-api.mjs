@@ -61,13 +61,15 @@ export async function startMockApi({role='operator'}={}) {
   const bytes = Buffer.from('合成桌面附件\n{"fixture":true,"modelInvoked":false}\n');
   const artifact = { id: randomUUID(), name: 'synthetic-client-artifact.jsonl', mediaType: 'application/x-ndjson', kind: 'agent-trace', status: 'complete',
     playerId: 'p1', createdAt: stamp, completedAt: stamp, byteLength: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), reasoningAvailability: 'not-provided' };
-  const completion = { completeness: 'partial', reasoningAvailability: 'not-provided', scope: 'Synthetic UI fixture only', unavailable: ['No real model was invoked.'], lastSequence: 1 };
+  const completion = { completeness: 'partial', reasoningAvailability: 'not-provided', scope: 'Synthetic UI fixture only', unavailable: ['No real model was invoked.'], lastSequence: 3 };
   const initial = { rollout: auditRollout(id, players), players, step: 0, ended: true, messages: new Map(), completions: new Map([['p1', completion]]), credentials: new Map() };
   initial.messages.set('p1', [
     { sequence: 0, messageId: 'synthetic-ui-message', playerId: 'p1', kind: 'model-input', createdAt: stamp, message: { role: 'user', content: '合成验收消息：仅用于测试客户端，不是模型实局轨迹。' } },
     { sequence: 1, messageId: 'synthetic-linked-reasoning', playerId: 'p1', kind: 'model-output', createdAt: stamp,
       observationId: initial.rollout.frames[1].observed.observationId, reasoningAvailability: 'provided', message: { role: 'assistant',
         reasoning_content: '合成布局测试：这是用于检验长文本展示的虚构内容，没有调用真实模型。'.repeat(25) + '原文结束标记', content: '<img src=x onerror="window.__thinkingXss=1">' } },
+    {sequence:2,messageId:'synthetic-action-call',playerId:'p1',kind:'tool-call',createdAt:stamp,observationId:initial.rollout.frames[1].observed.observationId,requestId:'synthetic-action-request',message:{raw:{tool:'act',action:initial.rollout.frames[1].action,decisionSummary:'合成测试动作，不是模型推理。'}}},
+    {sequence:3,messageId:'synthetic-action-result',playerId:'p1',kind:'tool-result',createdAt:stamp,observationId:initial.rollout.frames[1].observed.observationId,requestId:'synthetic-action-request',message:{raw:{accepted:true}}},
   ]);
   episodes.set(id, initial);
   let password, sessionToken, registered = false, updateOpened = false, closed = false;

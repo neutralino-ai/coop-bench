@@ -179,9 +179,14 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
     });
     layout.push(measured);await capture(`replay-${width}x${height}.png`);
     writeFileSync(join(dataDir,'replay-layout.json'),JSON.stringify(layout,null,2));
-    check(measured.pageFits&&measured.timelineFits&&measured.panels.every(p=>p.actionFits&&p.handFits&&p.thoughtFont>=15&&p.thoughtHeight>=24),`player hands, reasoning and actions fit ${width}x${height} without page scrolling`);
+    check(measured.pageFits&&measured.timelineFits&&measured.panels.every(p=>p.actionFits&&p.handFits&&p.thoughtFont>=15&&p.thoughtHeight>=20),`player hands, reasoning and actions fit ${width}x${height} without page scrolling`);
   }
-  check(await run(()=>document.querySelector('.acting .trace-blocks').textContent.includes('原文结束标记')&&!document.querySelector('.acting .trace-blocks img')&&document.querySelector('.acting .trace-reason').textContent.includes('合成测试动作')),'colored trajectory blocks preserve complete recorded reasoning and highlight the submitted reason without executing markup');
+  check(await run(()=>{const blocks=[...document.querySelectorAll('.acting .trace-block')];return new Set(blocks.map(b=>b.dataset.category)).size===5&&blocks.every(b=>b.getBoundingClientRect().height<=90)&&!document.querySelector('.trace-detail[open]')&&document.querySelectorAll('.trace-current').length===1&&document.querySelector('.trace-current').dataset.category==='call';}),'five trace categories stay compact and only the selected turn tool use is highlighted');
+  await run(()=>document.querySelector('.acting .trace-reasoning .trace-block-head').click());
+  await wait(()=>run(()=>document.querySelector('.acting .trace-reasoning .trace-expanded')?.textContent.includes('原文结束标记')),'Expanded thinking must preserve the complete original');
+  check(await run(()=>!document.querySelector('.acting .trace-blocks img')&&!window.__thinkingXss&&document.querySelector('.acting .trace-reason').textContent.includes('合成测试动作')),'compact trace details preserve complete recorded reasoning and treat markup as text');
+  await capture('replay-expanded-thinking.png');
+  await run(()=>document.querySelector('.acting .trace-reasoning .trace-block-head').click());
   check(await run(()=>!document.querySelector('.replay-deadline')&&![...document.querySelectorAll('.player-panel button')].some(b=>b.textContent.includes('跳到这一步'))),'completed replay hides countdowns and redundant jump links');
   const identityChecks=fixture.requests.filter(r=>r.path==='/api/v1/identity').length;
   await run(()=>document.getElementById('connection-quick-check').click());

@@ -298,13 +298,14 @@
     }offset+=30;if(offset<entries.length)list.append(more);}
     more.onclick=append;append();return list;
   }
-  function traceBlock(block){
-    const item=node('article',`trace-block trace-${block.type}`);item.dataset.traceId=block.id;
-    const head=node('header','trace-block-head');head.append(node('strong','',block.title),node('time','',date(block.at,true)));item.append(head);
-    if(block.action)item.append(node('p','trace-action-name',R.actionText({action:block.action})));
-    if(block.reason){const reason=node('div','trace-reason');reason.append(node('span','','提交理由'),node('p','',block.reason));item.append(reason);}
-    if(typeof block.value==='string')item.append(node('p','trace-text thinking-excerpt',block.value));
-    else{const detail=node('details','trace-content');detail.append(node('summary','',block.action?'动作字段':'展开内容'));detail.addEventListener('toggle',()=>{if(detail.open&&!detail.dataset.loaded){detail.dataset.loaded='true';detail.append(traceValue(block.value));}});item.append(detail);}
+  function traceBlock(block,current=false){
+    const category=CoopTrace.category(block),item=node('article',`trace-block trace-${block.type}${current?' trace-current':''}`);item.dataset.traceId=block.id;item.dataset.category=category;
+    const detail=node('details','trace-detail'),head=node('summary','trace-block-head'),label=({input:block.type==='prompt'?'System':'User / System',output:'Assistant',reasoning:'Thinking',call:'Tool use',result:'Tool result',notice:'记录'})[category];
+    head.append(node('strong','trace-kind',label));
+    if(current)head.append(node('span','trace-current-label','本轮动作'));
+    const at=node('time','',date(block.at,true).split(' ').at(-1));at.title=date(block.at,true);head.append(at,node('span','trace-disclosure','详情'));head.title=block.title;detail.append(head);
+    detail.addEventListener('toggle',()=>{if(detail.open&&!detail.dataset.loaded){detail.dataset.loaded='true';const body=node('div','trace-expanded');body.append(node('p','trace-source',block.title));if(block.reason)body.append(node('p','trace-reason-full',block.reason));body.append(traceValue(block.value));if(block.confirmation){const f=block.confirmation;body.append(node('p','trace-source',`服务器确认 · 第 ${f.seq} 步`),traceValue({action:f.action,decisionSummary:f.decisionSummary??null}));}if(block.settings){const settings=node('details','trace-content');settings.append(node('summary','','模型设置与工具'),traceValue(block.settings));body.append(settings);}detail.append(body);}});
+    const preview=node('p',`trace-preview thinking-excerpt${block.reason?' trace-reason':''}`,CoopTrace.preview(block));item.append(detail,preview);
     return item;
   }
   function renderPlayer(p,snap) {
@@ -336,15 +337,17 @@
     const decision=node('section','player-decision'),status=seats[p.player];
     const recorded=status?.blocks??[],agent=recorded.some(b=>['prompt','input','output','reasoning','request'].includes(b.type));
     if(agent)panel.classList.add('agent-panel');
-    const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',agent?'Agent 完整轨迹':'行动理由'),node('span','decision-step',agent?'最新在上':p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
+    const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',agent?'Agent 完整轨迹':'行动理由'),node('span','decision-step',agent?'本轮优先 · 最新在上':p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
     if(agent){
       decisionHead.title='本席全局记录，包含行动理由与动作，独立于局面时间线';
       const list=node('div','trace-blocks');list.setAttribute('aria-label',`${p.player} 完整轨迹`);list.dataset.player=p.player;
-      const savedReasons=state.rollout.frames.filter(f=>f.playerId===p.player&&f.action).map(f=>({id:'frame-'+f.seq,sequence:Infinity,at:f.at,type:'action',title:`服务器${f.error?'拒绝':'已确认'} · 第 ${f.seq} 步`,value:f.action,action:f.action,reason:f.decisionSummary??(f.automatic?'服务器超时默认动作':null)}));
-      const blocks=[...recorded,...savedReasons].sort((a,b)=>(typeof b.at==='number'?b.at:Date.parse(b.at)||0)-(typeof a.at==='number'?a.at:Date.parse(a.at)||0)||b.sequence-a.sequence);
+      const blocks=CoopTrace.withFrames(recorded,state.rollout.frames.filter(f=>f.playerId===p.player&&f.action)).sort((a,b)=>(typeof b.at==='number'?b.at:Date.parse(b.at)||0)-(typeof a.at==='number'?a.at:Date.parse(a.at)||0)||b.sequence-a.sequence);
       const limit=status.displayLimit??80;
+      const current=CoopTrace.currentCallId(recorded,{frame:snap.frame?.playerId===p.player?snap.frame:null,live:snap.live,observation:p.observation});
+      const selectedBlock=blocks.find(b=>b.id===current),displayed=selectedBlock?[selectedBlock,...blocks.filter(b=>b!==selectedBlock).slice(0,limit-1)]:blocks.slice(0,limit);
+      if(current&&status.highlightedId!==current)list.dataset.revealCurrent='true';status.highlightedId=current;
       status.nodes??=new Map();
-      for(const block of blocks.slice(0,limit)){const signature=JSON.stringify(block);let saved=status.nodes.get(block.id);if(saved?.signature!==signature){saved={signature,item:traceBlock(block)};status.nodes.set(block.id,saved);}list.append(saved.item);}
+      for(const block of displayed){const signature=JSON.stringify(block);let saved=status.nodes.get(block.id);if(saved?.signature!==signature){saved={signature,item:traceBlock(block,block.id===current)};status.nodes.set(block.id,saved);}const selected=block.id===current;saved.item.classList.toggle('trace-current',selected);let badge=saved.item.querySelector('.trace-current-label');if(selected&&!badge){badge=node('span','trace-current-label','本轮动作');saved.item.querySelector('.trace-kind').after(badge);}if(!selected)badge?.remove();list.append(saved.item);}
       if(blocks.length>limit)list.append(button(`展开更早的 ${Math.min(80,blocks.length-limit)} 个记录块`,()=>{status.displayLimit=limit+80;render();}));
       decision.append(list);
     }else{
@@ -364,7 +367,7 @@
     $('open-create').hidden=!['operator','member'].includes(state.identity?.role);
     setText('focus-timing',snap.live?'实时局面 · 当前待行动':snap.frame?.action?'手牌 / 可见信息：动作前':'手牌 / 可见信息：此时点');
     setText('focus-step-title',snap.live?`实时局面 · ${snap.actors.length?`等待 ${snap.actors.join(' / ')} 行动`:'等待进展'} · 最近记录 #${snap.frame?.seq??0}`:`${snap.frame?.seq===0?'初始局面':`第 ${snap.frame?.seq??0} 步`} · ${snap.frame?.playerId??'系统'} · ${R.actionText(snap.frame)}`);
-    const scrolls=new Map([...grid.querySelectorAll('.trace-blocks')].map(el=>[el.dataset.player,el.scrollTop]));grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);for(const el of grid.querySelectorAll('.trace-blocks'))el.scrollTop=scrolls.get(el.dataset.player)??0;
+    const scrolls=new Map([...grid.querySelectorAll('.trace-blocks')].map(el=>[el.dataset.player,el.scrollTop]));grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);for(const el of grid.querySelectorAll('.trace-blocks'))el.scrollTop=el.dataset.revealCurrent?0:scrolls.get(el.dataset.player)??0;
     const communications=state.rollout.frames.slice(0,state.index+1).map(f=>({frame:f,text:publicCommunication(f)})).filter(m=>m.text);
     const last=communications.at(-1);chat.replaceChildren(node('strong','','公开交流'),node('span','chat-preview',last?`${last.frame.playerId} · ${last.text}`:'截至这一步还没有公开交流。'));
     const communicationButton=button(`交流 ${communications.length} ↗`,()=>{openEvidence();$('communication-panel').scrollIntoView({block:'start'});});communicationButton.title=last?`${last.frame.playerId} · ${last.text}`:'尚无公开交流';shared.append(communicationButton);
