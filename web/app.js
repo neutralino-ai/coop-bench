@@ -87,8 +87,11 @@ function renderAuthenticatedControls(remembered,hideLogin=false){
 }
 async function activateConnection(info,session){
  if(session!==state.session||!info.connected)return;apiUrl=info.apiUrl;state.token='connected';$('api-address').value=apiUrl;setConnectionStatus('connecting','正在验证服务器身份响应…',{attemptUrl:apiUrl});
+ const episode=new URLSearchParams(location.hash.slice(1)).get('episode');
  state.identity=await request('/identity');if(session!==state.session)return;renderAuthenticatedControls(info.remembered,true);message('连接成功，身份已验证。');
- await Promise.all([loadGames(),loadList()]);if(session!==state.session)return;const episode=new URLSearchParams(location.hash.slice(1)).get('episode');const available=episode&&state.items.find(s=>s.episodeId===episode&&true);if(available)await selectEpisode(available.episodeId);else window.CoopLobby?.home();
+ const navigation=state.detailRequest;
+ await Promise.all([loadGames(),loadList()]);if(session!==state.session||navigation!==state.detailRequest)return;
+ const available=episode&&state.items.find(s=>s.episodeId===episode);if(available)await selectEpisode(available.episodeId);
 }
 async function beginLogin(perform,description,safeErrors=false){
  const address=$('api-address').value.trim(),remember=$('remember-credential').checked;resetSession();const session=state.session;apiUrl=address;setConnectionStatus('connecting',description,{attemptUrl:address,verifiedUrl:'',lastCheckedAt:null});

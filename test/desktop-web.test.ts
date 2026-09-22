@@ -14,6 +14,14 @@ function transportContext(bridge:any,fetchImpl:any=()=>{throw Error('Renderer mu
 const identity={id:'fixture-user',role:'operator'};
 const connection={mode:'remote',apiUrl:'https://example.test/api/v1',connected:true,identity,remembered:false};
 
+test('finishing login metadata cannot send a newly selected replay back to the lobby',async()=>{
+ const games=deferred();const {context}=uiContext(async()=>Response.json(identity));context.slowGames=games.promise;
+ vm.runInContext("window.CoopLobby={home(){document.body.dataset.view='home';state.detailRequest++;$('detail').hidden=true}};loadGames=()=>slowGames;loadList=async()=>{state.items=[{episodeId:'chosen'}]};selectEpisode=async()=>{state.detailRequest++;document.body.dataset.view='replay';$('detail').hidden=false}",context);
+ const activation=vm.runInContext('activateConnection('+JSON.stringify(connection)+',state.session)',context);await new Promise(resolve=>setImmediate(resolve));
+ await vm.runInContext("selectEpisode('chosen')",context);games.resolve();await activation;
+ assert.equal(vm.runInContext('document.body.dataset.view',context),'replay');assert.equal(vm.runInContext("$('detail').hidden",context),false);
+});
+
 test('background library refresh does not reread a focused or hidden replay',async()=>{
  const {context,get,intervals}=uiContext(async()=>{throw Error('Unexpected API read');});
  vm.runInContext("globalThis.listReads=0;globalThis.detailReads=0;loadList=async()=>{listReads++};refreshDetail=async()=>{detailReads++};state.rollout={summary:{status:'active'}};document.body.dataset.view='replay'",context);

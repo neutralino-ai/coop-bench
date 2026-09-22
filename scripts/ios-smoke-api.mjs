@@ -19,6 +19,9 @@ const proxy=createServer(async(req,res)=>{
    res.on('close',()=>{clearInterval(timer);clearTimeout(finish)});return;
   }
   if(req.url==='/_ios/redirect'){res.writeHead(302,{Location:mock.apiUrl+'/health'});res.end();return;}
+  // Replay rows may arrive before the game catalogue during login. Exercise
+  // clicking a row while that initial catalogue request is still outstanding.
+  if(req.method==='GET'&&req.url==='/api/v1/games')await new Promise(resolve=>setTimeout(resolve,1500));
   const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks);
   if(req.url.endsWith('/actions')){
    const key=req.headers['idempotency-key'],digest=createHash('sha256').update(body).digest('hex');

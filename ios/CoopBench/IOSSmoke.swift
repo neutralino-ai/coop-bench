@@ -155,7 +155,10 @@ import WebKit
             _=try await js("document.querySelector('#operator-close').click();return true",app.host)
             try check(try await js("return !document.querySelector('#operator-dialog').open && document.querySelector('#operator-invite-result').value==='';",app.host) as? Bool == true,"operator-close-clears-invitations")
             report=["ok":true,"checks":checks,"evidence":"iPhone simulator, synthetic HTTP/model fixture; no real game engine or model"]
-        } catch { report=["ok":false,"checks":checks,"error":publicFailure(error).record] }
+        } catch {
+            report=["ok":false,"checks":checks,"error":publicFailure(error).record]
+            if let ui = try? await js("return {view:document.body.dataset.view,loading:document.querySelector('#replay-loading-detail')?.textContent,connection:document.querySelector('#connection-status')?.dataset.state,message:document.querySelector('#message')?.textContent}",app.host) { report["ui"]=ui }
+        }
         try? jsonData(report).write(to:directory.appendingPathComponent("ios-smoke.json"),options:.atomic)
     }
 }
