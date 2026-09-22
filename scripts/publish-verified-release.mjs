@@ -26,11 +26,13 @@ entries.push({dir:'ios',name:`Coop-Bench-${version}-iOS-Xcode.zip`});
 const assets=entries.map(({dir,name})=>{const path=`dist/${dir}/${name}`,size=statSync(path).size;if(size<1000)throw Error(`Invalid asset ${name}`);return {name,path,size,sha256:createHash('sha256').update(readFileSync(path)).digest('hex')};});
 const checksum='dist/release/SHA256SUMS.txt';writeFileSync(checksum,assets.map(a=>`${a.sha256}  ${a.name}`).join('\n')+'\n');
 assets.push({name:'SHA256SUMS.txt',path:checksum,size:statSync(checksum).size,sha256:createHash('sha256').update(readFileSync(checksum)).digest('hex')});
-let release=JSON.parse(gh('release','view',tag,'--repo',repo,'--json','isDraft,assets,tagName'));
+let release=JSON.parse(gh('release','view',tag,'--repo',repo,'--json','isDraft,assets,tagName,apiUrl'));
 if(!release.isDraft||release.tagName!==tag)throw Error('Recovery requires the existing draft for this tag');
 if(release.assets.some(a=>!assets.some(expected=>a.name===expected.name)))throw Error('Draft contains unrelated assets');
+const releaseId=/\/releases\/(\d+)$/.exec(release.apiUrl)?.[1];if(!releaseId)throw Error('Missing draft release ID');
 gh('release','upload',tag,...assets.map(a=>a.path),'--repo',repo,'--clobber');
-release=api(`releases/tags/${tag}`);
+// The tag endpoint can return 404 for a draft; its stable ID is readable.
+release=api(`releases/${releaseId}`);
 if(!release.draft||release.assets.length!==assets.length)throw Error('Incomplete draft');
 for(const expected of assets){const actual=release.assets.find(a=>a.name===expected.name);if(!actual||actual.state!=='uploaded'||actual.size!==expected.size||actual.digest&&actual.digest!==`sha256:${expected.sha256}`)throw Error(`Uploaded asset mismatch: ${expected.name}`);}
 gh('release','edit',tag,'--repo',repo,'--notes-file',notes,'--draft=false','--latest');

@@ -1,0 +1,33 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {UpdateClient,selectRelease} from '../desktop/update-client.mjs';
+const [directory,expected]=process.argv.slice(2);
+if(!directory||!/^\d+\.\d+\.\d+$/.test(expected??''))throw Error('Expected evidence directory and version');
+fs.mkdirSync(directory,{recursive:true});
+const fetcher=(url,options={})=>{
+ const headers=new Headers(options.headers);
+ if(headers.has('authorization')||headers.has('cookie'))throw Error('Updater must remain credential-free');
+ return fetch(url,options);
+};
+const response=await fetcher('https://api.github.com/repos/neutralino-ai/coop-bench/releases/latest');
+if(!response.ok)throw Error('Release metadata '+response.status);
+const release=await response.json();
+if(release.tag_name!=='v'+expected||release.draft||release.prerelease||release.assets.length!==12)throw Error('Unexpected latest release');
+const selected=['win32:x64','darwin:x64','darwin:arm64'].map(x=>{const [platform,arch]=x.split(':');const selection=selectRelease(release,'0.10.1',platform,arch);if(selection.state!=='available')throw Error('Old updater did not detect update');return {platform,arch,...selection};});
+const checksum=release.assets.find(a=>a.name==='SHA256SUMS.txt');
+const checksumResponse=await fetcher(checksum.browser_download_url);
+if(!checksumResponse.ok)throw Error('Checksum file unavailable');
+const text=await checksumResponse.text();
+const lines=text.trim().split('\n');if(lines.length!==11)throw Error('Unexpected checksum inventory');
+for(const line of lines){const match=/^([a-f0-9]{64})  (.+)$/.exec(line);if(!match)throw Error('Malformed checksum');const asset=release.assets.find(a=>a.name===match[2]);if(!asset||asset.digest!=='sha256:'+match[1])throw Error('Published asset digest mismatch');}
+const client=new UpdateClient({currentVersion:'0.10.1',platform:'win32',arch:'x64',directory:path.join(directory,'download'),fetcher,opener:()=>{throw Error('Verification does not launch installers');}});
+await client.check();const downloaded=await client.download();if(downloaded.state!=='ready')throw Error('Download verification failed');
+const source=release.assets.find(a=>a.name===`Coop-Bench-${expected}-iOS-Xcode.zip`);
+if(!source)throw Error('Missing source project');
+const sourceResponse=await fetcher(source.browser_download_url);if(!sourceResponse.ok)throw Error('Source download failed');
+const bytes=Buffer.from(await sourceResponse.arrayBuffer());
+if(bytes.length!==source.size||'sha256:'+crypto.createHash('sha256').update(bytes).digest('hex')!==source.digest)throw Error('Source checksum mismatch');
+fs.writeFileSync(path.join(directory,source.name),bytes);
+const report={ok:true,release:release.html_url,version:expected,selected,windowsDownload:downloaded,iosSource:{name:source.name,size:source.size,digest:source.digest},assetCount:release.assets.length};
+fs.writeFileSync(path.join(directory,'verification.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
