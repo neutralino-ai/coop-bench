@@ -1,0 +1,52 @@
+name: Publish existing verified build
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Completed Remote clients run containing the signed artifacts
+        required: true
+        type: string
+      release_tag:
+        description: Existing immutable version tag from that run
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: publish-verified-${{ inputs.release_tag }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.source_run }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+      - name: Require matching tag and every native and TestFlight check
+        run: node scripts/publish-verified-release.mjs check
+      - uses: actions/download-artifact@v6
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run }}
+          pattern: coop-bench-*
+          merge-multiple: true
+          path: dist
+      - uses: actions/download-artifact@v6
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run }}
+          name: ios-xcode-project
+          path: dist/ios
+      - name: Verify and publish the original signed files
+        run: node scripts/publish-verified-release.mjs publish
