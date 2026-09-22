@@ -77,7 +77,7 @@ jobs:
       - name: Build remote-only client runtime
         run: pnpm build
       - name: Exercise desktop against synthetic mock API
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: pnpm exec electron . --client-smoke-test --data-dir=artifacts/ci-client-smoke
       - name: Require client acceptance report
         run: node -e "const r=require('./artifacts/ci-client-smoke/client-smoke-result.json');if(!r.ok)throw Error('Client smoke failed');console.log(r.checks.length+' mock API/UI checks passed')"
@@ -98,11 +98,11 @@ jobs:
         run: node scripts/verify-package.mjs "${{ matrix.asar }}"
       - name: Verify actual packaged management client with mock API
         if: runner.os != 'macOS'
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: node desktop/ci-client-smoke.mjs "${{ matrix.executable }}" artifacts/ci-packaged-smoke "${{ matrix.arch }}"
       - name: Verify actual packaged macOS client with isolated test keychain
         if: runner.os == 'macOS'
-        timeout-minutes: 4
+        timeout-minutes: 6
         run: node scripts/with-mac-test-keychain.mjs desktop/ci-client-smoke.mjs "${{ matrix.executable }}" artifacts/ci-packaged-smoke "${{ matrix.arch }}"
       - name: Package Player client
         if: runner.os != 'macOS' || env.SIGN_APPLE != 'true'

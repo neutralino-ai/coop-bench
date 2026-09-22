@@ -37,6 +37,7 @@ function renderConnectionStatus(){
 function markIdentityVerified(identity){if(!identity||typeof identity.id!=='string'||!identity.id||!['operator','member'].includes(identity.role))throw Object.assign(Error('身份验证响应格式不正确，未确认登录成功。'),{code:'INVALID_API_RESPONSE'});state.identity=identity;setConnectionStatus('connected',`身份已验证：${identity.id} · ${identity.role}。每 20 秒检查一次连接。`,{attemptUrl:apiUrl,verifiedUrl:apiUrl,lastCheckedAt:new Date().toISOString()});}
 async function markConnectionFailure(error,{status=0,session=state.session,identityCheck=false}={}){
  if(session!==state.session||error?.code==='CANCELLED'||error?.name==='AbortError'&&!error?.connectionTimeout)return;
+ if(status===429)return;
  const now=new Date().toISOString(),reason=connectionErrorText(error);
  if(status===401&&error?.code!=='PROXY_AUTH_REQUIRED'){resetSession();setConnectionStatus('expired','登录会话已失效，请重新输入用户名和密码。',{lastCheckedAt:now});try{await transport.disconnect();}catch{}return;}
  if(status>=400&&status<500&&!identityCheck&&(!error?.code||error.code==='PERMISSION_DENIED'))return;
@@ -56,7 +57,7 @@ async function request(path,body,options={}){
  else if(state.token&&state.connection.phase==='disconnected'&&!state.connectionCheck)void checkConnection();
  if(/^\/rollouts\/[^/?]+$/.test(path)){
   const serverTime=Date.parse(response.headers.get('date')??'');
-  state.replayClock={session,offset:Number.isFinite(serverTime)?serverTime-(requestStartedAt+Date.now())/2:0};
+  state.replayClock={session,offset:Number.isFinite(serverTime)?serverTime-((response.coopRequestStartedAt??requestStartedAt)+Date.now())/2:0};
  }
  return data;
 }
@@ -64,9 +65,9 @@ async function checkConnection(manual=false){
  if(state.connectionCheck||state.passwordBusy)return false;
  if(!state.token){if(manual){$('auth-panel').hidden=false;$(state.authMode==='password'?'login-password':'admin-token').focus();message('请先登录，再检查已验证的连接。');}return false;}
  if(manual&&!sameApi($('api-address').value,apiUrl)){renderConnectionStatus();message('新 API 地址尚未连接，请输入凭证并点击“连接审计台”。');return false;}
- const session=state.session;state.connectionCheck=true;if(manual)setConnectionStatus('checking','正在向当前 API 验证身份…');else renderConnectionStatus();
+ const session=state.session,previousPhase=state.connection.phase;state.connectionCheck=true;if(manual)setConnectionStatus('checking','正在向当前 API 验证身份…');else renderConnectionStatus();
  try{const identity=await request('/identity');if(session!==state.session)return false;const recovering=!state.sessionReady;state.identity=identity;renderAuthenticatedControls(undefined,recovering);if(recovering)await Promise.all([loadGames(),loadList()]);if(manual)message('连接成功，个人身份已由服务器验证。');return true;}
- catch(error){if(manual&&session===state.session)message(connectionErrorText(error),true);return false;}
+ catch(error){if(session===state.session&&error.status===429){if(manual)setConnectionStatus(previousPhase,'服务器暂时限流，稍后自动检查。');if(manual)message('服务器暂时限流，稍后自动检查。');}else if(manual&&session===state.session)message(connectionErrorText(error),true);return false;}
  finally{if(session===state.session){state.connectionCheck=false;renderConnectionStatus();}}
 }
 
@@ -387,7 +388,7 @@ transport.getConnection().then(async info=>{
  else {setConnectionStatus('idle','输入用户名和密码登录，或使用注册 token 创建账号。',{lastCheckedAt:null});if(!transport.desktop)await loadGames();}
 }).catch(error=>{if(initialSession===state.session){setConnectionStatus('failed',`恢复连接失败：${connectionErrorText(error)}`,{lastCheckedAt:new Date().toISOString()});message(connectionErrorText(error),true);}});
 setInterval(()=>{if(state.token&&!state.passwordBusy&&!state.connectionCheck&&!['connecting','checking'].includes(state.connection.phase))void checkConnection();},20000);
-setInterval(async()=>{if(!state.token||state.passwordBusy||!$('auto-refresh').checked||state.loading||state.playing||document.hidden)return;state.loading=true;const session=state.session;try{await loadList();if(state.rollout&&!isDone(state.rollout.summary))await refreshDetail();if(state.rollout&&state.artifacts.some(a=>a.status!=='complete'))await loadArtifacts();}catch(error){if(session===state.session&&error.name!=='AbortError')message(`自动刷新失败：${error.message}`,true);}finally{state.loading=false;}},5000);
+setInterval(async()=>{if(!state.token||state.passwordBusy||!$('auto-refresh').checked||state.loading||state.playing||document.hidden||document.body.dataset.view==='replay')return;state.loading=true;const session=state.session;try{await loadList();}catch(error){if(session===state.session&&error.name!=='AbortError')message(error.status===429?'服务器暂时限流，稍后自动刷新。':`自动刷新失败：${error.message}`,error.status!==429);}finally{state.loading=false;}},5000);
 window.addEventListener('beforeunload',()=>{clearSensitiveFields();stopPlayback();clearArtifacts();clearModelMessages();});
 
 

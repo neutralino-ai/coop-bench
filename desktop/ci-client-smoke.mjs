@@ -8,7 +8,9 @@ const executable = resolve(executableArgument), dataDir = resolve(dataArgument);
 const development = process.argv.includes('--development');
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.NODE_OPTIONS;
 const child = spawn(executable, [...(development ? [resolve('.')] : []), '--client-smoke-test', `--data-dir=${dataDir}`], { env, windowsHide: true, stdio: 'inherit', shell: false });
-const timeout = setTimeout(() => child.kill(), 90000);
+// Audit acceptance deliberately uses the production read pacing, across many
+// independent replay/export checks. Allow the suite to wait for that budget.
+const timeout = setTimeout(() => child.kill(), 240000);
 try {
   const { code, signal } = await new Promise((accept, reject) => { child.once('error', reject); child.once('close', (code, signal) => accept({ code, signal })); });
   const report = JSON.parse(readFileSync(resolve(dataDir, 'client-smoke-result.json'), 'utf8'));

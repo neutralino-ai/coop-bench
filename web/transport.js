@@ -16,11 +16,35 @@ if(typeof document!=='undefined'){
  const defaultApi=desktop?'https://coop.neutrinophysics.cn:34936/api/v1':`${location.origin}/api/v1`;
  let info={mode:desktop?'remote':'browser',apiUrl:defaultApi,connected:false,identity:null,remembered:false};
  let browserToken='',browserSession=false,generation=0;
- const pending=new Map(),hostTokens=new Map();
+ const pending=new Map(),hostTokens=new Map(),readQueue=[];
+ // All audit readers share one credential budget, including replay, traces,
+ // observation dialogs and exports. Leave headroom for other account activity.
+ let readCredits=3,creditAt=Date.now(),readPauseUntil=0;
+ const auditRead=path=>/^\/api\/v1\/(?:rollouts\/[^/]+(?:\/(?:messages|observations|artifacts\/[^/]+\/content))?|episodes\/[^/]+\/(?:audit|training|replay))$/.test(path.split('?')[0]);
  const abortError=()=>new DOMException('连接已更换或请求已取消。','AbortError');
  function unwrapBridge(value){if(value&&typeof value==='object'&&value.__coopClientError){const detail=value.__coopClientError,error=Error(String(detail.message??'桌面连接请求失败。'));if(typeof detail.code==='string')error.code=detail.code;if(Number.isInteger(detail.status))error.status=detail.status;throw error;}return value;}
  const publicInfo=()=>({...info,identity:info.identity?{...info.identity}:null});
- function invalidate(){generation++;for(const cancel of pending.values())cancel();pending.clear();hostTokens.clear();}
+ function invalidate(){generation++;for(const cancel of pending.values())cancel();pending.clear();hostTokens.clear();readQueue.length=0;readCredits=3;creditAt=Date.now();readPauseUntil=0;}
+ function wait(ms,signal,version){return new Promise((resolve,reject)=>{
+  const id=crypto.randomUUID();let timer;
+  const cleanup=()=>{clearTimeout(timer);pending.delete(id);signal?.removeEventListener('abort',cancel);};
+  const cancel=()=>{cleanup();reject(abortError());};
+  timer=setTimeout(()=>{cleanup();resolve();},ms);pending.set(id,cancel);signal?.addEventListener('abort',cancel,{once:true});
+  if(version!==generation||signal?.aborted)cancel();
+ });}
+ async function acquireRead(signal,version){
+  const deadline=Date.now()+15000,ticket=Symbol();readQueue.push(ticket);
+  try{for(;;){
+   if(version!==generation||signal?.aborted)throw abortError();
+   const now=Date.now();readCredits=Math.min(3,readCredits+Math.max(0,now-creditAt)/3500);creditAt=now;
+   const delay=Math.max(readPauseUntil-now,(1-readCredits)*3500,readQueue[0]===ticket?0:3500);
+   if(delay<=0){readCredits--;return;}
+   // A busy audit queue is not a broken connection. Keep interactive waits
+   // bounded, retain the shared cooldown, and let the next refresh retry.
+   if(now+delay>deadline)throw Object.assign(Error('读取较多，正在等待刷新额度；稍后会自动重试。'),{status:429,code:'RATE_LIMITED'});
+   await wait(Math.ceil(delay),signal,version);
+  }}finally{const index=readQueue.indexOf(ticket);if(index>=0)readQueue.splice(index,1);}
+ }
  function apiPath(value){
   if(typeof value!=='string'||!value.startsWith('/api/v1/')||value.includes('\\')||value.includes('#'))throw Error('只允许当前服务器的 API 路径。');
   const parsed=new URL(value,'https://api.invalid');
@@ -56,25 +80,23 @@ if(typeof document!=='undefined'){
   }finally{pending.delete(id);signal?.removeEventListener('abort',cancel);}
  }
  async function request(path,options={}){
-  const version=generation;
+  path=apiPath(path);const version=generation,read=(options.method??'GET').toUpperCase()==='GET',heavy=read&&options.seatToken===undefined&&auditRead(path);
   for(let retry=0;;retry++){
    if(version!==generation||options.signal?.aborted)throw abortError();
+   if(heavy)await acquireRead(options.signal,version);
+   const startedAt=Date.now();
    const response=await requestOnce(path,options);
-   if(response.status!==429||(options.method??'GET').toUpperCase()!=='GET'||retry>=2)return response;
+   Object.defineProperty(response,'coopRequestStartedAt',{value:startedAt});
+   if(response.status!==429||!read)return response;
    const retryAfter=response.headers.get('retry-after');
    const advertised=retryAfter&&/^\d+$/.test(retryAfter)?Number(retryAfter)*1000:retryAfter?Date.parse(retryAfter)-Date.now():NaN;
    const ms=Number.isNaN(advertised)?3200*(retry+1):Math.max(1000,advertised);
+   if(heavy&&Number.isFinite(ms)){readPauseUntil=Math.max(readPauseUntil,Date.now()+ms);readCredits=0;creditAt=Date.now();}
    // Never retry earlier than the server asks. A long advertised pause exceeds
    // this interactive budget, so return the 429 for a later explicit retry.
-   if(!Number.isFinite(ms)||ms>15000)return response;
+   if(retry>=2||!Number.isFinite(ms)||ms>15000)return response;
    await response.body?.cancel();
-   await new Promise((resolve,reject)=>{
-    const id=crypto.randomUUID();let timer;
-    const cleanup=()=>{clearTimeout(timer);pending.delete(id);options.signal?.removeEventListener('abort',cancel);};
-    const cancel=()=>{cleanup();reject(abortError());};
-    timer=setTimeout(()=>{cleanup();resolve();},ms);pending.set(id,cancel);options.signal?.addEventListener('abort',cancel,{once:true});
-    if(version!==generation||options.signal?.aborted)cancel();
-   });
+   await wait(ms,options.signal,version);
   }
  }
  function accept(value){info={mode:desktop?'remote':'browser',apiUrl:value.apiUrl||defaultApi,connected:Boolean(value.connected),identity:value.identity??null,remembered:Boolean(value.remembered),...(value.connectionError?{connectionError:typeof value.connectionError==='string'?value.connectionError:{message:String(value.connectionError.message??'保存的连接恢复失败。'),...(typeof value.connectionError.code==='string'?{code:value.connectionError.code}:{}),...(Number.isInteger(value.connectionError.status)?{status:value.connectionError.status}:{})}}:{})};return publicInfo();}

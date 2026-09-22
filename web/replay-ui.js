@@ -3,7 +3,6 @@
   const R = globalThis.CoopReplay;
   let epoch = 0, episode = '', seats = {}, busy = false, controller;
   let recording=null,recordingError='',recordingBusy=false,recordingAt=0,recordingEpisode='';
-  let readCredits=4, creditAt=Date.now();
   const dialog = (id, title) => {
     const box = node('dialog', 'audit-dialog'); box.id = id;
     const heading = node('header','drawer-heading'); heading.append(node('h2','',title));
@@ -140,11 +139,7 @@
       seat.loading=true;seat.error='';render();
       try{
         for(let page=0;page<5;page++){
-          // Use a small initial burst, then refill at the server's read budget.
-          // Only read seats needed at the selected step; never block the board.
-          readCredits=Math.min(4,readCredits+(Date.now()-creditAt)/3100);creditAt=Date.now();
-          if(readCredits<1){await new Promise(resolve=>setTimeout(resolve,(1-readCredits)*3100));readCredits=1;creditAt=Date.now();}
-          if(!valid())return;readCredits--;
+          if(!valid())return;
           const data=await request(`/rollouts/${encodeURIComponent(id)}/messages?playerId=${encodeURIComponent(player)}&after=${seat.after}&limit=100`,undefined,{signal});
           if(!valid())return;
           if(!Array.isArray(data.messages))throw Error('消息响应不完整');
@@ -387,7 +382,7 @@
   let liveBusy=false;
   const liveButton=addButton('replay-refresh','刷新进展',()=>void refreshReplay(true));
   async function refreshReplay(manual=false){
-    if(liveBusy||!state.rollout||document.body.dataset.view!=='replay'||document.hidden||!manual&&state.rollout.summary.status!=='active')return;
+    if(liveBusy||!state.token||state.passwordBusy||!state.rollout||document.body.dataset.view!=='replay'||document.hidden||!manual&&(!$('auto-refresh').checked||state.playing||state.rollout.summary.status!=='active'))return;
     const id=state.rollout.summary.episodeId,session=state.session,serial=state.detailRequest;liveBusy=true;liveButton.disabled=true;
     try{
       const data=await request(`/rollouts/${encodeURIComponent(id)}`);
@@ -397,7 +392,7 @@
       for(const seat of Object.values(seats)){seat.more=true;seat.error='';}
       await load(true);
       liveButton.textContent=data.summary.status==='active'?'实时更新中 · 刷新':'刷新进展';
-    }catch(error){liveButton.textContent='刷新失败 · 重试';}
+    }catch(error){liveButton.textContent=error.status===429?'等待读取额度 · 自动重试':'刷新失败 · 重试';}
     finally{liveBusy=false;liveButton.disabled=false;}
   }
   setInterval(()=>void refreshReplay(),5000);

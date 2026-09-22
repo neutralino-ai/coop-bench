@@ -1,6 +1,6 @@
 {
   "name": "cooperative-boardgame-bench",
-  "version": "0.11.5",
+  "version": "0.11.6",
   "packageManager": "pnpm@11.19.0",
   "private": true,
   "type": "module",

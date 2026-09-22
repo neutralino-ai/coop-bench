@@ -32,6 +32,30 @@ test('room-only links contain no credential and still parse old invitations',()=
  assert.throws(()=>invitation('coopbench://join#api=http://evil.example&room='+roomId));
 });
 
+test('reopening the host from disk restores the original Agent seat, model context and pending command',async()=>{
+ const fixture=await startMockApi(),directory=mkdtempSync(join(tmpdir(),'coop-host-reopen-'));
+ const encryption={isEncryptionAvailable:()=>true,encryptString:(s:string)=>Buffer.from(s).map(b=>b^173),decryptString:(b:Buffer)=>Buffer.from(b).map(n=>n^173).toString()};
+ const remote=new RemoteSession({fetcher:fetch,store:new ConnectionStore(join(directory,'connection.json'),encryption)});
+ await remote.connect({apiUrl:fixture.apiUrl,token:fixture.adminToken});
+ const options={remote,directory:join(directory,'host'),encryption,Runtime:PlayerRuntime,Agent:MinimalAgent};let host=new HostSeats(options);
+ try{
+  const created=await fixture.call('/rooms',fixture.adminToken,{gameId:'hanabi',scenarioId:'base',playerCount:3,allowHumans:true});
+  const config={baseUrl:fixture.baseUrl+'/model',model:'test-model',apiKey:'synthetic-provider-key'};
+  const proof=await host.testModel(config);await host.start({roomId:created.roomId,playerId:'p1',verificationId:proof.verificationId});
+  const original=host.agents.get(created.roomId+'/p1').runtime,token=original.credentials().playerToken;
+  const history=[{role:'user',content:'Synthetic persisted observation'},{role:'assistant',content:'Synthetic explicit decision summary'}];
+  const pending={key:'synthetic-original-idempotency-key',command:{observationId:'synthetic-observation',action:{type:'discard',cardIndex:0}}};
+  original.put('strategy:responsesHistory',history);original.put('pendingAction',pending);
+  await host.close();host=new HostSeats(options);
+  const saved=host.status({roomId:created.roomId});assert.equal(saved[0].status,'stopped');assert.equal(saved[0].canResume,true);
+  const restoredProof=await host.testModel({...config,apiKey:''});await host.resume({roomId:created.roomId,playerId:'p1',verificationId:restoredProof.verificationId});
+  const resumed=host.agents.get(created.roomId+'/p1').runtime;
+  assert.notEqual(resumed,original);assert.equal(resumed.credentials().playerToken,token);
+  assert.deepEqual(resumed.get('strategy:responsesHistory'),history);assert.deepEqual(resumed.get('pendingAction'),pending);
+  assert.equal((await fixture.call(`/rooms/${created.roomId}/admin`)).members.length,1);
+ }finally{await host.close();remote.invalidate();await fixture.close();}
+});
+
 test('host harnesses keep independent seat credentials, reserve once, copy occupied keys and stop on kick/logout',async()=>{
  const fixture=await startMockApi(),directory=mkdtempSync(join(tmpdir(),'coop-host-test-')),encryption={isEncryptionAvailable:()=>false};
  const remote=new RemoteSession({fetcher:fetch,store:new ConnectionStore(join(directory,'connection.json'),encryption)});

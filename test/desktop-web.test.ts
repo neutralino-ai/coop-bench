@@ -14,6 +14,22 @@ function transportContext(bridge:any,fetchImpl:any=()=>{throw Error('Renderer mu
 const identity={id:'fixture-user',role:'operator'};
 const connection={mode:'remote',apiUrl:'https://example.test/api/v1',connected:true,identity,remembered:false};
 
+test('background library refresh does not reread a focused or hidden replay',async()=>{
+ const {context,get,intervals}=uiContext(async()=>{throw Error('Unexpected API read');});
+ vm.runInContext("globalThis.listReads=0;globalThis.detailReads=0;loadList=async()=>{listReads++};refreshDetail=async()=>{detailReads++};state.rollout={summary:{status:'active'}};document.body.dataset.view='replay'",context);
+ get('auto-refresh').checked=true;const tick=intervals.find(x=>x.ms===5000).handler;
+ await tick();assert.equal(vm.runInContext('listReads+detailReads',context),0);
+ vm.runInContext("document.body.dataset.view='home'",context);await tick();assert.equal(vm.runInContext('listReads',context),1);assert.equal(vm.runInContext('detailReads',context),0);
+});
+
+test('rate limits preserve the last verified connection state, including a failed manual check',async()=>{
+ const {context,get}=uiContext(async()=>Response.json({error:{code:'RATE_LIMITED',message:'retry later'}},{status:429}));
+ vm.runInContext("markIdentityVerified({id:'fixture',role:'operator'});$('api-address').value=apiUrl",context);
+ await assert.rejects(vm.runInContext("request('/identity')",context),{status:429});assert.equal(get('connection-status').dataset.state,'connected');
+ await vm.runInContext('checkConnection(true)',context);assert.equal(get('connection-status').dataset.state,'connected');
+ vm.runInContext("setConnectionStatus('disconnected','network failed')",context);await vm.runInContext('checkConnection(true)',context);assert.equal(get('connection-status').dataset.state,'disconnected');
+});
+
 test('read-only rate-limit retries are bounded; writes are never automatically retried',async()=>{
  let calls=0;const delays:number[]=[];
  const api=transportContext({connect:async()=>connection,request:async()=>({status:++calls<3?429:200,headers:{},bytes:new Uint8Array()}),cancelRequest:async()=>{}},undefined,{setTimeout:(f:any,ms:number)=>{delays.push(ms);return setTimeout(f,0);},clearTimeout});
@@ -30,13 +46,49 @@ test('logout cancels rate-limit waiting without sending another request as the n
 
 test('artifact GET honors numeric and HTTP-date Retry-After, preserves bytes and rejects excessive waits',async()=>{
  for(const retryAfter of ['5',new Date(Date.now()+10000).toUTCString()]){
-  let calls=0;const delays:number[]=[];
-  const api=transportContext({request:async()=>++calls===1?{status:429,headers:{'retry-after':retryAfter},bytes:new Uint8Array()}:{status:200,headers:{'content-type':'application/octet-stream'},bytes:new Uint8Array([0,255,8])},connect:async()=>connection,cancelRequest:async()=>{}},undefined,{setTimeout:(fn:any,ms:number)=>{delays.push(ms);return setTimeout(fn,0);},clearTimeout});
+  let calls=0,now=Date.now();const delays:number[]=[];
+  const api=transportContext({request:async()=>++calls===1?{status:429,headers:{'retry-after':retryAfter},bytes:new Uint8Array()}:{status:200,headers:{'content-type':'application/octet-stream'},bytes:new Uint8Array([0,255,8])},connect:async()=>connection,cancelRequest:async()=>{}},undefined,{Date:class extends Date{static now(){return now;}},setTimeout:(fn:any,ms:number)=>{delays.push(ms);return setTimeout(()=>{now+=ms;fn();},0);},clearTimeout});
   const result=await api.request('/api/v1/rollouts/e/artifacts/a/content');assert.deepEqual([...new Uint8Array(await result.arrayBuffer())],[0,255,8]);assert.equal(calls,2);
   assert.equal(delays.length,1);if(retryAfter==='5')assert.equal(delays[0],5000);else assert.ok(delays[0]>8000&&delays[0]<=10000);
  }
  let calls=0,timers=0;const api=transportContext({request:async()=>{calls++;return {status:429,headers:{'retry-after':'120'},bytes:new Uint8Array()};},connect:async()=>connection,cancelRequest:async()=>{}},undefined,{setTimeout:()=>{timers++;throw Error('Must not retry earlier than requested.');},clearTimeout});
  assert.equal((await api.request('/api/v1/rollouts/e/artifacts/a/content')).status,429);assert.equal(calls,1);assert.equal(timers,0);
+});
+
+function auditClock(){
+ let now=0,serial=0;const tasks=new Map<number,{at:number,fn:()=>void}>();
+ return {now:()=>now,timers:{Date:class extends Date{static now(){return now;}},setTimeout:(fn:()=>void,ms:number)=>{const id=++serial;tasks.set(id,{at:now+ms,fn});return id;},clearTimeout:(id:number)=>tasks.delete(id)},async advance(ms:number){const end=now+ms;await new Promise(resolve=>setImmediate(resolve));for(;;){const next=[...tasks].sort((a,b)=>a[1].at-b[1].at)[0];if(!next||next[1].at>end)break;now=next[1].at;tasks.delete(next[0]);next[1].fn();await new Promise(resolve=>setImmediate(resolve));}now=end;await new Promise(resolve=>setImmediate(resolve));}};
+}
+
+test('concurrent replay, trace and observation reads fit the shared 20/minute server budget',async()=>{
+ const clock=auditClock(),reads:number[]=[];let credits=8,at=0;
+ const api=transportContext({connect:async()=>connection,cancelRequest:async()=>{},request:async({path}:any)=>{
+  if(path.includes('/rollouts/')){const now=clock.now();credits=Math.min(8,credits+(now-at)/3000);at=now;assert.ok(credits>=1,`Server would rate limit at ${now}`);credits--;reads.push(now);}
+  return {status:200,headers:{},bytes:new Uint8Array()};
+ }},undefined,clock.timers);
+ const streams=Promise.all(['e','e/messages?playerId=p1','e/observations?playerId=p2'].map(async path=>{for(let i=0;i<12;i++)assert.equal((await api.request('/api/v1/rollouts/'+path)).status,200);}));
+ await clock.advance(120000);await streams;assert.equal(reads.length,36);assert.ok(reads.at(-1)!>=110000);
+});
+
+test('queued audit reads cancel on abort or account switch; identity and writes remain immediate',async()=>{
+ const clock=auditClock(),paths:string[]=[];
+ const api=transportContext({connect:async()=>connection,disconnect:async()=>{},cancelRequest:async()=>{},request:async({path}:any)=>{paths.push(path);return {status:200,headers:{},bytes:new Uint8Array()};}},undefined,clock.timers);
+ for(let i=0;i<3;i++)await api.request('/api/v1/rollouts/e');
+ const controller=new AbortController(),cancelled=api.request('/api/v1/rollouts/e/messages',{signal:controller.signal});
+ await api.request('/api/v1/identity');await api.request('/api/v1/episodes/e/actions',{method:'POST',body:{}});
+ controller.abort();await assert.rejects(cancelled,{name:'AbortError'});
+ const old=api.request('/api/v1/rollouts/e/observations');await api.disconnect();await assert.rejects(old,{name:'AbortError'});
+ await clock.advance(10000);assert.equal(paths.length,5);
+ await api.connect({token:'next-user'});await api.request('/api/v1/rollouts/new');assert.equal(paths.at(-1),'/api/v1/rollouts/new');
+});
+
+test('a long Retry-After pauses other audit readers without disabling connection checks',async()=>{
+ const clock=auditClock(),paths:string[]=[];
+ const api=transportContext({connect:async()=>connection,cancelRequest:async()=>{},request:async({path}:any)=>{paths.push(path);return {status:paths.length===1?429:200,headers:{'retry-after':'120'},bytes:new Uint8Array()};}},undefined,clock.timers);
+ assert.equal((await api.request('/api/v1/rollouts/e')).status,429);
+ await assert.rejects(api.request('/api/v1/rollouts/e/messages'),{status:429,code:'RATE_LIMITED'});
+ assert.equal((await api.request('/api/v1/identity')).status,200);assert.equal(paths.length,2);
+ await clock.advance(120000);const response=await api.request('/api/v1/rollouts/e/messages');assert.equal(response.status,200);assert.equal(response.coopRequestStartedAt,120000);
 });
 
 test('switching server cancels rate-limited artifact backoff instead of replaying it with the new session',async()=>{
