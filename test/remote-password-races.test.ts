@@ -48,8 +48,8 @@ test('switching servers during password rotation discards the old commit without
 });
 
 test('an authenticated role update is accepted without changing the account subject',async()=>{
-  const f=fixture();await f.login();f.state.role='auditor';const result=await f.session.getAccount();
-  assert.equal(result.role,'auditor');assert.equal(f.session.descriptor().identity.role,'auditor');assert.equal(result.userId,'owner');
+  const f=fixture();await f.login();f.state.role='member';const result=await f.session.getAccount();
+  assert.equal(result.role,'member');assert.equal(f.session.descriptor().identity.role,'member');assert.equal(result.userId,'owner');
 });
 
 test('Unicode password validation matches backend codepoint limits and does not trim secrets',async()=>{

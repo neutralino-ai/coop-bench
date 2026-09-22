@@ -86,12 +86,28 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>run(()=>document.body.dataset.view==='home' && document.querySelectorAll('#episode-list button').length>0),'Login did not land on the lobby.');
   check(await run(()=>document.querySelector('#home-replays .library') && getComputedStyle(document.getElementById('lobby-home')).display!=='none' && document.getElementById('detail').hidden), 'login displays permanent rooms and replay blocks without auto-opening a game');
   await capture('client-home.png');
+  check(await run(()=>!document.querySelector('#operator-open').hidden),'operator sees management entry');
+  await run(()=>document.querySelector('#operator-open').click());
+  await wait(()=>run(()=>document.querySelectorAll('#operator-users-body tr').length===3),'Operator user list did not load.');
+  await capture('operator-users.png');
+  await run(()=>{const rows=document.querySelectorAll('#operator-users-body tr');for(const row of [...rows].slice(1)){const input=row.querySelector('input');input.checked=true;input.dispatchEvent(new Event('change'));}document.querySelector('#operator-disable').click();});
+  await wait(()=>run(()=>document.querySelector('#operator-confirm-title').textContent.includes('2 个用户')),'Batch disable confirmation missing.');
+  await run(()=>document.querySelector('#operator-confirm-yes').click());
+  await wait(()=>run(()=>document.querySelector('#operator-users-body').textContent.match(/禁止登录/g)?.length===2),'Batch disable did not refresh states.');
+  check(fixture.requests.some(r=>r.path==='/api/v1/operator/users/disable'&&r.body.userIds.length===2),'batch user disable uses operator API');
+  await run(()=>document.querySelector('[data-tab="invitations"]').click());
+  await run(()=>{document.querySelector('#operator-invite-count').value='3';document.querySelector('#operator-invite-form').requestSubmit();});
+  await wait(()=>run(()=>document.querySelector('#operator-invite-result').value.includes('3. ')),'Invitations were not generated.');
+  await capture('operator-invitations.png');
+  check(fixture.requests.some(r=>r.path==='/api/v1/operator/invitations'&&r.body.count===3),'operator can generate multiple invitations');
+  await run(()=>document.querySelector('#operator-close').click());
+  check(await run(()=>!document.querySelector('#operator-dialog').open&&document.querySelector('#operator-invite-result').value===''),'closing management clears invitation secrets');
   await run(id=>{void selectEpisode(id);},fixture.id);
   const loadingUi=await run(()=>({startupHidden:document.getElementById('startup-screen').hidden,detailHidden:document.getElementById('detail').hidden,animation:getComputedStyle(document.querySelector('#replay-loading .loading-spinner')).animationName,reduced:matchMedia('(prefers-reduced-motion:reduce)').matches}));
   check(loadingUi.startupHidden&&loadingUi.detailHidden&&(loadingUi.animation==='loading-spin'||loadingUi.reduced),`startup finishes and replay loader honors motion preference: ${JSON.stringify(loadingUi)}`);
   await capture('client-replay-loading.png');
   await wait(()=>run(()=>!document.getElementById('detail').hidden&&document.getElementById('player-grid').dataset.messages==='ready'),'Board/current decision failed to render');
-  check(!apiReads.some(path=>/\/artifacts/.test(path)||/limit=25/.test(path)),'first board reads each seat trajectory without prefetching attachments or duplicate raw-message pages');
+  check(!apiReads.some(path=>/\/artifacts/.test(path)||/\/messages\?.*limit=25/.test(path)),'first board reads each seat trajectory without prefetching attachments or duplicate raw-message pages');
   await run(()=>document.getElementById('open-observations').click());
   await wait(()=>run(()=>document.querySelector('#issued-list pre')?.textContent.includes('possibleColors')),'Raw issued observation did not load');
   check(await run(()=>{const raw=JSON.parse(document.querySelector('#issued-list pre').textContent);return raw.playerId==='p1'&&!raw.decisionToken&&raw.updates.length>0&&raw.view.hands.p1.every(c=>c.color===undefined);}), 'raw server observations preserve updates and hidden own cards without credentials');
@@ -167,7 +183,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   }
   check(await run(()=>document.querySelector('.acting .trace-blocks').textContent.includes('原文结束标记')&&!document.querySelector('.acting .trace-blocks img')&&document.querySelector('.acting .trace-reason').textContent.includes('合成测试动作')),'colored trajectory blocks preserve complete recorded reasoning and highlight the submitted reason without executing markup');
   check(await run(() => Number(document.getElementById('timeline').max) >= 2), 'recorded timeline renders');
-  check(await run(() => !window.__smokeXss && !document.getElementById('annotations').querySelector('img')), 'untrusted annotation rendered as text');
+  check(await run(() => !window.__smokeXss && !document.getElementById('annotation-form') && !document.getElementById('annotations')), 'review annotation UI removed');
   await run(() => document.getElementById('previous').click());
   check(await run(() => Number(document.getElementById('timeline').value) < Number(document.getElementById('timeline').max)), 'historical frame navigation');
   await run(() => document.getElementById('verify-replay').click());

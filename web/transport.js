@@ -118,6 +118,13 @@ if(typeof document!=='undefined'){
   const result=await authJson('/auth/register',{userId:userId.trim(),password,registrationToken},'');if(version!==generation)throw abortError();browserToken=result.token;browserSession=true;
   const identity=await authJson('/identity');if(version!==generation)throw abortError();return accept({apiUrl:defaultApi,connected:true,identity,remembered:false});
  }
+ async function operatorCommand({operation,body}){
+  if(info.identity?.role!=='operator')throw authError(403);
+  const version=generation;let result;
+  if(desktop){if(!bridge.operatorCommand)throw authError(404);result=unwrapBridge(await bridge.operatorCommand({operation,body}));}
+  else result=await authJson('/operator/'+operation,body);
+  if(version!==generation)throw abortError();return result;
+ }
  async function setPassword({password,currentPassword,remember=false}){
   let version=generation;if(!validPassword(password,12)||currentPassword!==undefined&&!validPassword(currentPassword))throw authError(400);
   if(desktop){if(!bridge.setPassword)throw authError(404);const received=await bridge.setPassword({password,...(currentPassword===undefined?{}:{currentPassword}),remember:Boolean(remember)});if(version!==generation)throw abortError();const next=unwrapBridge(received);invalidate();return accept(next);}
@@ -125,5 +132,5 @@ if(typeof document!=='undefined'){
  }
  async function disconnect(){const oldToken=browserToken,revoke=browserSession;invalidate();const version=generation;browserToken='';browserSession=false;info={...info,connected:false,identity:null,remembered:false,connectionError:undefined};if(desktop){const result=unwrapBridge(await bridge.disconnect());if(result?.logoutWarning)throw Object.assign(Error('本机已退出，但尚未确认服务器撤销会话；请稍后重新连接确认。'),{code:'LOGOUT_UNCONFIRMED'});}else if(revoke){try{await authJson('/auth/logout',{},oldToken);}catch(error){if(version===generation&&error.status!==401)throw error;}}}
  const updates=bridge?.updateInfo?Object.fromEntries(['updateInfo','checkUpdate','downloadUpdate','installUpdate'].map(name=>[name,()=>Promise.resolve(bridge[name]()).then(unwrapBridge)])):{};
- window.coopTransport=Object.freeze({...updates,...(bridge?.hostSeat?{hostSeat:(name,input)=>Promise.resolve(bridge.hostSeat(name,input)).then(unwrapBridge)}:{}),...(bridge?.openPlayer?{openPlayer:input=>Promise.resolve(bridge.openPlayer(input)).then(unwrapBridge)}:{}),desktop,defaultApi,getConnection,connect,login,register,getAccount,setPassword,disconnect,request,copyText:text=>bridge?.copyText?Promise.resolve(bridge.copyText(String(text))).then(unwrapBridge):navigator.clipboard.writeText(String(text))});
+ window.coopTransport=Object.freeze({...updates,...(bridge?.hostSeat?{hostSeat:(name,input)=>Promise.resolve(bridge.hostSeat(name,input)).then(unwrapBridge)}:{}),...(bridge?.openPlayer?{openPlayer:input=>Promise.resolve(bridge.openPlayer(input)).then(unwrapBridge)}:{}),desktop,defaultApi,getConnection,connect,login,register,operatorCommand,getAccount,setPassword,disconnect,request,copyText:text=>bridge?.copyText?Promise.resolve(bridge.copyText(String(text))).then(unwrapBridge):navigator.clipboard.writeText(String(text))});
 })();

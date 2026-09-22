@@ -56,6 +56,11 @@ function roomCredentialRequest(input) {
   requireThat(input.method==='GET'&&/^\/api\/v1\/rooms\/[a-f0-9-]{36}\/host$/.test(input.path)||input.method==='POST'&&/^\/api\/v1\/lobby\/[a-f0-9-]{36}\/resume$/.test(input.path),'无效席位恢复请求。');
   return {path:input.path,method:input.method,body:input.method==='POST'?'{}':undefined};
 }
+function operatorRequest(input){
+  requireThat(input.method==='POST'&&/^\/api\/v1\/operator\/(?:invitations|users\/(?:disable|enable|delete|reset-password)|games\/(?:stop|delete))$/.test(input.path),'无效管理操作。');
+  requireThat(input.body&&typeof input.body==='object'&&!Array.isArray(input.body),'管理参数无效。');
+  const body=JSON.stringify(input.body);requireThat(Buffer.byteLength(body)<=32768,'管理请求过大。');return {path:input.path,method:'POST',body};
+}
 export function normalizeApiUrl(value) {
   requireThat(typeof value === 'string' && value.length <= 2048, '请输入 API 地址。');
   const raw = value.trim();
@@ -79,7 +84,7 @@ export function validateRequest(input) {
   const url = new URL(input.path, 'https://local.invalid');
   requireThat(url.origin === 'https://local.invalid' && url.pathname === path, 'API 路径无效。');
   const id = '[A-Za-z0-9_-]+';
-  const get = new RegExp(`^/api/v1/(health|identity|lobby(?:/mine)?|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:observations|messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
+  const get = new RegExp(`^/api/v1/(operator/users|health|identity|lobby(?:/mine)?|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:observations|messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
   const post = new RegExp(`^/api/v1/(lobby/${id}/(?:join|leave)|rooms|rooms/${id}/admin-(?:start|kick|invite|seat-tokens|end)|episodes|episodes/${id}/truncate|rollouts/${id}/annotations)$`);
   requireThat((input.method === 'GET' ? get : post).test(path), '此接口不属于人类客户端；Agent 请使用独立座位 API。');
   requireThat(input.method !== 'GET' || input.body === undefined, 'GET 不能携带请求体。');
@@ -148,7 +153,7 @@ export class RemoteSession {
     requireThat(epoch === this.epoch, '连接已更换或请求已取消，旧请求已丢弃。', 'CANCELLED');
     requireThat(this.pending.size < 8, '请求过多，请稍后重试。');
     requireThat(!this.pending.has(input.id), '请求 ID 重复。');
-    const request = authentication==='room'?roomCredentialRequest(input):authentication ? authRequest(input) : validateRequest(input), controller = new AbortController();
+    const request = authentication==='operator'?operatorRequest(input):authentication==='room'?roomCredentialRequest(input):authentication ? authRequest(input) : validateRequest(input), controller = new AbortController();
     this.pending.set(input.id, controller);
     const binary = request.path.split('?')[0].endsWith('/content');
     let timedOut = false;
@@ -207,7 +212,7 @@ export class RemoteSession {
     const result = await this.wire(apiUrl, token, { id: randomUUID(), path: '/api/v1/identity', method: 'GET' }, epoch);
     requireLoginStatus(result.status);
     const identity = json(result);
-    requireThat(typeof identity.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(identity.id) && ['coordinator', 'operator', 'auditor','member'].includes(identity.role), '服务返回的身份无效。', 'INVALID_API_RESPONSE');
+    requireThat(typeof identity.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(identity.id) && ['operator','member'].includes(identity.role), '服务返回的身份无效。', 'INVALID_API_RESPONSE');
     requireThat(epoch === this.epoch, '连接已更换，登录结果已丢弃。', 'CANCELLED');
     this.store.save(apiUrl, token, input.remember === true);
     this.token = token; this.identity = { id: identity.id, role: identity.role,
@@ -225,7 +230,7 @@ export class RemoteSession {
   async acceptSession(result, apiUrl, remember, epoch) {
     const value = jsonResponse(result), expiry = Date.parse(value.expiresAt);
     requireThat(validToken(value.token) && value.token.startsWith('hs1_') && Number.isFinite(expiry) && expiry > Date.now() &&
-      validUser(value.identity?.id) && ['operator', 'auditor','member'].includes(value.identity?.role), '服务器返回的登录会话无效。', 'INVALID_API_RESPONSE');
+      validUser(value.identity?.id) && ['operator','member'].includes(value.identity?.role), '服务器返回的登录会话无效。', 'INVALID_API_RESPONSE');
     const verified = await this.wire(apiUrl, value.token, { id: randomUUID(), path: '/api/v1/identity', method: 'GET' }, epoch);
     requireLoginStatus(verified.status);
     const identity = jsonResponse(verified);
@@ -260,6 +265,12 @@ export class RemoteSession {
     requireThat(result.status===201,'注册失败，请检查填写内容或联系管理员。','REGISTRATION_FAILED',result.status);
     try{return await this.acceptSession(result,apiUrl,input.remember===true,epoch);}catch{throw new ClientConnectionError('REGISTERED_RELOGIN','账号已创建，请使用刚设置的用户名和密码登录。');}
   }
+  async operatorCommand(input){
+    requireThat(this.identity?.role==='operator'&&this.token,'仅管理员可以执行此操作。','PERMISSION_DENIED',403);
+    requireThat(input&&typeof input.operation==='string'&&Object.keys(input).every(k=>['operation','body'].includes(k)),'管理参数无效。');
+    const epoch=this.epoch,result=await this.wire(this.apiUrl,this.token,{id:randomUUID(),path:'/api/v1/operator/'+input.operation,method:'POST',body:input.body},epoch,'operator');
+    const value=jsonResponse(result);if(result.status!==200){const messages={ACTIVE_GAME:'只能删除已结束的对局，请先单独中止。',FORBIDDEN:'没有权限，或操作会影响当前管理员账号。',NOT_FOUND:'部分记录已不存在，请刷新列表。',INVALID_REQUEST:'输入不符合要求，请检查数量、有效期或密码长度。',IDEMPOTENCY_CONFLICT:'重试参数已变化，请重新打开管理页面。'};const code=value.error?.code;throw new ClientConnectionError(code??'OPERATOR_FAILED',messages[code]??'管理操作未完成，请刷新状态后重试。',result.status);}return value;
+  }
   async roomCredential(roomId,operation) {
     requireThat(/^[a-f0-9-]{36}$/.test(roomId??'')&&['host','resume'].includes(operation)&&this.token&&this.identity,'请登录后选择房间。');const epoch=this.epoch;
     const result=await this.wire(this.apiUrl,this.token,{id:randomUUID(),path:operation==='host'?`/api/v1/rooms/${roomId}/host`:`/api/v1/lobby/${roomId}/resume`,method:operation==='host'?'GET':'POST'},epoch,'room');
@@ -276,7 +287,7 @@ export class RemoteSession {
     if ([404, 503].includes(result.status)) throw new ClientConnectionError('PASSWORD_UNAVAILABLE', '此服务器尚未启用个人密码设置。', result.status);
     requireLoginStatus(result.status);
     const value = jsonResponse(result);
-    requireThat(value.userId === this.identity.id && ['operator', 'auditor','member'].includes(value.role) && typeof value.passwordConfigured === 'boolean' &&
+    requireThat(value.userId === this.identity.id && ['operator','member'].includes(value.role) && typeof value.passwordConfigured === 'boolean' &&
       ['personal-token', 'password-session'].includes(value.authentication), '服务器返回的账号信息无效。', 'INVALID_API_RESPONSE');
     this.identity.role = value.role;
     return { userId: value.userId, role: value.role, passwordConfigured: value.passwordConfigured, authentication: value.authentication,

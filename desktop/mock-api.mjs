@@ -55,7 +55,7 @@ function auditRollout(id, players) {
     metadata: clone(metadata), players, frames, annotations: [{ kind: 'review', text: '合成 UI 审计 <img src=x onerror="window.__smokeXss=1">', source: 'admin', createdAt: stamp }] };
 }
 
-export async function startMockApi() {
+export async function startMockApi({role='operator'}={}) {
   const adminToken = 'synthetic-owner-' + randomUUID(), id = randomUUID(), rooms = new Map(), episodes = new Map(), requests = [];
   const players = ['p1', 'p2', 'p3'];
   const bytes = Buffer.from('合成桌面附件\n{"fixture":true,"modelInvoked":false}\n');
@@ -71,7 +71,8 @@ export async function startMockApi() {
   ]);
   episodes.set(id, initial);
   let password, sessionToken, registered = false, updateOpened = false, closed = false;
-  const identity = { id: 'owner', role: 'operator', retention: { policy: 'synthetic-only' } };
+  const identity = { id: 'owner', role, retention: { policy: 'synthetic-only' } };
+  const managedUsers=new Map([['owner',{id:'owner',role,disabled:false,passwordConfigured:true}],['tester-a',{id:'tester-a',role:'member',disabled:false,passwordConfigured:true}],['tester-b',{id:'tester-b',role:'member',disabled:false,passwordConfigured:true}]]),managementResults=new Map();
   const updateBytes = Buffer.from('Synthetic updater fixture; never execute.'), updateDigest = createHash('sha256').update(updateBytes).digest('hex');
   const suffix = process.platform === 'darwin' ? `mac-${process.arch}.dmg` : 'win-x64.exe', updateName = `Coop-Bench-99.0.0-${suffix}`;
   const respond = (res, value, status = 200, headers = {}) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }); res.end(JSON.stringify(value)); };
@@ -125,6 +126,18 @@ export async function startMockApi() {
       if (path === '/health') return respond(res, { ok: true, service: 'coop-bench', apiVersion: 'v1', backend: 'mock' });
       if (path === '/games') return respond(res, { games: [metadata] });
       if (path === '/games/hanabi') return respond(res, metadata);
+      if(path.startsWith('/operator/')){
+        if(!isAdmin(credential))return fail(res,401,'UNAUTHORIZED');if(identity.role!=='operator')return fail(res,403,'FORBIDDEN');
+        if(path==='/operator/users'&&req.method==='GET'){const users=[...managedUsers.values()].filter(u=>u.id.includes(url.searchParams.get('q')??'')),offset=Number(url.searchParams.get('offset')??0),limit=Number(url.searchParams.get('limit')??25);return respond(res,{users:users.slice(offset,offset+limit),total:users.length});}
+        if(!body?.requestId)return fail(res,400,'INVALID_REQUEST');if(managementResults.has(body.requestId))return respond(res,managementResults.get(body.requestId));
+        let result;
+        if(path==='/operator/invitations')result={invitations:Array.from({length:body.count},()=>({code:token(),expiresAt:new Date(Date.now()+body.expiresInDays*86400000).toISOString()}))};
+        else if(path==='/operator/users/reset-password')result={userId:body.userId,reset:true,sessionsRevoked:true};
+        else if(path.startsWith('/operator/users/')){if(body.userIds.includes('owner'))return fail(res,403,'FORBIDDEN');for(const id of body.userIds){if(path.endsWith('/delete'))managedUsers.delete(id);else managedUsers.get(id).disabled=path.endsWith('/disable');}result={userIds:body.userIds};}
+        else if(path==='/operator/games/stop'){for(const id of body.episodeIds){const game=episodes.get(id);game.ended=true;game.rollout.summary.status='truncated';}result={episodeIds:body.episodeIds,stopped:body.episodeIds.length};}
+        else if(path==='/operator/games/delete'){if(body.episodeIds.some(id=>episodes.get(id)?.rollout.summary.status==='active'))return fail(res,409,'ACTIVE_GAME');for(const id of body.episodeIds)episodes.delete(id);result={episodeIds:body.episodeIds,deleted:body.episodeIds.length};}
+        else return fail(res,404,'NOT_FOUND');managementResults.set(body.requestId,result);return respond(res,result);
+      }
       if(path==='/auth/register'&&req.method==='POST'){
         if(body.registrationToken!==adminToken||registered)return fail(res,401,'UNAUTHORIZED');
         registered=true;password=body.password;sessionToken='hs1_'+token();
@@ -137,7 +150,7 @@ export async function startMockApi() {
       if (path === '/identity') return isAdmin(credential) ? respond(res, identity) : fail(res, 401, 'UNAUTHORIZED');
       if (path.startsWith('/auth/')) {
         if (!isAdmin(credential)) return fail(res, 401, 'UNAUTHORIZED');
-        if (path === '/auth/account') return respond(res, { userId: 'owner', role: 'operator', passwordConfigured: Boolean(password), authentication: credential.startsWith('hs1_') ? 'password-session' : 'personal-token' });
+        if (path === '/auth/account') return respond(res, { userId: 'owner', role: identity.role, passwordConfigured: Boolean(password), authentication: credential.startsWith('hs1_') ? 'password-session' : 'personal-token' });
         if (path === '/auth/password') { password = body.password; sessionToken = 'hs1_' + token(); return respond(res, { token: sessionToken, identity, expiresAt: new Date(Date.now() + 3600000).toISOString() }); }
         if (path === '/auth/logout') { sessionToken = undefined; return respond(res, { ok: true }); }
       }
@@ -205,7 +218,7 @@ export async function startMockApi() {
         return respond(res, roomView(room, credential));
       }
       if (path === '/episodes' && req.method === 'POST') return isAdmin(credential) ? respond(res, makeEpisode(body.playerCount,new Map(),body.name)) : fail(res, 401, 'UNAUTHORIZED');
-      if (path === '/rollouts') return isAdmin(credential) ? respond(res, { items: [...episodes.values()].map(e => e.rollout.summary), total: episodes.size }) : fail(res, 401, 'UNAUTHORIZED');
+      if (path === '/rollouts') {const items=[...episodes.values()].map(e=>e.rollout.summary).filter(e=>!url.searchParams.get('status')||e.status===url.searchParams.get('status')),offset=Number(url.searchParams.get('offset')??0),limit=Number(url.searchParams.get('limit')??50);return isAdmin(credential)?respond(res,{items:items.slice(offset,offset+limit),total:items.length}):fail(res,401,'UNAUTHORIZED');}
       match = path.match(/^\/(rollouts|episodes)\/([^/]+)(?:\/(.*))?$/);
       if (!match) return fail(res, 404, 'MOCK_ROUTE_NOT_FOUND');
       const [, category, episodeId, operation] = match, episode = episodes.get(episodeId);

@@ -208,6 +208,29 @@ test('registration requires username, password and a token; none remain in the l
  let input:any;const {context,get}=uiContext(async()=>Response.json(identity),{initialAuth:false,transport:{register:async(value:any)=>{input=value;return connection;},connect:async()=>{throw Error('Token login must not run');}}});vm.runInContext("setConnectionStatus('idle');setLoginMode('token')",context);assert.equal(get('admin-token').disabled,false);assert.equal(get('login-password').required,true);assert.equal(get('password-login-fields').hidden,false);get('admin-token').value='synthetic-registration-token';get('login-user-id').value='new-user';get('login-password').value='Synthetic new password 7!';await get('login-form').listeners.submit({preventDefault(){}});assert.equal(input.registrationToken,'synthetic-registration-token');assert.equal(input.userId,'new-user');assert.equal(get('admin-token').value,'');assert.equal(get('login-password').value,'');assert.equal(get('connection-status').dataset.state,'connected');
 });
 
+test('ordinary member registration, password login and connection checks accept the server identity',async()=>{
+ const member={id:'ordinary-user',role:'member'},memberConnection={...connection,identity:member};
+ for(const mode of ['register','password']){
+  const {context,get}=uiContext(async()=>Response.json(member),{initialAuth:false,transport:{register:async()=>memberConnection,login:async()=>memberConnection}});
+  vm.runInContext(`setConnectionStatus('idle');setLoginMode('${mode==='register'?'token':'password'}')`,context);
+  get('login-user-id').value=member.id;get('login-password').value='Synthetic member password 7!';get('admin-token').value='synthetic-registration-token';
+  await get('login-form').listeners.submit({preventDefault(){}});
+  assert.equal(get('connection-status').dataset.state,'connected',mode);
+  assert.equal(get('auth-panel').hidden,true,mode);
+  assert.equal(get('create-panel').hidden,false,mode);
+  assert.equal(get('verify-replay').hidden,false,'members can verify replay');
+  assert.equal(vm.runInContext('state.identity.role',context),'member');
+  assert.equal(await vm.runInContext('checkConnection(true)',context),true);
+  assert.equal(get('connection-status').dataset.state,'connected');
+ }
+});
+
+test('unrecognized identity roles remain rejected',async()=>{
+ const {context,get}=uiContext(async()=>Response.json({id:'ordinary-user',role:'unknown'}));
+ assert.equal(await vm.runInContext('checkConnection(true)',context),false);
+ assert.equal(get('connection-status').dataset.state,'failed');
+});
+
 test('closing settings clears all password inputs and discards late account responses',async()=>{
  const account=deferred();const {context,get}=uiContext(async()=>Response.json(identity),{transport:{getAccount:()=>account.promise}});vm.runInContext('openSettings()',context);assert.equal(get('settings-dialog').open,true);for(const id of ['current-password','new-password','confirm-password','login-password','admin-token'])get(id).value='synthetic-secret';vm.runInContext('closeSettings()',context);for(const id of ['current-password','new-password','confirm-password','login-password','admin-token'])assert.equal(get(id).value,'');assert.equal(get('settings-dialog').open,false);account.resolve({userId:'owner',role:'operator',passwordConfigured:true,authentication:'password-session'});await new Promise(resolve=>setImmediate(resolve));assert.equal(vm.runInContext('state.account',context),null);
 });

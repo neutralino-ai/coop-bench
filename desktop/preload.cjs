@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('coopDesktop', Object.freeze({
   connect: input => invoke('coop:connect', input),
   login: input => invoke('coop:login', input),
   register: input => invoke('coop:register', input),
+  operatorCommand: input => invoke('coop:operator-command', input),
   setPassword: input => invoke('coop:set-password', input),
   getAccount: () => invoke('coop:get-account'),
   disconnect: () => invoke('coop:disconnect'),

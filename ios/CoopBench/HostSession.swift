@@ -33,7 +33,7 @@ import UIKit
         player?.suspend();player=nil;for agent in agents.values { agent.suspend() };agents.removeAll();identity=nil;token="";remembered=false;hostTokens.removeAll();updateScreenAwake()
     }
     private func accept(_ id: JSON,key: String,remember: Bool) throws {
-        try require(id["id"] is String && ["operator","coordinator","auditor","member"].contains(id["role"] as? String ?? ""),"身份验证响应格式不正确。")
+        try require(id["id"] is String && ["operator","member"].contains(id["role"] as? String ?? ""),"身份验证响应格式不正确。")
         if remember { try Vault.save("connection",["apiUrl":api,"token":key]) } else { try Vault.save("connection",nil) }
         token=key;identity=id;remembered=remember
         restoreAgents()
@@ -56,6 +56,14 @@ import UIKit
         try accept(id,key:key,remember:input["remember"] as? Bool == true);return info()
     }
     func account() async throws -> JSON { _=try scope();return try await HTTP.shared.json(api+"/auth/account",token:token) }
+    func operatorCommand(_ input:JSON) async throws -> JSON {
+        _=try scope();try require(identity?["role"] as? String == "operator","仅管理员可以执行此操作。","FORBIDDEN")
+        let operation=input["operation"] as? String ?? ""
+        try require(["invitations","users/disable","users/enable","users/delete","users/reset-password","games/stop","games/delete"].contains(operation),"管理操作无效。")
+        guard let body=input["body"] as? JSON else { throw ClientFailure("INVALID_REQUEST","管理参数无效。") }
+        let generation=epoch,result=try await HTTP.shared.json(api+"/operator/"+operation,token:token,body:body)
+        try require(generation == epoch,"登录已改变，请重新读取管理状态。","CANCELLED");return result
+    }
     func register(_ input:JSON) async throws -> JSON {
         stop();try Vault.save("connection",nil);api=try Endpoint.base(input["apiUrl"] as? String ?? apiDefault);let generation=epoch
         let user=input["userId"] as? String ?? "",password=input["password"] as? String ?? "",registrationToken=input["registrationToken"] as? String ?? ""

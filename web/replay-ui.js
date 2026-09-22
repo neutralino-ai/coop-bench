@@ -347,7 +347,7 @@
   function render() {
     if(!state.rollout)return;document.body.dataset.audit='true';const snap=R.snapshot(state.rollout,state.index);
 
-    $('open-create').hidden=state.identity?.role==='auditor';
+    $('open-create').hidden=!['operator','member'].includes(state.identity?.role);
     setText('focus-timing',snap.frame?.action?'手牌 / 可见信息：动作前':'手牌 / 可见信息：此时点');
     setText('focus-step-title',`${snap.frame?.seq===0?'初始局面':`第 ${snap.frame?.seq??0} 步`} · ${snap.frame?.playerId??'系统'} · ${R.actionText(snap.frame)}`);
     const scrolls=new Map([...grid.querySelectorAll('.trace-blocks')].map(el=>[el.dataset.player,el.scrollTop]));grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);for(const el of grid.querySelectorAll('.trace-blocks'))el.scrollTop=scrolls.get(el.dataset.player)??0;

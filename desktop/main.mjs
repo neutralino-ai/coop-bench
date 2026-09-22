@@ -36,7 +36,7 @@ import { PlayerRuntime,MinimalAgent,invitation } from '../runtime/coop-bench/cli
     remote = new RemoteSession({ fetcher: (url, options) => apiSession.fetch(url, options), store: new ConnectionStore(join(dataDir, 'remote-connection.json'), safeStorage) });
     player = new LobbyPlayer({remote,directory:join(dataDir,'lobby-seats'),preload:join(here,'player-preload.cjs'),show:!smoke});
     hostSeats=new HostSeats({remote,directory:join(dataDir,'host-seats'),encryption:safeStorage,Runtime:PlayerRuntime,Agent:MinimalAgent});
-    Object.assign(assets,{'/replay-trace.js':'replay-trace.js','/room-seats.js':'room-seats.js','/lobby.js':'lobby.js','/player.html':'player.html','/player.js':'player.js','/player.css':'player.css'});
+    Object.assign(assets,{'/operator.js':'operator.js','/operator.css':'operator.css','/replay-trace.js':'replay-trace.js','/room-seats.js':'room-seats.js','/lobby.js':'lobby.js','/player.html':'player.html','/player.js':'player.js','/player.css':'player.css'});
     if (smoke) {
       const { startClientFixture } = await import('./client-smoke.mjs');
       fixture = await startClientFixture(dataDir);
@@ -62,6 +62,7 @@ import { PlayerRuntime,MinimalAgent,invitation } from '../runtime/coop-bench/cli
       'host-seat': async ({name,input}={})=>{if(!['key','start','resume','status','modelConfig','testModel','cancelModelTest','forgetModel'].includes(name)||JSON.stringify(input??{}).length>65536)throw Error('无效席位操作。');return hostSeats[name](input);},
       connect: async input => {await hostSeats.close();await player.close();return remote.connect(input);}, login: async input => {await hostSeats.close();await player.close();return remote.login(input);},
       register: async input => {await hostSeats.close();await player.close();return remote.register(input);},
+      'operator-command': input => remote.operatorCommand(input),
       'set-password': input => remote.setPassword(input), 'get-account': () => remote.getAccount(), disconnect: async () => {await hostSeats.close();await player.close();return remote.logout();},
       request: async input => {const epoch=remote.epoch,response=await remote.request(input);if(epoch===remote.epoch)await hostSeats.capture(input,response);return response;}, 'cancel-request': id => { if (typeof id === 'string') remote.cancel(id); },
       'copy-text': text => { if (typeof text !== 'string' || text.length > 65536) throw new Error('复制内容过大。'); if (smoke) copiedText = text; else clipboard.writeText(text); },

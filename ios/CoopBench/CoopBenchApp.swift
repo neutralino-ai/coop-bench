@@ -92,6 +92,7 @@ struct WebSurface: UIViewRepresentable {
         case "getConnection":return await session.getConnection()
         case "login":return try await session.login(input)
         case "register":return try await session.register(input)
+        case "operatorCommand":return try await session.operatorCommand(input)
         case "connect":return try await session.login(input,personal:true)
         case "getAccount":return try await session.account()
         case "setPassword":return try await session.password(input)

@@ -2,7 +2,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import {startMockApi} from '../desktop/mock-api.mjs';
-const mock=await startMockApi(),password='synthetic-ios-password-only';
+const mock=await startMockApi({role:'member'}),password='synthetic-ios-password-only';
 await mkdir('artifacts/ios',{recursive:true});
 // Network fault fixture only: drop one accepted action response, then verify
 // the native outbox retries the identical command with its original key.

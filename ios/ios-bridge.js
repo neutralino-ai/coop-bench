@@ -7,7 +7,7 @@
  window.__coopEvent=(name,value)=>{for(const fn of listeners[name]??[])fn(value);};
  const listen=name=>fn=>{listeners[name].push(fn);return ()=>{listeners[name]=listeners[name].filter(x=>x!==fn);};};
  if(window.__coopRole==='player')window.coopPlayer=Object.freeze({command:invoke,dictate:()=>invoke('dictateReason'),onState:listen('state'),onInvitation:listen('invitation')});
- else window.coopDesktop=Object.freeze(Object.assign(Object.fromEntries(['getConnection','connect','login','register','getAccount','setPassword','disconnect','request','cancelRequest','copyText','openPlayer','incomingInvitation'].map(name=>[name,input=>invoke(name,input)])),{hostSeat:(name,input)=>invoke('hostSeat',{name,input}),onInvitation:listen('invitation')}));
+ else window.coopDesktop=Object.freeze(Object.assign(Object.fromEntries(['getConnection','connect','login','register','operatorCommand','getAccount','setPassword','disconnect','request','cancelRequest','copyText','openPlayer','incomingInvitation'].map(name=>[name,input=>invoke(name,input)])),{hostSeat:(name,input)=>invoke('hostSeat',{name,input}),onInvitation:listen('invitation')}));
  window.addEventListener('DOMContentLoaded',()=>{
   document.body.classList.add('ios-client');
   const note=document.createElement('p');note.className='ios-foreground-note';note.textContent='参赛时保持应用在前台；切到后台不会暂停服务器倒计时。';document.body.append(note);
