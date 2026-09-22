@@ -401,6 +401,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>run(id=>!document.querySelector(`#my-created-rooms [data-room-id="${id}"]`),agentRoomId),'Ended created room remained in the active room list');
   check(await run(()=>[...document.querySelectorAll('#my-created-rooms .personal-room')].every(el=>{const button=el.querySelector('button'),row=el.querySelector('.section-heading');return button.getBoundingClientRect().left>=row.getBoundingClientRect().right-1;})),'created rooms exclude finished games and place management buttons on the right');
   await capture('client-owned-room-rows.png');
+  check(await run(()=>['open-observations','replay-refresh'].every(id=>getComputedStyle(document.getElementById(id)).display==='none')),'audit and live-replay controls are confined to the replay page');
   checks.push('packaged host prompt, built-in model harness, token copy, kick, revoked key, rejoin, ready and action verified');
   if (remote.store.encryption.isEncryptionAvailable()) {
     const sessionKey=remote.token;await remote.connect({ apiUrl: fixture.apiUrl, token: sessionKey, remember: true });

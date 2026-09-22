@@ -119,6 +119,7 @@ body{min-height:100vh}.host-seat-keys{padding:18px;background:#f7f9fa;border:1px
 .owned-room>.section-heading{flex:1;min-width:0;margin:0;justify-content:flex-start;flex-wrap:wrap;gap:10px}
 .owned-room>.button{width:auto;flex:none;padding:8px 18px;border-radius:9px}
 .owned-room h3{overflow-wrap:anywhere;font-size:17px}
+body[data-view=home] #open-observations,body[data-view=home] #replay-refresh{display:none}
 .trace-blocks{min-height:70px;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;display:flex;flex-direction:column;gap:10px;padding-right:5px}
 .trace-block{--trace:#627783;--trace-bg:#f5f7f9;background:var(--trace-bg);border:1px solid #dfe6e9;border-left:3px solid var(--trace);border-radius:9px;padding:12px;flex:none;min-width:0;overflow-wrap:anywhere}
 .trace-prompt{--trace:#8464b0;--trace-bg:#f8f4fc}.trace-input,.trace-request{--trace:#5081ae;--trace-bg:#f1f7fc}.trace-reasoning{--trace:#b08a34;--trace-bg:#fcf8ed}.trace-call{--trace:#b57548;--trace-bg:#fff6ed}.trace-result{--trace:#4e8b78;--trace-bg:#eff8f3}.trace-action{--trace:#39785b;--trace-bg:#ecf7ef}.trace-output{--trace:#6c75aa;--trace-bg:#f4f4fc}
