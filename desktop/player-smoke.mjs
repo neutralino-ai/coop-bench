@@ -46,7 +46,7 @@ export async function runPlayerSmoke({window,directory}) {
     assert.equal(await js("document.querySelector('#turn-label').textContent"),'轮到你了');
     assert.ok(await js("parseFloat(getComputedStyle(document.querySelector('#deadline')).fontSize)>=60"));
     assert.equal(await js("document.querySelector('#action-form').hidden"),true);
-    assert.equal(await js("document.querySelector('#game details,#manual-actions,#observation,#updates,#trace,#action-status')"),null);
+    assert.equal(await js("document.querySelector('#game details:not(#history-panel),#manual-actions,#observation,#updates,#trace,#action-status')"),null);
     checks.push('human card board replaces manual forms and raw diagnostic panels with a large own-turn countdown');
     writeFileSync(join(directory,'player-own-turn.png'),(await window.webContents.capturePage()).toPNG());
     await js("document.querySelector('#rules-button').click()");assert.match(await js("document.querySelector('#rules-content').textContent"),/hint/i);await js("document.querySelector('#close-rules').click()");checks.push('read game rules');

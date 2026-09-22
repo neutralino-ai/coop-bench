@@ -42,7 +42,7 @@ import Foundation
         if data["sealed"] as? Bool == true { notify("ended");return }
         guard loop == nil else { return };let generation=UUID();running=generation;agentFailed=false;lastDecision=""
         loop=Task { [weak self] in guard let self else { return };defer { if self.running == generation { self.loop=nil } }
-            var failures=0
+            var failures=0,refreshImmediately=true
             while !Task.isCancelled && self.running == generation {
                 do {
                     if self.episode == nil { self.room=try await self.request("/rooms/"+self.roomID);self.notify("waiting") }
@@ -62,8 +62,8 @@ import Foundation
                         if self.data["pendingAction"] != nil && !self.actionBusy { do { _=try await self.sendPending() } catch { if (error as? ClientFailure)?.status != 409 { throw error } } }
                         var more=true
                         while more && !Task.isCancelled {
-                            let packet=try await self.request("/episodes/\(episode)/wait?after=\(self.cursor)&timeoutMs=\(self.observation?["hasMore"] as? Bool == true ? 0:25000)")
-                            try Task.checkCancellation();try self.accept(packet);more=self.observation?["hasMore"] as? Bool ?? false
+                            let packet=try await self.request("/episodes/\(episode)/wait?after=\(self.cursor)&timeoutMs=\(refreshImmediately || self.observation?["hasMore"] as? Bool == true ? 0:25000)")
+                            try Task.checkCancellation();try self.accept(packet);refreshImmediately=false;more=self.observation?["hasMore"] as? Bool ?? false
                         }
                         self.flushSoon()
                         if self.observation?["status"] as? String != "active" {
@@ -81,7 +81,7 @@ import Foundation
                     if Task.isCancelled { return }
                     let failure=publicFailure(error);self.warning=failure.message
                     if [401,403,404].contains(failure.status ?? 0) || ["TRACE_SEALED","STORAGE_LIMIT"].contains(failure.code) { self.notify("access-denied");return }
-                    failures=min(failures+1,5);self.notify("reconnecting")
+                    refreshImmediately=true;failures=min(failures+1,5);self.notify("reconnecting")
                 }
                 let delay=failures>0 ? min(10,pow(2,Double(failures-1))) : self.episode == nil ? 1:0.3
                 try? await Task.sleep(nanoseconds:UInt64(delay*1_000_000_000))

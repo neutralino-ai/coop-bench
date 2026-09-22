@@ -12,7 +12,7 @@ window.CoopRoomSeats={
    if(room.status==='waiting'){
     if(member)button('kick','踢出玩家',async()=>{const next=await request(`/rooms/${room.roomId}/admin-kick`,{playerId});await refresh(next,session);message('玩家已踢出，旧 seat token 已失效。');});
     else if(room.allowHumans){
-     button('claude','复制 Claude 入席提示词',async()=>{const {seatToken}=await key(playerId);await transport.copyText(this.prompt({apiUrl,roomId:room.roomId,playerId,seatToken}));message('已复制 Claude 入席提示词，含本席密钥，请只交给这位玩家。');});
+     button('coding-agent','复制 Coding Agent 提示词',async()=>{const {seatToken}=await key(playerId);await transport.copyText(this.prompt({apiUrl,roomId:room.roomId,playerId,seatToken}));message('已复制 Coding Agent 入席提示词，含本席密钥，请只交给这位玩家。');});
      button('agent','启用内置 Agent',async()=>this.modelDialog({roomId:room.roomId,playerId,onStarted:async()=>{await refresh(undefined,session);message('内置 Agent 已入席，客户端保持打开即可。');}}));
      button('token','复制 seat token',async()=>{const {seatToken}=await key(playerId);await transport.copyText(seatToken);message(`已复制席位 ${i+1} 的 seat token。`);});
     }
@@ -33,7 +33,9 @@ playerId: ${playerId}
 seat token: ${seatToken}
 玩家专用说明文档：${guide}
 
-先 GET 并完整阅读上面的玩家文档，再执行入席、准备、等待开局和 rules → wait → actions 循环。每次提交动作必须附 decisionSummary，用中文简短说明理由（1–1200 字，仅根据本席可见信息，不要求隐藏思维过程）。首次入席 POST ${apiUrl}/rooms/${roomId}/join，Authorization: Bearer 使用上面的 seat token，JSON 为 {"name":"Claude","playerToken":"${seatToken}"}。不需要邀请码，也不需要房主密码。
+本提示词适用于 Codex、Claude Code、GPT、DeepSeek 等 coding agent / harness。先给自己起一个简短名字，并在括号里注明实际使用的 harness、模型和推理档位，例如 Lili (codex-gpt-6-astra-high)。这只是格式示例，请按你的真实配置填写；不知道的字段写 unknown，不要猜测。完整名字不超过 60 个字符。
+
+先 GET 并完整阅读上面的玩家文档，再执行入席、准备、等待开局和 rules → wait → actions 循环。每次提交动作必须附 decisionSummary，用中文简短说明理由（1–1200 字，仅根据本席可见信息，不要求隐藏思维过程）。首次入席 POST ${apiUrl}/rooms/${roomId}/join，Authorization: Bearer 使用上面的 seat token，JSON 为 {"name":"你刚起的名字 (实际harness-模型-推理档位)","playerToken":"${seatToken}"}，将 name 替换为你自己的完整名字。不需要邀请码，也不需要房主密码。
 
 新房间默认每个必需行动窗口 3 分钟，房主可自定义；以 observation.control.decisionTimeoutSeconds 和 deadlineAt 为准。timeoutPolicy=default-action-v1 或 default-action-v2 时，超时由服务器执行本席 control.timeoutAction 所示的默认合法动作并继续，不会仅因该次超时结束整局（v2 花火能弃牌时弃第一张，否则出第一张；旧 v1 策略按服务端返回）。旧对局保留原策略。等待、重连和无效动作不会续时。超时后重新 wait 读取当前观察，不要重发过期动作；整局上限和游戏自带时钟仍适用。
 

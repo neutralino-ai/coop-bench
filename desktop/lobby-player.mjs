@@ -51,11 +51,11 @@ export class LobbyPlayer {
     }
     if(input.roomId!==undefined&&!/^[a-f0-9-]{36}$/.test(input.roomId))throw new ClientConnectionError('INVALID_ROOM','无效房间。');
     const prior=this.saved(scope);
-    let config=input.seatToken?{apiUrl:remote.apiUrl,roomId:input.roomId,name:String(input.name??remote.identity.id).trim(),playerToken:input.seatToken}:null;
+    let config=input.seatToken?{apiUrl:remote.apiUrl,roomId:input.roomId,name:String(remote.identity.id),playerToken:input.seatToken}:null;
     this.busy=true;const epoch=remote.epoch;let next;
     try {
       if(!config){const roomId=input.roomId??prior?.roomId;if(!roomId)throw new ClientConnectionError('NO_SEAT','请在“我参与的”选择要继续的对局。');const restored=await remote.roomCredential(roomId,'resume');config={apiUrl:remote.apiUrl,roomId,name:restored.name,playerToken:restored.playerToken};}
-      if(!config.name||config.name.length>60)throw new ClientConnectionError('INVALID_NAME','请输入 1–60 字的玩家名字。');
+      if(!config.name)throw new ClientConnectionError('INVALID_NAME','登录身份缺少用户名，请重新登录。');
       if(input.seatToken){
         const response=await remote.request({id:randomUUID(),path:`/api/v1/lobby/${config.roomId}/join`,method:'POST',body:{name:config.name,playerToken:config.playerToken}});
         let result;try{result=JSON.parse(Buffer.from(response.bytes).toString());}catch{throw new ClientConnectionError('LOBBY_UNAVAILABLE','服务器尚未提供大厅功能，请更新服务端。');}

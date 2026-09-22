@@ -359,6 +359,7 @@
   function render() {
     if(!state.rollout)return;document.body.dataset.audit='true';const snap=R.snapshot(state.rollout,state.index);
 
+    syncFollow();
     $('open-create').hidden=!['operator','member'].includes(state.identity?.role);
     setText('focus-timing',snap.live?'实时局面 · 当前待行动':snap.frame?.action?'手牌 / 可见信息：动作前':'手牌 / 可见信息：此时点');
     setText('focus-step-title',snap.live?`实时局面 · ${snap.actors.length?`等待 ${snap.actors.join(' / ')} 行动`:'等待进展'} · 最近记录 #${snap.frame?.seq??0}`:`${snap.frame?.seq===0?'初始局面':`第 ${snap.frame?.seq??0} 步`} · ${snap.frame?.playerId??'系统'} · ${R.actionText(snap.frame)}`);
@@ -380,22 +381,25 @@
   }
   setInterval(updateCountdowns,250);
   let liveBusy=false;
+  const followButton=addButton('replay-follow','跟随最新',()=>{state.followLive=true;state.index=Math.max(0,state.rollout.frames.length-1);renderTimeline();renderFrame();void refreshReplay(true);});
+  function syncFollow(){const active=state.rollout?.summary.status==='active',behind=Math.max(0,(state.rollout?.frames.length??1)-1-state.index);followButton.hidden=!active;followButton.setAttribute('aria-pressed',String(Boolean(state.followLive)));followButton.textContent=state.followLive?'● 正在直播':behind?'回到直播 · +'+behind:'跟随最新';followButton.title=state.followLive?'自动跟随新动作；拖动时间条可回看历史':'回到最新局面，并自动跟随新动作';}
   const liveButton=addButton('replay-refresh','刷新进展',()=>void refreshReplay(true));
   async function refreshReplay(manual=false){
-    if(liveBusy||!state.token||state.passwordBusy||!state.rollout||document.body.dataset.view!=='replay'||document.hidden||!manual&&(!$('auto-refresh').checked||state.playing||state.rollout.summary.status!=='active'))return;
+    if(liveBusy||!state.token||state.passwordBusy||!state.rollout||document.body.dataset.view!=='replay'||document.hidden||!manual&&(state.playing||state.rollout.summary.status!=='active'))return;
     const id=state.rollout.summary.episodeId,session=state.session,serial=state.detailRequest;liveBusy=true;liveButton.disabled=true;
     try{
       const data=await request(`/rollouts/${encodeURIComponent(id)}`);
       if(session!==state.session||serial!==state.detailRequest||state.rollout?.summary.episodeId!==id)return;
-      const follow=state.index===state.rollout.frames.length-1;state.rollout=data;if(follow)state.index=Math.max(0,data.frames.length-1);
+      const follow=state.followLive;state.rollout=data;if(follow)state.index=Math.max(0,data.frames.length-1);
       renderHeader();renderTimeline();renderFrame();
       for(const seat of Object.values(seats)){seat.more=true;seat.error='';}
-      await load(true);
+      void load(true);
       liveButton.textContent=data.summary.status==='active'?'实时更新中 · 刷新':'刷新进展';
     }catch(error){liveButton.textContent=error.status===429?'等待读取额度 · 自动重试':'刷新失败 · 重试';}
     finally{liveBusy=false;liveButton.disabled=false;}
   }
   setInterval(()=>void refreshReplay(),5000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshReplay();});
   window.CoopFocus={clear,load,render,openMessages:openStream,selected(){clearStream();if(streamDialog.box.open)streamDialog.box.close();issuedController?.abort();issuedEpoch++;if(issuedDialog.box.open)issuedDialog.box.close();controller?.abort();epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();if(evidence.box.open)evidence.box.close();full.content.replaceChildren();}};
   window.addEventListener('keydown',event=>{
     if(!state.rollout||document.querySelector('dialog[open]')||['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName))return;

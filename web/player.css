@@ -30,3 +30,29 @@ button.card.hint-excluded{opacity:.55}
 @media(prefers-reduced-motion:reduce){button.card{transition:none}}
 
 .reason-panel{margin:16px 0;padding:18px;background:#fff;border:1px solid #dbe5df;border-radius:14px}.reason-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.reason-heading label{font-weight:650;margin:0}.reason-heading label span{font-weight:400;color:#8b9992;font-size:12px;margin-left:6px}.reason-panel textarea{width:100%;box-sizing:border-box;min-height:94px;resize:vertical;border:1px solid #dbe5df;border-radius:9px;padding:12px;font:16px/1.6 system-ui;background:#f9fbfa}.reason-panel small{display:block;margin-top:8px;color:#73857b;font-size:12px;line-height:1.5}.reason-heading button{font-size:13px;padding:6px 10px}
+
+/* Keep the turn visible and cards readable on a phone. */
+#game>.turn-panel{margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;text-align:left}
+#game>.turn-panel #turn-label{margin:0;font-size:20px}
+#game>.turn-panel #deadline{font-size:60px;letter-spacing:-1px}
+#game>.turn-panel .timeout-policy{margin:0;font-size:12px}
+body.own-turn{background:#e5f0ff}
+#game>.turn-panel.own-turn{background:#1764c0;border-color:#1458aa;color:white}
+#game>.turn-panel.own-turn #turn-label,#game>.turn-panel.own-turn #deadline,#game>.turn-panel.own-turn .timeout-policy{color:white}
+#game>.turn-panel.urgent #deadline{color:#b34718}
+#game>.turn-panel.own-turn.urgent #deadline{color:#ffe19b}
+.history-panel summary{cursor:pointer;font-weight:650;color:#425e50;font-size:15px;min-height:36px;display:list-item}
+.history-panel #history-status{margin:4px 0}
+@media(max-width:600px){
+ header{padding:6px 12px;gap:6px;flex-wrap:wrap}.ios-client header{flex-wrap:nowrap}header strong{font-size:16px}header small{display:none}header button{font-size:12px;padding:6px 8px;min-height:36px}#connection{font-size:12px;gap:6px}#status{max-width:105px}.ios-client #disconnect{display:none}
+ main{margin:8px auto;padding:0 10px}.game-heading{margin-bottom:6px}.game-heading h1{font-size:15px}
+ #game>.turn-panel{position:sticky;top:0;z-index:3;padding:8px 12px;gap:8px;box-shadow:0 3px 10px #12345b14}
+ #game>.turn-panel #turn-label{font-size:18px}#game>.turn-panel #deadline{font-size:30px;letter-spacing:0}#game>.turn-panel .timeout-policy{display:none}
+ .play-grid{gap:8px}.play-grid>section{padding:10px;border-radius:10px}.board-panel>h2{display:none}#board{display:flex;flex-direction:column}.metrics{margin-bottom:8px;gap:14px}.metric-label{font-size:12px;margin-bottom:3px}.deck-counter strong{font-size:20px}.token-dot{width:11px;height:11px}.token-dots{gap:3px;height:14px}
+ .firework-piles{order:1;gap:5px}.firework-pile{padding:2px 7px;font-size:12px}.firework-pile strong{font-size:19px}.knowledge-note{display:none}
+ .player-hand{order:3;padding:7px 0}.player-hand.own-hand{order:2}.hand-heading{margin-bottom:4px}.hand-heading strong{font-size:14px}.hand-status{display:block;font-size:11px}.active-hand .hand-status{padding:0 6px}.cards{gap:4px}
+ .card-face{position:relative;padding:2px 4px;flex-direction:row;justify-content:center;gap:3px}.card-face small{position:absolute;left:3px;top:2px;font-size:0}.card-face small::after{content:attr(data-position);font-size:9px}.card-face strong{font-size:25px;margin:0}.card-face>span{font-size:11px}.own-hand .card-face>span{display:none}.card-knowledge{padding:3px;gap:0}.knowledge-label{display:none}.knowledge-value{font-size:12px;line-height:1.3}
+ .history-panel{margin:0;padding:0;border:0}.history-panel:not([open]) summary{min-height:24px}#action-history{max-height:120px}#action-history li{padding:5px 8px;font-size:13px}.history-time{display:inline;margin-left:6px}
+ .reason-panel{margin:8px 0 0;padding:8px;border-radius:9px}.reason-heading{margin-bottom:4px}.reason-panel textarea{min-height:58px;padding:6px 8px;line-height:1.35;margin-top:0}.reason-panel small{font-size:11px;margin-top:3px}.reason-heading button{min-height:36px}
+ .card-action-panel{padding:8px;margin-top:7px}.card-action-choices{margin-top:7px}.card-action-preview{margin:6px 0;font-size:13px}.card-action-buttons button{min-height:42px}#progress{padding:6px 12px;font-size:12px}
+}

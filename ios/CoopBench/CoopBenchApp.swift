@@ -8,10 +8,14 @@ import WebKit
         WebSurface(view:model.host.view)
             .preferredColorScheme(.light)
             .fullScreenCover(isPresented:$model.playerShown) {
-                VStack(spacing:0) { HStack { Button("返回大厅") { Task { await model.session.returnToLobby() } }.padding();Spacer();Text("我的席位").padding() };WebSurface(view:model.player.view) }
+                VStack(spacing:0) { HStack { Button("返回大厅") { Task { await model.session.returnToLobby() } };Spacer();Text("我的席位").font(.subheadline) }.padding(.horizontal,16).frame(minHeight:44);WebSurface(view:model.player.view) }
             }
             .onOpenURL { model.invitation($0) }
-            .onChange(of:phase) { _,value in model.session.foreground(value == .active) }
+            .onChange(of:phase) { _,value in
+                // Permission / dictation alerts are inactive, not backgrounded.
+                if value == .background { model.session.foreground(false) }
+                else if value == .active { model.session.foreground(true) }
+            }
     } }
 }
 struct WebSurface: UIViewRepresentable {

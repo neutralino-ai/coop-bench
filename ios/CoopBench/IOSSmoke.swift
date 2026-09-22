@@ -66,11 +66,12 @@ import WebKit
             let key=try await app.session.seatKey(roomID,"p1")
             try check(key.count>=43,"owner-issued-seat-token")
             try check(try await js("return document.querySelector('#start-room').disabled",app.host) as? Bool == true,"start-disabled-before-full")
-            _=try await js("document.querySelector('[data-action=claude][data-seat=p1]').click();return true",app.host)
-            try await wait("claude-prompt-copied",{let text=UIPasteboard.general.string ?? "";return text.contains(roomID) && text.contains(key) && text.contains("/player.md")})
+            _=try await js("document.querySelector('[data-action=coding-agent][data-seat=p1]').click();return true",app.host)
+            try await wait("coding-agent-prompt-copied",{let text=UIPasteboard.general.string ?? "";return text.contains(roomID) && text.contains(key) && text.contains("/player.md") && text.contains("Lili (codex-gpt-6-astra-high)")})
             try await snapshot("room",app.host)
             _=try await js("document.querySelector('#create-dialog').close();window.CoopLobby.join({roomId:\(jsonString(roomID))});document.querySelector('#lobby-seat-token').value=\(jsonString(key));document.querySelector('#join-seat').click();return true",app.host)
             try await wait("human-joined-in-ui",{app.session.player != nil})
+            try check(app.session.player?.config["name"] as? String == app.session.identity?["id"] as? String,"human-uses-authenticated-username")
             try await wait("player-rendered",{try await js("return !!window.coopPlayer && !!document.querySelector('#connection')",app.player) as? Bool == true})
             try check(try await js("return !window.coopDesktop",app.player) as? Bool == true,"player-has-no-owner-bridge")
             try check(try await js("try {await window.coopPlayer.command('request',{path:'/api/v1/rollouts'});return false;}catch(e){return e.code==='FORBIDDEN'}",app.player) as? Bool == true,"native-rejects-owner-command-from-player")
@@ -95,6 +96,8 @@ import WebKit
             try check(started["episodeId"] is String,"owner-starts-game")
             _=try await js("document.querySelector('#create-dialog').close();return true",app.host);app.playerShown=true
             try await wait("seat-observation",{app.session.player?.observation != nil})
+            try await wait("compact-player-board",{try await js("return !document.querySelector('#game').hidden && document.querySelector('#turn-panel').parentElement.id==='game'",app.player) as? Bool == true})
+            try await snapshot("player-mobile",app.player)
             try await wait("agent-submits-action",{app.session.agents.values.first?.data["lastActionResult"] != nil})
             try await wait("model-failure-is-visible",{app.session.agents.values.first?.warning?.contains("停止") == true})
             let runtime=app.session.player!
@@ -110,8 +113,11 @@ import WebKit
             _=try await js("selectFrame(0);return true",app.host)
             try check(try await js("return !document.querySelector('.replay-deadline')",app.host) as? Bool == true,"historical-replay-hides-live-clock")
             app.playerShown=true
-            runtime.suspend();runtime.start()
+            await runtime.suspendAndWait()
+            _=try await HTTP.shared.json(origin+"/_ios/arm-resume",token:runtime.token,body:[:])
+            let resumedAt=Date();runtime.start()
             try await wait("resume-refreshes-seat",{runtime.status != "disconnected"})
+            try check(Date().timeIntervalSince(resumedAt)<3,"resume-fetches-immediately-without-long-poll-delay")
             try await wait("trace-upload",{(runtime.data["acked"] as? Int ?? 0)>0})
             let captured: JSON=["synthetic":true,"text":String(repeating:"fragment 中文 ",count:4000),"value":1e-7]
             try runtime.record("tool-result",captured)

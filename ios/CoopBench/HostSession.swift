@@ -148,8 +148,8 @@ import UIKit
         if player != nil { await player?.suspendAndWait();player=nil }
         var config=try Vault.load("human-"+binding)
         if let room=input["roomId"] as? String,input["seatToken"] != nil {
-            let key=input["seatToken"] as? String ?? "",name=input["name"] as? String ?? "玩家"
-            try require(UUID(uuidString:room) != nil && matches(key,"^[A-Za-z0-9_-]{43,128}$") && !name.isEmpty && name.count<=60,"请输入房间ID、名字和房主发放的 seat token。")
+            let key=input["seatToken"] as? String ?? "",name=identity?["id"] as? String ?? ""
+            try require(UUID(uuidString:room) != nil && matches(key,"^[A-Za-z0-9_-]{43,128}$") && !name.isEmpty,"请输入房间ID和房主发放的 seat token，并确认已登录。")
             _=try await owner("/lobby/\(room)/join",["name":name,"playerToken":key]);config=["apiUrl":api,"roomId":room,"playerToken":key,"name":name]
         }
         else if let room=(input["roomId"] as? String) ?? (config?["roomId"] as? String) {

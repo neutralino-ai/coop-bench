@@ -206,6 +206,10 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   const beforeCountdown=await run(()=>document.querySelector('.replay-deadline').textContent);
   await wait(()=>run(previous=>document.querySelector('.replay-deadline').textContent!==previous,beforeCountdown),'Live countdown did not tick');
   await capture('replay-live-p3.png');
+  await run(()=>{document.getElementById('auto-refresh').checked=false;});fixture.advanceWaitingReplay();
+  await wait(()=>run(()=>state.index===3&&document.querySelector('.acting')?.dataset.player==='p1'),'Live replay did not follow the next server frame automatically',30000);
+  check(true,'live viewer follows new server frames without clicks or library auto-refresh');
+  await run(()=>{document.getElementById('auto-refresh').checked=true;});
   await run(()=>selectFrame(1));
   check(await run(()=>document.querySelector('.acting')?.dataset.player==='p1'&&!document.querySelector('.replay-deadline')),'ongoing replay historical steps retain their own actor and hide the live clock');
   restoreReplay();await run(id=>selectEpisode(id),fixture.id);
@@ -288,8 +292,9 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await capture('client-lobby.png');
   check(await run(()=>document.getElementById('joinable-rooms').textContent.includes('周日花火练习 <b>一起玩</b>')&&!document.querySelector('#joinable-rooms b')),'lobby room names are displayed as inert text');
   const joinHuman=async()=>{
-    await run(id=>{document.querySelector(`#joinable-rooms button[data-room-id="${id}"]`).click();document.getElementById('lobby-player-name').value='Synthetic lobby human';},humanRoom.roomId);
+    await run(id=>{document.querySelector(`#joinable-rooms button[data-room-id="${id}"]`).click();},humanRoom.roomId);
     check(!player.runtime,'clicking a room does not claim a seat without its token');
+    check(await run(()=>!document.getElementById('lobby-player-name')&&document.getElementById('join-dialog').textContent.includes(state.identity.id)),'human joins as authenticated username without name input');
     await run(()=>document.getElementById('join-seat').click());
     check(!player.runtime,'blank seat token cannot claim a seat');
     check(await run(()=>!document.getElementById('generate-seat-token')),'players cannot generate their own seat keys');
@@ -301,6 +306,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
     check(await run(()=>!document.getElementById('lobby-seat-token').value),'seat token field clears after joining');
   };
   await joinHuman();
+  check(player.credentials.name===remote.identity.id,'native human seat ignores editable aliases and uses logged-in account');
   const seatJs=code=>player.window.webContents.executeJavaScript(code,true);
   await wait(()=>seatJs("!document.querySelector('#lobby').hidden"),'Human waiting room did not render.');
   check(await seatJs("document.querySelector('#game-name').textContent==='周日花火练习 <b>一起玩</b>'"),'joined player sees the room name');
@@ -339,6 +345,11 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(await run(()=>document.getElementById('message').hidden),'page navigation clears stale notices');
   await wait(()=>seatJs("!document.querySelector('#game').hidden"),'Started human game did not render.');
   check(await seatJs("[...document.querySelector('.player-hand').querySelectorAll('.card-face strong')].every(card=>card.textContent==='?')"),'human board retains own hidden cards');
+  player.window.webContents.enableDeviceEmulation({screenPosition:'mobile',screenSize:{width:390,height:700},viewSize:{width:390,height:700},deviceScaleFactor:1,scale:1});
+  await seatJs("document.querySelector('#history-panel').open=false;new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+  check(await seatJs("document.body.classList.contains('own-turn')&&getComputedStyle(document.querySelector('#turn-panel')).backgroundColor==='rgb(23, 100, 192)'&&document.documentElement.scrollWidth<=innerWidth+2"),'mobile own turn uses prominent blue banner without horizontal overflow');
+  const mobilePicture=await player.window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});writeFileSync(join(dataDir,'player-mobile-own-turn.png'),mobilePicture.toPNG());
+  player.window.webContents.disableDeviceEmulation();
   await seatJs("document.querySelector('.card[data-player=p2][data-index=\"0\"]').click();document.querySelector('[data-choice=color]').click()");
   check(await seatJs("document.querySelectorAll('.card.card-preview').length===2&&!document.querySelector('#manual-actions')&&!document.querySelector('#observation')&&document.querySelector('#turn-label').textContent==='轮到你了'"),'human card click previews every matching card alongside the turn countdown without raw diagnostic controls');
   await seatJs("document.querySelector('#confirm-card-action').click()");
@@ -351,9 +362,13 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await run(id=>{void selectEpisode(id);},episode);
   await wait(()=>run(()=>document.getElementById('player-grid').dataset.messages==='ready'&&!document.getElementById('detail').hidden),'Live replay did not open');
   check(await run(()=>state.rollout.summary.status==='active'&&state.index===state.rollout.frames.length-1),'ongoing replay opens at the latest recorded step');
+  check(await run(()=>state.followLive&&document.getElementById('replay-follow').getAttribute('aria-pressed')==='true'),'ongoing replay defaults to visible live follow mode');
   await run(()=>selectFrame(0));await run(()=>document.getElementById('replay-refresh').click());
   await wait(()=>run(()=>!document.getElementById('replay-refresh').disabled),'Live replay refresh did not finish');
   check(await run(()=>state.index===0&&state.rollout.summary.status==='active'),'refreshing an ongoing replay keeps the selected historical step');
+  await run(()=>document.getElementById('replay-follow').click());
+  await wait(()=>run(()=>state.followLive&&state.index===state.rollout.frames.length-1&&!document.getElementById('replay-refresh').disabled),'Return to live did not follow latest');
+  check(true,'historical navigation pauses live following and return-to-live resumes it');
   await seatJs("document.querySelector('#disconnect').click()");await wait(()=>Promise.resolve(!player.runtime),'Disconnect did not finish.');
   await run(async roomId=>{try{await window.coopTransport.openPlayer({roomId,name:'Mistyped key',seatToken:'z'.repeat(43)});throw Error('Invalid active-seat key unexpectedly accepted');}catch(error){if(error.message==='Invalid active-seat key unexpectedly accepted')throw error;}},humanRoom.roomId);
   check(player.credentials.playerToken===issuedFirst,'rejected pasted key preserves the previous recoverable seat');
@@ -378,11 +393,11 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   checks.push('packaged lobby creates, discovers, joins, leaves, readies, starts and accepts a human action');
   await run(()=>{document.getElementById('open-create').click();document.getElementById('create-participation').value='human';document.getElementById('create-participation').dispatchEvent(new Event('change'));document.getElementById('create-name').value='内置 Agent 混合入席';document.getElementById('create-players').value='2';document.getElementById('create-room').click();});
   await wait(()=>run(()=>document.querySelectorAll('.host-seat.vacant').length===2),'Vacant host seats missing.');
-  check(await run(()=>[...document.querySelectorAll('.host-seat')].every(c=>[...c.querySelectorAll('button')].map(b=>b.dataset.action).join(',')==='claude,agent,token')),'empty seats expose exactly prompt, built-in agent and token buttons');
-  await run(()=>document.querySelector('[data-seat="p1"][data-action="claude"]').click());
-  await wait(()=>Promise.resolve(getCopied()?.includes('玩家专用说明文档')),'Claude prompt not copied.');
+  check(await run(()=>[...document.querySelectorAll('.host-seat')].every(c=>[...c.querySelectorAll('button')].map(b=>b.dataset.action).join(',')==='coding-agent,agent,token')),'empty seats expose exactly prompt, built-in agent and token buttons');
+  await run(()=>document.querySelector('[data-seat="p1"][data-action="coding-agent"]').click());
+  await wait(()=>Promise.resolve(getCopied()?.includes('玩家专用说明文档')),'Coding Agent prompt not copied.');
   const prompt=getCopied(),agentRoomId=prompt.match(/roomId: ([a-f0-9-]{36})/)[1],originalKey=prompt.match(/seat token: ([A-Za-z0-9_-]+)/)[1];
-  check(prompt.includes(fixture.baseUrl+'/player.md')&&prompt.includes('playerId: p1')&&!prompt.includes(fixture.adminToken),'Claude prompt carries exactly its own seat and same-origin player guide without organizer credentials');
+  check(prompt.includes(fixture.baseUrl+'/player.md')&&prompt.includes('playerId: p1')&&!prompt.includes(fixture.adminToken),'Coding Agent prompt carries exactly its own seat and same-origin player guide without organizer credentials');
   await capture('client-host-empty-seats.png');
   let modelLaunches=0;
   const launchModel=async()=>{

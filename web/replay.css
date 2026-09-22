@@ -204,3 +204,5 @@ body[data-view=login] #connection-quick-check{display:none}
 .trace-blocks{gap:4px}.trace-block{padding:4px 6px}
 .trace-block .trace-block-head{min-height:20px;line-height:20px}.trace-block-head time{line-height:20px}
 .trace-block .trace-preview,.trace-block .trace-preview.trace-reason{min-height:0;margin-top:1px}
+
+#replay-follow[aria-pressed=true]{color:#fff;background:#1764c0;border-color:#1764c0}#replay-follow{white-space:nowrap}

@@ -5,16 +5,16 @@
 <section id="lobby" hidden><h1 id="game-name"></h1><p id="room-status"></p><div id="members"></div><div class="buttons"><button id="ready">准备好了</button><button id="start">开始游戏</button><button id="invite">复制新邀请链接</button></div></section>
 <section id="game" hidden>
  <div class="game-heading"><h1 id="phase">游戏中</h1></div><p id="outcome" hidden></p>
- <div class="play-grid">
-  <section><h2>本席可见局面</h2><div id="board"></div></section>
-  <section>
-   <section class="history-panel"><h2>动作历史</h2><p id="history-status"></p><ol id="action-history" aria-label="本席收到的动作历史"></ol></section>
    <section id="turn-panel" class="turn-panel" aria-labelledby="turn-label">
     <h2 id="turn-label" role="status" aria-live="polite">等待对局开始</h2>
     <strong id="deadline" role="timer" aria-live="off"></strong>
     <p id="timeout-policy" class="timeout-policy"></p>
    </section>
-   <section id="reason-panel" class="reason-panel"><div class="reason-heading"><label for="decision-reason">行动理由 <span>选填</span></label><button id="dictate-reason" type="button" hidden>语音填写</button></div><textarea id="decision-reason" rows="3" maxlength="1200" placeholder="为什么这样出牌、弃牌或提示？" aria-describedby="reason-help"></textarea><small id="reason-help">仅供回放审阅，不发给队友。确认动作时一起提交。</small></section>
+ <div class="play-grid">
+  <section class="board-panel"><h2>本席可见局面</h2><div id="board"></div></section>
+  <section>
+   <details class="history-panel" id="history-panel"><summary>动作历史</summary><p id="history-status"></p><ol id="action-history" aria-label="本席收到的动作历史"></ol></details>
+   <section id="reason-panel" class="reason-panel"><div class="reason-heading"><label for="decision-reason">行动理由 <span>选填</span></label><button id="dictate-reason" type="button" hidden>语音填写</button></div><textarea id="decision-reason" rows="2" maxlength="1200" placeholder="为什么这样出牌、弃牌或提示？" aria-describedby="reason-help"></textarea><small id="reason-help">仅供回放审阅，不发给队友。确认动作时一起提交。</small></section>
    <form id="action-form" hidden><label>动作<select id="action-type"></select></label><p id="action-description"></p><div id="action-fields"></div><button id="act" type="submit">提交动作</button></form>
   </section>
  </div>

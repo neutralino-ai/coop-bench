@@ -8,11 +8,16 @@ await fetch(operatorMock.apiUrl+'/auth/password',{method:'POST',headers:{Authori
 await mkdir('artifacts/ios',{recursive:true});
 // Network fault fixture only: drop one accepted action response, then verify
 // the native outbox retries the identical command with its original key.
-let dropped=false,retries=0;const actions=new Map();
-const saveMetrics=()=>writeFile('artifacts/ios/network-fixture.json',JSON.stringify({droppedAcceptedResponse:dropped,identicalActionRetries:retries}));
+let dropped=false,retries=0,resumeCredential=null,immediateResumeVerified=false;const actions=new Map();
+const saveMetrics=()=>writeFile('artifacts/ios/network-fixture.json',JSON.stringify({droppedAcceptedResponse:dropped,identicalActionRetries:retries,immediateResumeVerified}));
 await saveMetrics();
 const proxy=createServer(async(req,res)=>{
  try{
+  if(req.url==='/_ios/arm-resume'&&req.method==='POST'){resumeCredential=req.headers.authorization;res.writeHead(200,{'Content-Type':'application/json'});res.end('{"ok":true}');return;}
+  if(req.url.includes('/wait?')&&resumeCredential&&req.headers.authorization===resumeCredential){
+   if(new URL(req.url,mock.baseUrl).searchParams.get('timeoutMs')!=='0'){res.writeHead(400,{'Content-Type':'application/json'});res.end('{"error":{"code":"RESUME_NOT_IMMEDIATE","message":"Resume must refresh before long polling"}}');return;}
+   resumeCredential=null;immediateResumeVerified=true;await saveMetrics();
+  }
   if(req.url==='/_ios/slow'){
    res.writeHead(200,{'Content-Type':'application/json'});res.write('{"ok":');
    const timer=setInterval(()=>res.write(' '),100),finish=setTimeout(()=>{clearInterval(timer);res.end('true}')},5000);

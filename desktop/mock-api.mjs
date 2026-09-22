@@ -290,6 +290,7 @@ export async function startMockApi({role='operator'}={}) {
   const baseUrl = `http://127.0.0.1:${server.address().port}`, apiUrl = baseUrl + '/api/v1';
   return { backend: 'mock', baseUrl, apiUrl, adminToken, id, bytes, artifact, requests,
     appendMonitorMessage(playerId,message){const records=initial.messages.get(playerId)??[],completion=initial.completions.get(playerId);records.push({sequence:(records.at(-1)?.sequence??-1)+1,playerId,kind:'model-input',createdAt:stamp,message});initial.messages.set(playerId,records);initial.completions.delete(playerId);return ()=>{records.pop();if(completion)initial.completions.set(playerId,completion);};},
+    advanceWaitingReplay(){const frame=clone(initial.rollout.frames.at(-1));frame.seq++;frame.playerId='p3';frame.action={type:'play',index:0};for(const [player,obs] of Object.entries(frame.views)){obs.view.current='p1';obs.control.required=player==='p1';}initial.rollout.frames.push(frame);},
     showWaitingReplay(){
       const previous=initial.rollout;initial.rollout=clone(previous);initial.rollout.summary.status='active';
       initial.rollout.frames=initial.rollout.frames.slice(0,3);

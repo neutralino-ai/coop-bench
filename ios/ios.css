@@ -3,3 +3,5 @@ html,body{min-width:0!important;-webkit-text-size-adjust:100%}body{padding-botto
 
 .ios-client .update-section{display:none}.ios-client[data-view=login] .ios-foreground-note{display:none}.ios-client .topbar{height:auto!important;min-height:60px}.ios-client .focus-toolbar{flex-wrap:wrap}.ios-client .settings-content{min-width:0}
 @media(max-width:600px){.ios-client .connection-status{grid-template-columns:minmax(0,1fr) auto;padding:8px 14px}.ios-client .connection-facts{grid-row:2;grid-column:1/-1;white-space:normal}.ios-client .lobby-home{padding:18px 0}.ios-client .host-seat-grid{grid-template-columns:minmax(0,1fr)}.ios-client .drawer-heading{padding:12px;gap:8px}.ios-client .drawer-heading h2{font-size:20px}.ios-client .host-agent-dialog{padding:18px}.ios-client .host-agent-dialog .buttons{flex-wrap:wrap}.ios-client .top-actions #auth-toggle{max-width:120px}.ios-client .episode-header h1{max-width:100%}}
+
+@media(max-width:600px){.ios-client header strong{font-size:16px}.ios-client .game-heading h1{font-size:15px}.ios-client #connection{font-size:12px}.ios-client:has(#game:not([hidden])) .ios-foreground-note{display:none}}
