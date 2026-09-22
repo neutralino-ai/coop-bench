@@ -123,6 +123,19 @@ import WebKit
             _=try await app.session.owner("/rooms/\(roomID)/admin-end",["reason":"synthetic iPhone acceptance"])
             let ended=try await app.session.owner("/rooms/\(roomID)/admin")
             try check(ended["status"] as? String == "truncated","host-can-end-with-preserved-records")
+            app.playerShown=false
+            _=try await js("await disconnect();document.querySelector('#api-address').value=\(jsonString(config["operatorApiUrl"] ?? ""));setLoginMode('password');document.querySelector('#login-user-id').value='owner';document.querySelector('#login-password').value=\(jsonString(config["password"] ?? ""));document.querySelector('#login-form').requestSubmit();return true",app.host)
+            try await wait("operator-login-management-entry",{try await js("return !document.querySelector('#operator-open').hidden && document.querySelector('#connection-status').dataset.state==='connected'",app.host) as? Bool == true})
+            _=try await js("document.querySelector('#operator-open').click();return true",app.host)
+            try await wait("operator-user-list",{try await js("return document.querySelectorAll('#operator-users-body tr').length===3",app.host) as? Bool == true})
+            try await snapshot("operator-users",app.host)
+            _=try await js("document.querySelector('[data-tab=invitations]').click();return true",app.host)
+            try await wait("operator-invite-tab",{try await js("return !document.querySelector('#operator-invitations').hidden",app.host) as? Bool == true})
+            _=try await js("document.querySelector('#operator-invite-count').value='2';document.querySelector('#operator-invite-form').requestSubmit();return true",app.host)
+            try await wait("operator-generates-invitations",{try await js("return document.querySelector('#operator-invite-result').value.includes('2. ')",app.host) as? Bool == true})
+            try await snapshot("operator-invitations",app.host)
+            _=try await js("document.querySelector('#operator-close').click();return true",app.host)
+            try check(try await js("return !document.querySelector('#operator-dialog').open && document.querySelector('#operator-invite-result').value==='';",app.host) as? Bool == true,"operator-close-clears-invitations")
             report=["ok":true,"checks":checks,"evidence":"iPhone simulator, synthetic HTTP/model fixture; no real game engine or model"]
         } catch { report=["ok":false,"checks":checks,"error":publicFailure(error).record] }
         try? jsonData(report).write(to:directory.appendingPathComponent("ios-smoke.json"),options:.atomic)
