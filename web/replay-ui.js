@@ -90,12 +90,23 @@
   issuedDialog.content.prepend(inputSources('服务器原始观测','实际模型请求 →','open-agent-messages',()=>{const player=issuedPlayer;issuedDialog.box.close();openStream(player);}));
   streamDialog.content.prepend(inputSources('实际模型请求','← 服务器原始观测','monitor-server-input',()=>{const player=streamPlayer;streamDialog.box.close();showIssued(player);}));
   document.querySelector('.top-actions').prepend(toolbar);
+  const quickConnection=node('button','connection-quick');quickConnection.id='connection-quick-check';quickConnection.type='button';quickConnection.append(node('span','connection-light'));quickConnection.onclick=()=>void checkConnection(true);toolbar.prepend(quickConnection);
+  const syncConnection=()=>{const phase=$('connection-status').dataset.state??'idle';quickConnection.className=`connection-quick ${phase}`;quickConnection.dataset.state=phase;quickConnection.disabled=$('check-connection').disabled;quickConnection.title=`${$('connection-status-label').textContent} · ${$('connection-reason').textContent} 点击检查连接`;
+    quickConnection.setAttribute('aria-label',`${$('connection-status-label').textContent}，点击强制检查连接`);};
+  new MutationObserver(syncConnection).observe($('connection-status'),{attributes:true,childList:true,subtree:true,characterData:true});syncConnection();
   const focus=node('section','focus-replay');focus.id='focus-replay';
   const shared=node('div','shared-board');shared.id='shared-board';
   const grid=node('div','player-grid');grid.id='player-grid';
   const chat=node('div','focus-communication');chat.id='focus-communication';
   focus.append(shared,grid,chat);detail.append(focus,timeline);
-  const title=node('strong','focus-step-title');title.id='focus-step-title';timeline.prepend(title);
+  const title=node('strong','focus-step-title');title.id='focus-step-title';title.hidden=true;timeline.prepend(title);
+  const rail=node('div','timeline-track');rail.id='timeline-track';$('timeline').before(rail);rail.append($('event-strip'),$('timeline'));$('event-strip').setAttribute('aria-hidden','true');
+  function positionTimelineNumbers(){
+    const chips=[...$('event-strip').children],last=chips.length-1,stride=Math.max(1,Math.ceil(chips.length/Math.max(2,Math.floor(rail.clientWidth/36))));
+    for(const [i,chip] of chips.entries()){chip.tabIndex=-1;chip.style.left=`${last?i/last*100:0}%`;chip.hidden=i!==state.index&&(Math.abs(i-state.index)<stride||i!==0&&i!==last&&i%stride!==0);}
+    $('timeline').setAttribute('aria-valuetext',title.textContent);
+  }
+  new ResizeObserver(positionTimelineNumbers).observe(rail);
   const phase=node('span','focus-timing','手牌 / 可见信息：动作前');phase.id='focus-timing';document.querySelector('.episode-header-actions').prepend(phase);
   const recordingButton=node('button','button subtle recording-summary','轨迹待核对');recordingButton.id='recording-summary';recordingButton.type='button';recordingButton.onclick=()=>{showRecording();void loadRecording(true);};document.querySelector('.episode-header-actions').prepend(recordingButton);
   const more=node('button','button subtle','读取更多消息');more.id='focus-load-more';more.hidden=true;more.onclick=()=>load(true);evidence.content.prepend(more);
@@ -302,7 +313,7 @@
     const head=node('div','player-heading');head.append(node('h2','',`玩家 ${p.player.replace(/^p/,'')}`),node('span','player-turn',actor?(snap.live?'当前行动者':'本轮行动者'):'观察 / 等待'));panel.append(head);
     if(snap.live&&actor){const timer=node('span','replay-deadline');timer.dataset.player=p.player;head.append(timer);}
     const game=state.rollout.summary.gameId;
-    const hand=node('section','player-hand'),handHead=node('div','compact-section-heading');handHead.append(node('h3','',game==='sky-team'?'骰子':game==='bomb-busters'?'电线':game==='magic-maze'?'行动能力':'手牌'),node('span','audit-scope',game==='hanabi'?'审计可见 · 本人不见牌面':'已记录信息'));hand.append(handHead);
+    const hand=node('section','player-hand'),handHead=node('div','compact-section-heading');handHead.append(node('h3','',game==='sky-team'?'骰子':game==='bomb-busters'?'电线':game==='magic-maze'?'行动能力':game==='hanabi'?'手牌与提示':'手牌'),node('span','audit-scope',game==='hanabi'?'牌面仅审计可见':'已记录信息'));hand.append(handHead);
     const backs=p.observation?.view?.cardBacks?.[p.player]?.hand;
     hand.append(cardRow(p.actual??(backs?.map(color=>({color}))),p.observation?'牌面未知 / 本游戏没有手牌':'历史视角缺失'));panel.append(hand);
     const visibility=node('section',`player-visibility${game==='hanabi'?' hanabi-knowledge':''}`),visibilityHead=node('div','compact-section-heading');visibilityHead.append(node('h3','',game==='hanabi'?'本人提示':'可见信息'));visibility.append(visibilityHead);
@@ -321,6 +332,7 @@
       visibility.append(node('p','',text));
     }else visibility.append(node('p','muted','未保存这个时点的合法视角。'));
     visibilityHead.append(button('视角 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}),button('签发原文 ↗',()=>showIssued(p.player)));panel.append(visibility);
+    if(game==='hanabi'){handHead.append(...visibilityHead.querySelectorAll('button'));visibilityHead.remove();visibility.setAttribute('aria-label','本人已知提示');}
     const decision=node('section','player-decision'),status=seats[p.player];
     const recorded=status?.blocks??[],agent=recorded.some(b=>['prompt','input','output','reasoning','request'].includes(b.type));
     if(agent)panel.classList.add('agent-panel');
@@ -355,7 +367,8 @@
     const scrolls=new Map([...grid.querySelectorAll('.trace-blocks')].map(el=>[el.dataset.player,el.scrollTop]));grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);for(const el of grid.querySelectorAll('.trace-blocks'))el.scrollTop=scrolls.get(el.dataset.player)??0;
     const communications=state.rollout.frames.slice(0,state.index+1).map(f=>({frame:f,text:publicCommunication(f)})).filter(m=>m.text);
     const last=communications.at(-1);chat.replaceChildren(node('strong','','公开交流'),node('span','chat-preview',last?`${last.frame.playerId} · ${last.text}`:'截至这一步还没有公开交流。'));
-    chat.append(button(`全部 ${communications.length} 条 ↗`,()=>{openEvidence();$('communication-panel').scrollIntoView({block:'start'});}));
+    const communicationButton=button(`交流 ${communications.length} ↗`,()=>{openEvidence();$('communication-panel').scrollIntoView({block:'start'});});communicationButton.title=last?`${last.frame.playerId} · ${last.text}`:'尚无公开交流';shared.append(communicationButton);
+    positionTimelineNumbers();
     updateCountdowns();
   }
   function updateCountdowns(){

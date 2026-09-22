@@ -183,6 +183,17 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   }
   check(await run(()=>document.querySelector('.acting .trace-blocks').textContent.includes('原文结束标记')&&!document.querySelector('.acting .trace-blocks img')&&document.querySelector('.acting .trace-reason').textContent.includes('合成测试动作')),'colored trajectory blocks preserve complete recorded reasoning and highlight the submitted reason without executing markup');
   check(await run(()=>!document.querySelector('.replay-deadline')&&![...document.querySelectorAll('.player-panel button')].some(b=>b.textContent.includes('跳到这一步'))),'completed replay hides countdowns and redundant jump links');
+  const identityChecks=fixture.requests.filter(r=>r.path==='/api/v1/identity').length;
+  await run(()=>document.getElementById('connection-quick-check').click());
+  await wait(()=>Promise.resolve(fixture.requests.filter(r=>r.path==='/api/v1/identity').length>identityChecks),'Menu connection light must trigger a real identity check');
+  check(await run(()=>getComputedStyle(document.getElementById('connection-status')).display==='none'&&document.getElementById('connection-quick-check').closest('.topbar')&&document.querySelector('.replay-panel').getBoundingClientRect().height<=55&&document.getElementById('focus-step-title').hidden),'connection status is in the menu and playback controls occupy one compact row');
+  const rail=await run(()=>{const r=document.getElementById('timeline').getBoundingClientRect();return {start:Math.round(r.left+16+(r.width-32)*state.index/Number(document.getElementById('timeline').max)),end:Math.round(r.left+16+(r.width-32)*0.75),y:Math.round(r.top+r.height/2)};});
+  window.webContents.sendInputEvent({type:'mouseDown',x:rail.start,y:rail.y,button:'left',clickCount:1});
+  window.webContents.sendInputEvent({type:'mouseMove',x:rail.end,y:rail.y,button:'left'});
+  window.webContents.sendInputEvent({type:'mouseUp',x:rail.end,y:rail.y,button:'left',clickCount:1});
+  await wait(()=>run(()=>state.index===3),'Dragging the timeline must select the matching recorded frame');
+  check(true,'native mouse dragging on the numbered timeline selects a recorded step');
+  await run(()=>selectFrame(1));
   const restoreReplay=fixture.showWaitingReplay();
   await run(id=>selectEpisode(id),fixture.id);
   await wait(()=>run(()=>document.querySelector('.player-panel.acting')?.dataset.player==='p3'),'Live replay must highlight waiting p3 after p2 acted');

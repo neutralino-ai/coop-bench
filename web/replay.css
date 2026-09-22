@@ -147,3 +147,37 @@ body[data-view=home] #open-observations,body[data-view=home] #replay-refresh{dis
 .replay-deadline[data-expired=true]{font:12px/1.2 system-ui;color:#986633}
 .player-heading .player-turn{margin-left:auto;white-space:nowrap}
 @media(max-width:760px){.player-panel.agent-panel{height:620px;min-height:540px}.player-panel{min-height:500px}.player-decision>.trace-blocks{max-height:none}}
+
+/* A single menu row and a single draggable timeline leave the height to evidence. */
+body[data-audit=true]>.connection-status{display:none}
+body[data-view=login] #connection-quick-check{display:none}
+.connection-quick{display:grid;place-items:center;flex:none;width:30px;height:30px;min-height:30px;padding:0;border:0;background:transparent;border-radius:7px;cursor:pointer}
+.connection-quick:hover{background:#e8eee9}.connection-quick:focus-visible{outline:2px solid #558168}
+.connection-quick.connected .connection-light{background:#2a9045;box-shadow:0 0 0 4px #2a904519}
+.connection-quick.connecting .connection-light,.connection-quick.checking .connection-light{background:#c39723;box-shadow:0 0 0 4px #c397231c}
+.connection-quick.failed .connection-light,.connection-quick.disconnected .connection-light,.connection-quick.expired .connection-light{background:#c04c3d;box-shadow:0 0 0 4px #c04c3d1c}
+.focus-toolbar{gap:5px}.focus-toolbar>.button{padding:5px 9px}
+.focus-replay{grid-template-rows:38px minmax(0,1fr);gap:6px}.focus-communication{display:none}
+.shared-board>.text-button{margin-left:0}.shared-board>.text-button:first-of-type{margin-left:auto}
+.episode-header{min-height:32px;gap:10px}.episode-header>div:first-child{display:flex;align-items:baseline;gap:12px;flex:1}
+.episode-header h1{font-size:20px;flex:none;max-width:32vw}.episode-header #episode-subtitle{margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.episode-header-actions{gap:9px}.episode-header-actions .badge,.recording-summary{padding:4px 7px!important;font-size:12px!important}
+.focus-timing{font-size:12px}.player-panel{gap:6px}
+.player-visibility.hanabi-knowledge{padding-top:0;border-top:0;margin-top:-3px}
+.compact-section-heading{gap:6px}.compact-section-heading .audit-scope{font-size:10px}.compact-section-heading .text-button{font-size:11px!important}
+#detail>.replay-panel{display:block;padding:5px 10px;min-height:42px}
+#detail>.replay-panel>.transport{display:flex;align-items:center;width:100%;gap:8px;min-height:32px}
+.transport #previous,.transport #next{width:30px;height:30px;min-height:30px;padding:0;flex:none}
+.transport #play{height:30px;min-height:30px;padding:3px 10px;flex:none}
+.transport .step-label{font-size:12px;flex:none;min-width:50px;text-align:right}
+.timeline-track{position:relative;flex:1;min-width:0;height:32px;margin:0 12px}
+.timeline-track::before{content:'';position:absolute;left:16px;right:16px;top:14px;height:4px;background:#d6e2d8;border-radius:3px}
+.timeline-track #event-strip{position:absolute;inset:0 16px;display:block;overflow:visible;height:32px;max-height:none;padding:0;margin:0;pointer-events:none}
+.timeline-track .event-chip{position:absolute;top:4px;transform:translateX(-50%);min-width:24px;width:24px;height:24px;min-height:24px;line-height:24px;padding:0;border:0;background:#f5f8f4;color:#697b6d}
+.timeline-track .event-chip.selected{color:#245d3d;background:#e0efe4;font-weight:700;border-radius:50%}
+.timeline-track #timeline{position:absolute;inset:0;appearance:none;-webkit-appearance:none;background:transparent;min-width:0;width:100%;height:32px;margin:0;cursor:ew-resize;touch-action:pan-y;z-index:1}
+.timeline-track #timeline::-webkit-slider-runnable-track{height:32px;background:transparent}
+.timeline-track #timeline::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:32px;height:32px;border:2px solid #47745a;border-radius:50%;background:transparent;box-shadow:0 0 0 2px #fff8}
+.timeline-track #timeline::-moz-range-track{height:32px;background:transparent}
+.timeline-track #timeline::-moz-range-thumb{width:28px;height:28px;border:2px solid #47745a;border-radius:50%;background:transparent}
+@media(max-width:760px){.episode-header>div:first-child{display:block}.episode-header h1{max-width:85vw}.episode-header #episode-subtitle{font-size:11px;max-width:85vw}.transport .step-label{display:none}.timeline-track{margin:0 8px}.focus-replay{display:flex}.compact-section-heading{flex-wrap:wrap}.compact-section-heading .audit-scope{flex:1}.player-panel.agent-panel{height:680px}}

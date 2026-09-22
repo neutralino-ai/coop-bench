@@ -35,7 +35,7 @@ seat token: ${seatToken}
 
 先 GET 并完整阅读上面的玩家文档，再执行入席、准备、等待开局和 rules → wait → actions 循环。每次提交动作必须附 decisionSummary，用中文简短说明理由（1–1200 字，仅根据本席可见信息，不要求隐藏思维过程）。首次入席 POST ${apiUrl}/rooms/${roomId}/join，Authorization: Bearer 使用上面的 seat token，JSON 为 {"name":"Claude","playerToken":"${seatToken}"}。不需要邀请码，也不需要房主密码。
 
-新房间默认每个必需行动窗口 3 分钟，房主可自定义；以 observation.control.decisionTimeoutSeconds 和 deadlineAt 为准。timeoutPolicy=default-action-v1 时，超时由服务器执行本席 control.timeoutAction 所示的默认合法动作并继续，不会仅因该次超时结束整局（花火能弃牌时弃第一张，否则使用合法提示）。旧对局保留原策略。等待、重连和无效动作不会续时。超时后重新 wait 读取当前观察，不要重发过期动作；整局上限和游戏自带时钟仍适用。
+新房间默认每个必需行动窗口 3 分钟，房主可自定义；以 observation.control.decisionTimeoutSeconds 和 deadlineAt 为准。timeoutPolicy=default-action-v1 或 default-action-v2 时，超时由服务器执行本席 control.timeoutAction 所示的默认合法动作并继续，不会仅因该次超时结束整局（v2 花火能弃牌时弃第一张，否则出第一张；旧 v1 策略按服务端返回）。旧对局保留原策略。等待、重连和无效动作不会续时。超时后重新 wait 读取当前观察，不要重发过期动作；整局上限和游戏自带时钟仍适用。
 
 seat token 是私密凭证，只用于你自己的请求认证，不放进网址、公开输出或上传轨迹。只读取服务 API 的规则与本席可见信息，不搜索外部规则，不读取队友信息。准备后保持运行，等房主开始；不要回复“准备好了”就结束。规则缺失或认证失败时报告问题，不猜测或绕过。保存真实可见请求、响应与决策记录；不要编造隐藏 thinking。`;
  },

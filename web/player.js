@@ -110,7 +110,7 @@ function countdown(){
  $('turn-panel').classList.toggle('own-turn',own);$('turn-panel').classList.toggle('urgent',active&&remaining!==null&&remaining<=10);
  $('deadline').hidden=!active||remaining===null;$('deadline').textContent=active&&remaining!==null?`${String(Math.floor(remaining/60)).padStart(2,'0')}:${String(remaining%60).padStart(2,'0')}`:'';
  $('deadline').setAttribute('aria-label',active&&remaining!==null?`剩余 ${remaining} 秒`:'');
- $('timeout-policy').textContent=!active?'':remaining===0?o.control?.timeoutPolicy==='default-action-v1'?'时间到，等待服务器执行默认动作':'时间到，等待服务器裁决':remaining===null?'按游戏规则行动':o.control?.timeoutPolicy==='default-action-v1'?'超时后自动行动，游戏继续':'请在倒计时结束前完成行动';
+ $('timeout-policy').textContent=!active?'':remaining===0?['default-action-v1','default-action-v2'].includes(o.control?.timeoutPolicy)?'时间到，等待服务器执行默认动作':'时间到，等待服务器裁决':remaining===null?'按游戏规则行动':['default-action-v1','default-action-v2'].includes(o.control?.timeoutPolicy)?'超时后自动行动，游戏继续':'请在倒计时结束前完成行动';
  $('act').disabled=busy||!active||latestMode==='model'||['connecting','reconnecting','submitting','access-denied','room-closed'].includes(state.status)||remaining===0;updateCardAvailability();
 }
 $('join-form').onsubmit=async event=>{event.preventDefault();if(busy)return;busy=true;$('join-button').disabled=true;$('status').textContent='正在连接…';$('light').className='yellow';latestMode=$('mode').value;

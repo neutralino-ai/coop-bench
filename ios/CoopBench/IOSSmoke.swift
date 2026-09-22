@@ -46,6 +46,7 @@ import WebKit
             try await wait("replay-rendered",{try await js("return !document.querySelector('#detail').hidden && document.querySelectorAll('#player-grid .player-panel').length>0",app.host) as? Bool == true})
             try await snapshot("replay",app.host)
             try check(try await js("return !document.querySelector('.replay-deadline') && ![...document.querySelectorAll('.player-panel button')].some(b=>b.textContent.includes('跳到这一步'))",app.host) as? Bool == true,"completed-replay-hides-live-clock-and-jump-links")
+            try check(try await js("return getComputedStyle(document.querySelector('#connection-status')).display==='none' && !!document.querySelector('.topbar #connection-quick-check') && !!document.querySelector('#timeline-track #timeline') && document.querySelector('#focus-step-title').hidden",app.host) as? Bool == true,"compact-menu-connection-and-numbered-timeline")
             try check(try await js("const r=await window.coopTransport.request('/api/v1/rollouts');return r.ok",app.host) as? Bool == true,"owner-bridge-after-replay-hash")
             _=try await js("document.querySelector('#open-library').click();return true",app.host)
             _=try await js("document.querySelector('#open-create').click();document.querySelector('#create-players').value='2';document.querySelector('#create-name').value='iPhone 验收房间';return true",app.host)
