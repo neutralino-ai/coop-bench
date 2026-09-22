@@ -9,7 +9,8 @@ await mkdir('artifacts/ios',{recursive:true});
 // Network fault fixture only: drop one accepted action response, then verify
 // the native outbox retries the identical command with its original key.
 let dropped=false,retries=0,resumeCredential=null,immediateResumeVerified=false;const actions=new Map();
-const saveMetrics=()=>writeFile('artifacts/ios/network-fixture.json',JSON.stringify({droppedAcceptedResponse:dropped,identicalActionRetries:retries,immediateResumeVerified}));
+const roomRequests=[];
+const saveMetrics=()=>writeFile('artifacts/ios/network-fixture.json',JSON.stringify({droppedAcceptedResponse:dropped,identicalActionRetries:retries,immediateResumeVerified,roomRequests}));
 await saveMetrics();
 const proxy=createServer(async(req,res)=>{
  try{
@@ -36,6 +37,7 @@ const proxy=createServer(async(req,res)=>{
   }
   const response=await fetch(mock.baseUrl+req.url,{method:req.method,headers:{...(req.headers.authorization?{Authorization:req.headers.authorization}:{}),'Content-Type':'application/json',...(req.headers['x-room-host-token']?{'X-Room-Host-Token':req.headers['x-room-host-token']}:{}),...(req.headers['idempotency-key']?{'Idempotency-Key':req.headers['idempotency-key']}:{})},...(body.length?{body}:{}),redirect:'manual'});
   const bytes=Buffer.from(await response.arrayBuffer());
+  if(req.method==='POST'&&req.url==='/api/v1/rooms'){roomRequests.push({status:response.status,at:Date.now()});await saveMetrics();}
   if(req.url.endsWith('/actions')&&!dropped){dropped=true;await saveMetrics();res.destroy();return;}
   if(req.url.endsWith('/actions'))await saveMetrics();
   res.writeHead(response.status,{'Content-Type':response.headers.get('content-type')??'application/json'});res.end(bytes);

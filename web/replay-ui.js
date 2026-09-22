@@ -381,7 +381,7 @@
   }
   setInterval(updateCountdowns,250);
   let liveBusy=false;
-  const followButton=addButton('replay-follow','跟随最新',()=>{state.followLive=true;state.index=Math.max(0,state.rollout.frames.length-1);renderTimeline();renderFrame();void refreshReplay(true);});
+  const followButton=addButton('replay-follow','跟随最新',()=>{if(!state.rollout)return;state.followLive=true;state.index=Math.max(0,state.rollout.frames.length-1);renderTimeline();renderFrame();void refreshReplay(true);});
   function syncFollow(){const active=state.rollout?.summary.status==='active',behind=Math.max(0,(state.rollout?.frames.length??1)-1-state.index);followButton.hidden=!active;followButton.setAttribute('aria-pressed',String(Boolean(state.followLive)));followButton.textContent=state.followLive?'● 正在直播':behind?'回到直播 · +'+behind:'跟随最新';followButton.title=state.followLive?'自动跟随新动作；拖动时间条可回看历史':'回到最新局面，并自动跟随新动作';}
   const liveButton=addButton('replay-refresh','刷新进展',()=>void refreshReplay(true));
   async function refreshReplay(manual=false){

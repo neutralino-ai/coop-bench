@@ -58,7 +58,8 @@ import WebKit
             _=try await js("document.querySelector('#open-library').click();return true",app.host)
             _=try await js("document.querySelector('#open-create').click();document.querySelector('#create-players').value='2';document.querySelector('#create-name').value='iPhone 验收房间';return true",app.host)
             try await snapshot("create-room",app.host)
-            _=try await js("document.querySelector('#create-room').click();return true",app.host)
+            try check(try await js("return document.querySelector('#create-form').checkValidity() && !document.querySelector('#create-room').disabled && !!state.token && ['operator','member'].includes(state.identity?.role)",app.host) as? Bool == true,"room-create-ready")
+            try check(try await js("document.querySelector('#create-room').click();return document.querySelector('#create-room').disabled || document.querySelectorAll('.host-seat').length===2",app.host) as? Bool == true,"room-create-click-starts-request")
             try await wait("room-created-in-ui",{try await js("return document.querySelectorAll('.host-seat.vacant').length===2",app.host) as? Bool == true})
             let rooms=try await app.session.owner("/rooms")
             let room=(rooms["rooms"] as! [JSON]).first{$0["name"] as? String == "iPhone 验收房间"}!
@@ -163,7 +164,7 @@ import WebKit
             report=["ok":true,"checks":checks,"evidence":"iPhone simulator, synthetic HTTP/model fixture; no real game engine or model"]
         } catch {
             report=["ok":false,"checks":checks,"error":publicFailure(error).record]
-            if let ui = try? await js("return {view:document.body.dataset.view,loading:document.querySelector('#replay-loading-detail')?.textContent,connection:document.querySelector('#connection-status')?.dataset.state,message:document.querySelector('#message')?.textContent}",app.host) { report["ui"]=ui }
+            if let ui = try? await js("return {view:document.body.dataset.view,loading:document.querySelector('#replay-loading-detail')?.textContent,connection:document.querySelector('#connection-status')?.dataset.state,message:document.querySelector('#message')?.textContent,createDisabled:document.querySelector('#create-room')?.disabled,createRole:state.identity?.role,createInputs:[...document.querySelectorAll('#create-form input,#create-form select')].map(e=>({id:e.id,valid:e.checkValidity(),message:e.validationMessage})),seats:document.querySelectorAll('.host-seat').length}",app.host) { report["ui"]=ui }
         }
         try? jsonData(report).write(to:directory.appendingPathComponent("ios-smoke.json"),options:.atomic)
     }

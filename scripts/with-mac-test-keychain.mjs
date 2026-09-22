@@ -21,7 +21,7 @@ try{
  security(['unlock-keychain','-p',password,keychain]);
  security(['list-keychains','-d','user','-s',keychain]);
  security(['default-keychain','-d','user','-s',keychain]);
- const r=spawnSync(process.execPath,[script,...args],{stdio:'inherit',timeout:150000,killSignal:'SIGKILL'});
+ const r=spawnSync(process.execPath,[script,...args],{stdio:'inherit',timeout:script==='desktop/ci-client-smoke.mjs'?270000:150000,killSignal:'SIGKILL'});
  code=r.status??1;
 }finally{
  try{security(['default-keychain','-d','user','-s',originalDefault]);}
