@@ -109,9 +109,11 @@ export async function runPlayerSmoke({window,directory}) {
     await js("document.querySelector('.card[data-player=p1][data-index=\"4\"]').click();document.querySelector('[data-choice=discard]').click();document.querySelector('#decision-reason').value='合成理由：弃掉第五张牌。';document.querySelector('#confirm-card-action').click()");await until("!document.querySelector('#act').disabled");
     assert.deepEqual(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.action,{type:'discard',index:4});assert.equal(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.decisionSummary,'合成理由：弃掉第五张牌。');assert.equal(await js("document.querySelector('#decision-reason').value"),'');checks.push('direct card positions display 1–5 and play or discard the fifth card with protocol index 4');
     await js("document.querySelector('.card[data-player=p1][data-index=\"0\"]').click();document.querySelector('[data-choice=play]').click()");
-    await js("window.coopPlayer.command('status').then(s=>render({...s,clockOffsetMs:200000}))");
-    assert.equal(await js("document.querySelector('#confirm-card-action').disabled"),true);
-    assert.equal(await js("document.querySelector('#deadline').textContent"),'00:00');assert.match(await js("document.querySelector('#timeout-policy').textContent"),/等待服务器执行默认动作/);
+    // Read the synthetic clock render in the same renderer task. An ordinary
+    // runtime push between separate IPC reads can restore the real deadline.
+    const expired=await js("window.coopPlayer.command('status').then(s=>{render({...s,clockOffsetMs:200000});return {disabled:document.querySelector('#confirm-card-action').disabled,deadline:document.querySelector('#deadline').textContent,policy:document.querySelector('#timeout-policy').textContent};})");
+    assert.equal(expired.disabled,true);
+    assert.equal(expired.deadline,'00:00');assert.match(expired.policy,/等待服务器执行默认动作/);
     const offsetDeadline=await js("window.coopPlayer.command('status').then(s=>{render({...s,observation:{...s.observation,control:{...s.observation.control,deadlineAt:Date.now()+90000+(s.clockOffsetMs??0)}},clockOffsetMs:(s.clockOffsetMs??0)+60000});return document.querySelector('#deadline').textContent;})");
     assert.match(offsetDeadline,/^00:(29|30)$/);
     const noDeadline=await js("window.coopPlayer.command('status').then(s=>{render({...s,observation:{...s.observation,control:{...s.observation.control,deadlineAt:null}}});return {hidden:document.querySelector('#deadline').hidden,policy:document.querySelector('#timeout-policy').textContent};})");
