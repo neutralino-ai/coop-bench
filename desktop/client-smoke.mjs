@@ -212,7 +212,10 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
     document.getElementById('open-create').click();
     document.getElementById('create-participation').value='agent';document.getElementById('create-participation').dispatchEvent(new Event('change'));
     const game = document.getElementById('create-game'); game.value = 'hanabi'; game.dispatchEvent(new Event('change'));
-    document.getElementById('create-players').value = '3'; document.getElementById('create-form').requestSubmit();
+    document.getElementById('create-players').value = '3';
+  });
+  await capture('create-room.png');
+  await run(() => {document.getElementById('create-form').requestSubmit();
   });
   await wait(() => run(() => document.getElementById('seat-list').querySelectorAll('button').length === 3), 'Create game/seat configs failed.');
   check(await run(() => document.getElementById('seat-list').textContent.includes('p1')), 'three private player connection configs rendered');

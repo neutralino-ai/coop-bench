@@ -47,7 +47,9 @@ import WebKit
             try await snapshot("replay",app.host)
             try check(try await js("const r=await window.coopTransport.request('/api/v1/rollouts');return r.ok",app.host) as? Bool == true,"owner-bridge-after-replay-hash")
             _=try await js("document.querySelector('#open-library').click();return true",app.host)
-            _=try await js("document.querySelector('#open-create').click();document.querySelector('#create-players').value='2';document.querySelector('#create-name').value='iPhone 验收房间';document.querySelector('#create-room').click();return true",app.host)
+            _=try await js("document.querySelector('#open-create').click();document.querySelector('#create-players').value='2';document.querySelector('#create-name').value='iPhone 验收房间';return true",app.host)
+            try await snapshot("create-room",app.host)
+            _=try await js("document.querySelector('#create-room').click();return true",app.host)
             try await wait("room-created-in-ui",{try await js("return document.querySelectorAll('.host-seat.vacant').length===2",app.host) as? Bool == true})
             let rooms=try await app.session.owner("/rooms")
             let room=(rooms["rooms"] as! [JSON]).first{$0["name"] as? String == "iPhone 验收房间"}!
