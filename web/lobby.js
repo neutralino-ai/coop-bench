@@ -5,7 +5,7 @@
  const blocks=node('div','home-blocks'),rooms=node('section','home-block rooms-block'),replays=node('section','home-block replay-block');replays.id='home-replays';
  const roomHeading=node('div','section-heading');roomHeading.append(node('h2','','可加入的房间'));
  const refresh=node('button','button subtle','刷新');refresh.id='refresh-lobby';refresh.type='button';roomHeading.append(refresh);
- const controls=node('div','lobby-controls'),resume=node('button','button subtle','返回我的对局'),manage=node('button','button subtle','管理房间');resume.id='resume-player';resume.type='button';manage.id='manage-rooms';manage.type='button';manage.onclick=()=>{$('create-dialog').showModal();$('list-rooms').click();};controls.append(resume,manage);
+ const controls=node('div','lobby-controls');
  const status=node('p','small muted');status.id='lobby-status';status.setAttribute('role','status');
  const list=node('div','lobby-rooms');list.id='joinable-rooms';rooms.append(roomHeading,status,list,controls);blocks.append(rooms,replays);home.append(heading,blocks);document.querySelector('.workspace').prepend(home);
  const personal=node('div','home-blocks personal-rooms'),created=node('section','home-block'),participating=node('section','home-block'),createdList=node('div','lobby-rooms'),participatingList=node('div','lobby-rooms');
@@ -21,7 +21,7 @@
  let serial=0,loading=false,joining=false,selectedRoom=null;
  const issue=error=>error.status===404?'当前服务器尚未提供大厅功能，请更新服务端后重试。':error.message;
  function reset(){serial++;loading=false;joining=false;selectedRoom=null;list.replaceChildren();createdList.replaceChildren();participatingList.replaceChildren();status.textContent='';token.value='';box.close();document.body.dataset.view='login';}
- function showHome(){if(!state.token)return;message('');stopPlayback();detailController?.abort();clearInterval(detailTimer);state.detailRequest++;document.body.dataset.audit='false';document.body.dataset.view='home';$('detail').hidden=true;$('replay-loading').hidden=true;history.replaceState(null,'',location.pathname);manage.hidden=state.identity?.role==='auditor';void load();if(incoming&&incoming.apiUrl===apiUrl){choose(incoming);incoming=null;}}
+ function showHome(){if(!state.token)return;message('');stopPlayback();detailController?.abort();clearInterval(detailTimer);state.detailRequest++;document.body.dataset.audit='false';document.body.dataset.view='home';$('detail').hidden=true;$('replay-loading').hidden=true;history.replaceState(null,'',location.pathname);void load();if(incoming&&incoming.apiUrl===apiUrl){choose(incoming);incoming=null;}}
  function choose(room){selectedRoom=room;title.textContent=room.name||'加入房间';roomInput.value=room.roomId??'';token.value='';token.type='password';joinStatus.textContent='';if(!box.open)box.showModal();name.focus();}
  async function openPlayer(input){
   if(joining)return;if(!transport.openPlayer){joinStatus.textContent='请使用更新后的桌面客户端加入房间。';return;}
@@ -32,7 +32,7 @@
  }
  form.onsubmit=event=>{event.preventDefault();if(form.reportValidity())void openPlayer({roomId:roomInput.value.trim(),name:name.value.trim(),seatToken:token.value});};
  box.addEventListener('close',()=>{token.value='';token.type='password';});
- function renderBusy(){refresh.disabled=loading;resume.disabled=joining;submit.disabled=joining;for(const button of list.querySelectorAll('button'))button.disabled=joining;}
+ function renderBusy(){refresh.disabled=loading;submit.disabled=joining;for(const button of list.querySelectorAll('button'))button.disabled=joining;}
  async function load(){
   if(loading||!state.token)return;loading=true;const session=state.session,version=++serial;renderBusy();
   try{
@@ -60,7 +60,7 @@
  const byId=node('button','button subtle','输入房间 ID 加入');byId.id='join-by-id';byId.type='button';byId.onclick=()=>choose({});controls.prepend(byId);
  let incoming=null;function acceptLink(value){try{const u=new URL(value),q=new URLSearchParams(u.hash.slice(1));if(u.protocol!=='coopbench:'||u.hostname!=='join'||!/^[a-f0-9-]{36}$/.test(q.get('room')??''))return;const target=new URL(q.get('api'));if(target.protocol!=='https:'&&!(target.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(target.hostname)))return;incoming={roomId:q.get('room'),apiUrl:target.origin+'/api/v1'};if(!state.token){$('api-address').value=incoming.apiUrl;message('收到房间邀请，登录后输入 seat token 入席。');}else if(incoming.apiUrl===apiUrl){choose(incoming);incoming=null;}else message('邀请属于另一个服务器，请先切换登录地址。',true);}catch{}}
  window.coopDesktop?.onInvitation?.(acceptLink);window.coopDesktop?.incomingInvitation?.().then(acceptLink);
- refresh.onclick=()=>void load();resume.onclick=()=>void openPlayer({});
+ refresh.onclick=()=>void load();
  window.CoopLobby={home:showHome,open:showHome,join:choose,refresh:load,clear:reset};
  setInterval(()=>{if(state.token&&document.body.dataset.view==='home'&&!document.hidden&&!joining)void load();},5000);
 })();
