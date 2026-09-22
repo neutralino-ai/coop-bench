@@ -2,6 +2,11 @@ name: Remote clients
 
 on:
   workflow_dispatch:
+    inputs:
+      apple_signing:
+        description: Sign and notarize macOS, and upload iOS to TestFlight
+        type: boolean
+        default: false
   push:
     tags: ['v*']
   pull_request:
@@ -17,7 +22,7 @@ jobs:
   desktop:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +56,7 @@ jobs:
             arch: arm64
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      SIGN_APPLE: ${{ github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v') || inputs.apple_signing == true) }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -76,19 +82,46 @@ jobs:
       - name: Require client acceptance report
         run: node -e "const r=require('./artifacts/ci-client-smoke/client-smoke-result.json');if(!r.ok)throw Error('Client smoke failed');console.log(r.checks.length+' mock API/UI checks passed')"
       - name: Package management client
+        if: runner.os != 'macOS' || env.SIGN_APPLE != 'true'
         run: pnpm exec electron-builder --config build/electron-builder.json ${{ matrix.build-args }} --publish never
+      - name: Sign and notarize management client
+        if: runner.os == 'macOS' && env.SIGN_APPLE == 'true'
+        env:
+          MAC_DEVELOPER_ID_P12: ${{ secrets.MAC_DEVELOPER_ID_P12 }}
+          MAC_DEVELOPER_ID_PASSWORD: ${{ secrets.MAC_DEVELOPER_ID_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/package-desktop.mjs management ${{ matrix.build-args }}
       - name: Audit management package file boundary
         run: node scripts/verify-package.mjs "${{ matrix.asar }}"
       - name: Verify actual packaged management client with mock API
         timeout-minutes: 3
         run: node desktop/ci-client-smoke.mjs "${{ matrix.executable }}" artifacts/ci-packaged-smoke "${{ matrix.arch }}"
       - name: Package Player client
+        if: runner.os != 'macOS' || env.SIGN_APPLE != 'true'
         run: pnpm exec electron-builder --config build/player-electron-builder.json ${{ matrix.build-args }} --publish never
+      - name: Sign and notarize Player client
+        if: runner.os == 'macOS' && env.SIGN_APPLE == 'true'
+        env:
+          MAC_DEVELOPER_ID_P12: ${{ secrets.MAC_DEVELOPER_ID_P12 }}
+          MAC_DEVELOPER_ID_PASSWORD: ${{ secrets.MAC_DEVELOPER_ID_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/package-desktop.mjs player ${{ matrix.build-args }}
       - name: Audit Player package file boundary
         run: node scripts/verify-package.mjs "${{ matrix.player-asar }}"
       - name: Verify actual packaged Player with mock API
         timeout-minutes: 3
         run: node desktop/ci-player-smoke.mjs "${{ matrix.player-executable }}" artifacts/ci-player-smoke "${{ matrix.arch }}"
+      - name: Verify signatures and Gatekeeper on final macOS packages
+        if: runner.os == 'macOS' && env.SIGN_APPLE == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/verify-mac-signing.mjs
       - name: Upload remote-only installers
         uses: actions/upload-artifact@v6
         with:
@@ -102,6 +135,13 @@ jobs:
             release-player/*.exe
             release-player/*.dmg
             release-player/*.zip
+      - name: Upload Apple signing evidence
+        if: always() && runner.os == 'macOS' && env.SIGN_APPLE == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: apple-signing-${{ matrix.artifact }}
+          path: artifacts/apple-signing/*.json
+          retention-days: 30
       - name: Upload synthetic client evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -122,11 +162,37 @@ jobs:
   ios:
     name: iOS native and simulator acceptance
     uses: ./.github/workflows/ios-build.yml
+    with:
+      apple_signing: ${{ github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v') || inputs.apple_signing == true) }}
+    secrets: inherit
+
+  testflight:
+    name: Upload verified iOS build to TestFlight
+    if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v') || inputs.apple_signing == true)
+    needs: [desktop, ios]
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          name: ios-signed-ipa
+          path: artifacts/ios-export
+      - name: Upload with App Store Connect API key
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: bash scripts/upload-testflight.sh
 
   publish:
     name: Publish verified remote clients
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [desktop, ios]
+    needs: [desktop, ios, testflight]
     runs-on: ubuntu-latest
     permissions:
       contents: write

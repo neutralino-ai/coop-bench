@@ -1,6 +1,19 @@
 name: iOS client
 on:
   workflow_call:
+    inputs:
+      apple_signing:
+        type: boolean
+        default: false
+    secrets:
+      IOS_DISTRIBUTION_P12:
+        required: false
+      IOS_DISTRIBUTION_PASSWORD:
+        required: false
+      IOS_APP_STORE_PROFILE:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
   workflow_dispatch:
   push:
     branches: [main, codex/ios-client]
@@ -17,9 +30,11 @@ jobs:
     runs-on: macos-26
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -83,6 +98,28 @@ jobs:
         run: |
           version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')
           zip -r "artifacts/Coop-Bench-${version}-iOS-Xcode.zip" ios/CoopBench ios/Tests ios/Web ios/CoopBench.xcodeproj ios/README.md -x '*xcuserdata*'
+      - name: Archive and export signed iOS app
+        if: inputs.apple_signing == true && github.event_name != 'pull_request'
+        env:
+          IOS_DISTRIBUTION_P12: ${{ secrets.IOS_DISTRIBUTION_P12 }}
+          IOS_DISTRIBUTION_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_PASSWORD }}
+          IOS_APP_STORE_PROFILE: ${{ secrets.IOS_APP_STORE_PROFILE }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/sign-ios.sh
+      - uses: actions/upload-artifact@v6
+        if: inputs.apple_signing == true && github.event_name != 'pull_request'
+        with:
+          name: ios-signed-ipa
+          path: artifacts/ios-export/*.ipa
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v6
+        if: inputs.apple_signing == true && github.event_name != 'pull_request'
+        with:
+          name: apple-signing-ios
+          path: artifacts/apple-signing/ios-verification.json
+          if-no-files-found: error
+          retention-days: 30
       - uses: actions/upload-artifact@v6
         with:
           name: ios-xcode-project
