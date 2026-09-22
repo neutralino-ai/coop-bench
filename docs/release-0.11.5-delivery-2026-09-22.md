@@ -12,4 +12,10 @@
 
 实体 iPhone/Mac 安装和使用仍须设备验收。签名身份为仓库已有维护者 Apple 配置，材料仅在 Actions Secrets；公开工程不含签名密钥、私有后端或生产数据。Xcode ZIP 不称为签名 IPA。
 
-最终0.11.5流水线及下载、TestFlight结果在完成后补充。
+最终 0.11.5 提交/tag：`3eb50a04f17e5bfa0583d79a74ec5e75e8f64547`，正式签名流水线 [35698630310](https://github.com/neutralino-ai/coop-bench/actions/runs/35698630310)。本机最终0.11.5包内126项通过，1280×800下五张折叠卡可同时显示；[公开 Release](https://github.com/neutralino-ai/coop-bench/releases/tag/v0.11.5) 于2026-09-22 07:34:53 UTC发布，12个附件含同版Xcode工程。旧0.10.1更新器实际识别新版、下载111542919字节Windows安装包并校验SHA-256；iOS工程180739字节也实际下载校验通过。
+
+已读取最终 CI 证据：Mac ARM 管理端126项/Player25项，签名、公证票据及最终ZIP/DMG的Gatekeeper全部accepted；iOS模拟器68项，网络夹具确认 droppedAcceptedResponse=true、identicalActionRetries=1。Windows/Mac的1280×800及iPhone截图已检查。Apple签名身份为维护者 Xuefeng Ding 的既有配置。
+
+最终四平台、TestFlight上传和发布流水线35698630310全成功。Intel和ARM管理端/Player签名、公证、票据及最终包Gatekeeper均通过；iOS签名包为0.11.5（27.1）。Apple只读复查：processingState=VALID，internalBuildState=IN_BETA_TESTING，externalBuildState=READY_FOR_BETA_SUBMISSION，已有内部测试分发可用，未声称外部测试审核已通过。build id为2e15a768-5255-4f93-9933-d3409aa70180。实体设备仍未验收。
+
+本机证据位于忽略目录 artifacts/v0115-packaged、v0115-ci-mac-arm、v0115-ci-ios、v0115-ci-signing-arm、v0115-ci-signing-intel、v0115-ci-signing-ios、v0115-release-verification。服务端新策略独立完成空闲部署，旧34935与历史数据保持；本客户端公开仓库不含服务端部署材料。

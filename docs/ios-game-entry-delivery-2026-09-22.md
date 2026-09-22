@@ -21,4 +21,4 @@
 
 候选提交 fc1fc47，独立工作树 client/artifacts/ios-game-entry，分支 codex/ios-game-entry-fix。
 四平台签名及 TestFlight 候选 CI：https://github.com/neutralino-ai/coop-bench/actions/runs/35694004562。
-0.11.2 是中间候选，未作为正式版本发布；合并后以 0.11.3 正式签名流水线 35696757070 交付。0.11.3 标签流水线后来按新增 UI 要求取消，最终以 0.11.4 交付；见 [交付记录](release-0.11.4-delivery-2026-09-22.md)。
+0.11.2 是中间候选，未作为正式版本发布；合并后以 0.11.3 正式签名流水线 35696757070 交付。0.11.3 标签流水线后来按新增 UI 要求取消，最终以 0.11.5 交付；见 [交付记录](release-0.11.5-delivery-2026-09-22.md)。
