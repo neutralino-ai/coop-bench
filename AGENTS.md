@@ -1,10 +1,12 @@
 # Coop Bench 公开客户端接手指南
 
+**2026-09-22 / 0.10.2 已签名发布**：macOS Intel/Apple Silicon 的管理端和 Player 均为 Developer ID 签名、公证并附票据，最终 ZIP/DMG Gatekeeper 全通过。版本提交 `2be7407`，四平台及 TestFlight 上传 CI `35683963977` 成功；GitHub 12 个附件与旧版更新器下载校验通过。iOS `0.10.2 (17.1)` 已经 Apple 处理，内部 TestFlight 可测，仅持有人获邀；后续安装/更新优先 TestFlight，无需自己的 Mac。真机安装与麦克风仍待用户验收。详见 [交付记录](docs/apple-signing-delivery-2026-09-22.md)。
+
 **2026-09-22 / 0.10.1 已正式发布**：“我创建的”仅未结束房间且管理按钮在右；审查统一进回放，进行中回放、彩色完整录制轨迹、中文 Agent 理由、人类可选理由及 iOS 语音草稿已实现。发布提交 `895201e`，四平台及发布 CI `35675320034` 全通过；0.10.0 更新器已实际发现/下载校验，12 个附件含 iOS 同版工程。详见 [交付记录](docs/desktop-0.10.1-delivery-2026-09-22.md)。真机麦克风未验收。
 
 **2026-09-21 / 0.10.0 已正式发布**：账号归属、房主 token、人类原席恢复、Agent 状态/恢复与配套服务已上线；main/tag 版本提交 `848653a`。正式四平台及发布 CI `35602174531` 全成功，12个附件含同版iOS工程。0.9.7更新器实际发现新版、Windows完整下载校验通过，iOS工程也已下载校验；不等于实体iPhone安装验证。详见 [交付记录](docs/desktop-0.10.0-delivery-2026-09-21.md)。
 
-**发布要求（2026-09-21）**：用户要求今后每次发布同步带上 iOS。统一版本号；桌面三平台与 iOS 原生/模拟器验收全部通过后发布，Release 必须附同版本 Xcode 工程包。iOS 当前沿用用户选择的 Mac / Xcode 自签安装，不得把工程包宣称为已签名 IPA 或真机安装验证。
+**发布要求（2026-09-22 更新）**：每次发布同步 iOS、统一版本号；桌面三平台与 iOS 原生/模拟器验收全部通过后发布，Release 必须附同版本 Xcode 工程包。macOS 必须签名、公证并通过最终包 Gatekeeper 验证；iOS 签名导出并上传 TestFlight。Apple 上传成功、处理完成、测试者可用与真机验收是不同证据；工程 ZIP 不等于 IPA。签名材料只放仓库 Actions Secrets，公开下载无需嵌入下载密钥。
 
 **2026-09-21 / 0.9.6 已发布**：人类页面点牌操作、历史与提示知识、输入审计 UI、圆点计数和通知自动消失。三平台 CI 与公开 Release 成功，旧版更新器识别及 Windows 下载校验通过；配套审计后端因活动对局尚未切换。见 [交付记录](docs/desktop-0.9.6-delivery-2026-09-21.md)。
 **iOS（2026-09-21）**：用户选择自己的 Mac / Xcode 安装。`ios/` 为 SwiftUI / WKWebView 原生客户端，共享网页；源码分支 `codex/ios-client`。Xcode 26.3 原生测试、36 项 iPhone 模拟器流程及未签名真机 Release 编译已通过；实际 iPhone 安装仍未验证。工程下载、准确提交和验证边界见 `docs/ios-client-2026-09-21.md`，安装步骤见 `ios/README.md`。运行器及 Keychain 在 Swift 内，不能直接移入 Node/Electron 模块；玩家原生桥接只允许本席操作。
