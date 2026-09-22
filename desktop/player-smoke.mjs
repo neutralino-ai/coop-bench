@@ -112,10 +112,10 @@ export async function runPlayerSmoke({window,directory}) {
     await js("window.coopPlayer.command('status').then(s=>render({...s,clockOffsetMs:200000}))");
     assert.equal(await js("document.querySelector('#confirm-card-action').disabled"),true);
     assert.equal(await js("document.querySelector('#deadline').textContent"),'00:00');assert.match(await js("document.querySelector('#timeout-policy').textContent"),/等待服务器执行默认动作/);
-    await js("window.coopPlayer.command('status').then(s=>render({...s,observation:{...s.observation,control:{...s.observation.control,deadlineAt:Date.now()+90000+(s.clockOffsetMs??0)}},clockOffsetMs:(s.clockOffsetMs??0)+60000}))");
-    assert.match(await js("document.querySelector('#deadline').textContent"),/^00:(29|30)$/);
-    await js("window.coopPlayer.command('status').then(s=>render({...s,observation:{...s.observation,control:{...s.observation.control,deadlineAt:null}}}))");
-    assert.equal(await js("document.querySelector('#deadline').hidden"),true);assert.equal(await js("document.querySelector('#timeout-policy').textContent"),'按游戏规则行动');
+    const offsetDeadline=await js("window.coopPlayer.command('status').then(s=>{render({...s,observation:{...s.observation,control:{...s.observation.control,deadlineAt:Date.now()+90000+(s.clockOffsetMs??0)}},clockOffsetMs:(s.clockOffsetMs??0)+60000});return document.querySelector('#deadline').textContent;})");
+    assert.match(offsetDeadline,/^00:(29|30)$/);
+    const noDeadline=await js("window.coopPlayer.command('status').then(s=>{render({...s,observation:{...s.observation,control:{...s.observation.control,deadlineAt:null}}});return {hidden:document.querySelector('#deadline').hidden,policy:document.querySelector('#timeout-policy').textContent};})");
+    assert.equal(noDeadline.hidden,true);assert.equal(noDeadline.policy,'按游戏规则行动');
     checks.push('countdown honors server clock offset, expires at zero and never invents an absent deadline');
     await js("window.coopPlayer.command('status').then(render)");
     await call(`/episodes/${snapshot.room.episodeId}/truncate`,undefined,{reason:'synthetic-player-ui-test'});
