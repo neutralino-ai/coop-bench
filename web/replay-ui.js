@@ -331,7 +331,7 @@
       const blocks=[...recorded,...savedReasons].sort((a,b)=>(typeof b.at==='number'?b.at:Date.parse(b.at)||0)-(typeof a.at==='number'?a.at:Date.parse(a.at)||0)||b.sequence-a.sequence);
       const limit=status.displayLimit??80;
       status.nodes??=new Map();
-      for(const block of blocks.slice(0,limit)){let item=status.nodes.get(block.id);if(!item){item=traceBlock(block);status.nodes.set(block.id,item);}list.append(item);}
+      for(const block of blocks.slice(0,limit)){const signature=JSON.stringify(block);let saved=status.nodes.get(block.id);if(saved?.signature!==signature){saved={signature,item:traceBlock(block)};status.nodes.set(block.id,saved);}list.append(saved.item);}
       if(blocks.length>limit)list.append(button(`展开更早的 ${Math.min(80,blocks.length-limit)} 个记录块`,()=>{status.displayLimit=limit+80;render();}));
       decision.append(list);
     }else{

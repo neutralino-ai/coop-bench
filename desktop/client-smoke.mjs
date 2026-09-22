@@ -298,6 +298,13 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   const picture=await player.window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});writeFileSync(join(dataDir,'client-human-game.png'),picture.toPNG());
   const episode=player.runtime.room.episodeId,playerId=player.runtime.room.playerId;
   check((await fixture.call(`/rollouts/${episode}`)).summary.name===humanRoom.name,'started room retains its name in saved records');
+  await run(()=>document.getElementById('create-dialog').close());
+  await run(id=>{void selectEpisode(id);},episode);
+  await wait(()=>run(()=>document.getElementById('player-grid').dataset.messages==='ready'&&!document.getElementById('detail').hidden),'Live replay did not open');
+  check(await run(()=>state.rollout.summary.status==='active'&&state.index===state.rollout.frames.length-1),'ongoing replay opens at the latest recorded step');
+  await run(()=>selectFrame(0));await run(()=>document.getElementById('replay-refresh').click());
+  await wait(()=>run(()=>!document.getElementById('replay-refresh').disabled),'Live replay refresh did not finish');
+  check(await run(()=>state.index===0&&state.rollout.summary.status==='active'),'refreshing an ongoing replay keeps the selected historical step');
   await seatJs("document.querySelector('#disconnect').click()");await wait(()=>Promise.resolve(!player.runtime),'Disconnect did not finish.');
   await run(async roomId=>{try{await window.coopTransport.openPlayer({roomId,name:'Mistyped key',seatToken:'z'.repeat(43)});throw Error('Invalid active-seat key unexpectedly accepted');}catch(error){if(error.message==='Invalid active-seat key unexpectedly accepted')throw error;}},humanRoom.roomId);
   check(player.credentials.playerToken===issuedFirst,'rejected pasted key preserves the previous recoverable seat');
@@ -393,6 +400,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await run(()=>window.CoopLobby.home());
   await wait(()=>run(id=>!document.querySelector(`#my-created-rooms [data-room-id="${id}"]`),agentRoomId),'Ended created room remained in the active room list');
   check(await run(()=>[...document.querySelectorAll('#my-created-rooms .personal-room')].every(el=>{const button=el.querySelector('button'),row=el.querySelector('.section-heading');return button.getBoundingClientRect().left>=row.getBoundingClientRect().right-1;})),'created rooms exclude finished games and place management buttons on the right');
+  await capture('client-owned-room-rows.png');
   checks.push('packaged host prompt, built-in model harness, token copy, kick, revoked key, rejoin, ready and action verified');
   if (remote.store.encryption.isEncryptionAvailable()) {
     const sessionKey=remote.token;await remote.connect({ apiUrl: fixture.apiUrl, token: sessionKey, remember: true });
