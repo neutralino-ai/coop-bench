@@ -43,6 +43,7 @@ async function markConnectionFailure(error,{status=0,session=state.session,ident
  setConnectionStatus(state.connection.verifiedUrl&&sameApi(apiUrl,state.connection.verifiedUrl)?'disconnected':'failed',status>=500?`后端暂时不可用（HTTP ${status}）。${reason}`:reason,{lastCheckedAt:now});
 }
 async function request(path,body,options={}){
+ const requestStartedAt=Date.now();
  const session=state.session,timeout=AbortSignal.timeout(20000),signal=options.signal?AbortSignal.any([timeout,options.signal]):timeout;let response,data;
  try{response=await transport.request('/api/v1'+path,{signal,method:body?'POST':'GET',...(body?{body}:{})});}
  catch(error){if(options.signal?.aborted)throw new DOMException('已取消旧请求。','AbortError');if(timeout.aborted&&session===state.session)error=Object.assign(Error('连接超时，尚未确认服务器响应；请检查 API 地址与网络。'),{connectionTimeout:true});await markConnectionFailure(error,{session,status:Number(error?.status??0),identityCheck:path==='/identity'});throw error;}
@@ -53,6 +54,10 @@ async function request(path,body,options={}){
  if(!response.ok){const error=Object.assign(Error(`${data.error?.code??data.code??response.status}：${data.error?.message??data.message??'请求被服务器拒绝'}`),{status:response.status});await markConnectionFailure(error,{status:response.status,session,identityCheck:path==='/identity'});throw error;}
  if(path==='/identity'){try{markIdentityVerified(data);}catch(error){await markConnectionFailure(error,{session});throw error;}}
  else if(state.token&&state.connection.phase==='disconnected'&&!state.connectionCheck)void checkConnection();
+ if(/^\/rollouts\/[^/?]+$/.test(path)){
+  const serverTime=Date.parse(response.headers.get('date')??'');
+  state.replayClock={session,offset:Number.isFinite(serverTime)?serverTime-(requestStartedAt+Date.now())/2:0};
+ }
  return data;
 }
 async function checkConnection(manual=false){

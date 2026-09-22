@@ -38,6 +38,34 @@ test('missing and stale historic evidence is not filled by future cards or index
  const conflict:any=fixture();conflict.frames[0].views.p3={view:{hands:{p1:[{...hidden,color:'red',value:5}]}}};
  assert.equal(R.snapshot(conflict,1).players[0].actual[0].value,undefined);
 });
+
+test('live head shows the next required actor and post-action cards; historical playback stays before the selected action',()=>{
+ const data:any=fixture();data.summary.status='active';
+ data.frames[1].views.p1.control={required:false,deadlineAt:12000};
+ data.frames[1].views.p2.control={required:true,deadlineAt:12000,episodeDeadlineAt:20000};
+ const live=R.snapshot(data,1);
+ assert.equal(live.live,true);assert.deepEqual(Array.from(live.actors),['p2']);
+ assert.equal(live.players[0].actual[0].id,'drawn');assert.equal(live.players[0].exact,false);
+ assert.equal(R.remainingMs(live.views.p2,10000),2000);
+ assert.equal(R.remainingMs(live.views.p2,13000),0);
+ assert.equal(R.remainingMs(live.views.p1,10000),null);
+ assert.equal(R.remainingMs({control:{required:true}},10000),null);
+ assert.equal(R.remainingMs({control:{required:true,deadlineAt:12000,episodeDeadlineAt:11000}},10000),1000);
+ data.frames.push({...data.frames[1],seq:2,playerId:'p2'});
+ const history=R.snapshot(data,1);assert.equal(history.live,false);assert.deepEqual(Array.from(history.actors),['p1']);assert.equal(history.players[0].actual[0].id,'old-card');
+ data.frames.pop();data.summary.status='completed';
+ const ended=R.snapshot(data,1);assert.equal(ended.live,false);assert.deepEqual(Array.from(ended.actors),['p1']);assert.equal(ended.players[0].actual[0].id,'old-card');
+});
+
+test('live replay highlights every required seat and never guesses a turn from the last actor',()=>{
+ const data:any=fixture();data.summary.status='active';
+ for(const view of Object.values(data.frames[1].views) as any[])view.control={required:true};
+ assert.deepEqual(Array.from(R.snapshot(data,1).actors),['p1','p2']);
+ for(const view of Object.values(data.frames[1].views) as any[])view.control.required=false;
+ assert.deepEqual(Array.from(R.snapshot(data,1).actors),[]);
+ for(const view of Object.values(data.frames[1].views) as any[]){delete view.control;view.view.current='p2';}
+ assert.deepEqual(Array.from(R.snapshot(data,1).actors),['p2']);
+});
 test('last decision is bounded by playback position and not a later turn',()=>{
  const data:any=fixture();data.frames.push({...data.frames[1],seq:2,playerId:'p2',decisionSummary:'future'});
  assert.equal(R.snapshot(data,1).players[1].decision,null);

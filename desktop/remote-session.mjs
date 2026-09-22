@@ -187,7 +187,9 @@ export class RemoteSession {
       // Retry-After is required by the renderer's bounded GET backoff. Dropping
       // it made fast audit clients retry downloads before their budget refilled.
       const retryAfter=response.headers.get('retry-after');
+      const serverDate=response.headers.get('date');
       return { status: response.status, headers: { 'content-type': type, 'content-length': String(size),
+        ...(serverDate&&Number.isFinite(Date.parse(serverDate))?{'date':serverDate}:{}),
         ...(response.status===429&&retryAfter&&retryAfter.length<=128?{'retry-after':retryAfter}:{}) }, bytes };
     } catch (error) {
       if (timedOut) throw new ClientConnectionError('TIMEOUT', 'API 请求超时，请检查网络和服务器状态；请求不会自动重试。');

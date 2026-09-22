@@ -63,7 +63,9 @@ test('real HTTP transport authenticates private routes, omits tokens for public 
   assert.equal('token' in descriptor,false);assert.equal('token' in descriptor.identity,false);
   descriptor.identity.role='auditor';assert.equal(session.descriptor().identity.role,'operator');
   assert.equal(JSON.stringify(store.value).includes(TOKEN_A),false);
-  assert.equal(decode(await session.request(request('private'))).total,0);
+  const privateResponse=await session.request(request('private'));
+  assert.equal(decode(privateResponse).total,0);
+  assert.ok(Number.isFinite(Date.parse(privateResponse.headers.date)),'server clock is preserved for live replay deadlines');
   await session.request(request('public-again','/api/v1/games'));
   assert.ok(f.requests.filter(r=>/\/health|\/games/.test(r.path)).every(r=>r.authorization===undefined));
   assert.equal(f.requests.find(r=>r.path==='/api/v1/identity').authorization,`Bearer ${TOKEN_A}`);

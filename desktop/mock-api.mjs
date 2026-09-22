@@ -288,6 +288,13 @@ export async function startMockApi({role='operator'}={}) {
   const baseUrl = `http://127.0.0.1:${server.address().port}`, apiUrl = baseUrl + '/api/v1';
   return { backend: 'mock', baseUrl, apiUrl, adminToken, id, bytes, artifact, requests,
     appendMonitorMessage(playerId,message){const records=initial.messages.get(playerId)??[],completion=initial.completions.get(playerId);records.push({sequence:(records.at(-1)?.sequence??-1)+1,playerId,kind:'model-input',createdAt:stamp,message});initial.messages.set(playerId,records);initial.completions.delete(playerId);return ()=>{records.pop();if(completion)initial.completions.set(playerId,completion);};},
+    showWaitingReplay(){
+      const previous=initial.rollout;initial.rollout=clone(previous);initial.rollout.summary.status='active';
+      initial.rollout.frames=initial.rollout.frames.slice(0,3);
+      const head=initial.rollout.frames.at(-1),deadlineAt=Date.now()+120000;
+      for(const [player,obs] of Object.entries(head.views)){obs.view.current='p3';obs.control={required:player==='p3',deadlineAt,episodeDeadlineAt:deadlineAt+600000};}
+      return ()=>{initial.rollout=previous;};
+    },
     async call(path, credential = adminToken, body) { const response = await fetch(apiUrl + path, { method: body === undefined ? 'GET' : 'POST',
       headers: { Authorization: `Bearer ${credential}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),...(path.includes('/admin-')?{'X-Room-Host-Token':rooms.get(path.split('/')[2])?.hostToken}:{}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
       const value = await response.json(); assert.ok(response.ok, `Mock HTTP ${response.status}: ${JSON.stringify(value)}`); return value; },

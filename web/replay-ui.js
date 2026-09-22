@@ -297,16 +297,16 @@
     return item;
   }
   function renderPlayer(p,snap) {
-    const actor=snap.frame?.playerId===p.player;
+    const actor=snap.actors.includes(p.player);
     const panel=node('article',`player-panel${actor?' acting':''}`);panel.dataset.player=p.player;
-    const head=node('div','player-heading');head.append(node('h2','',`玩家 ${p.player.replace(/^p/,'')}`),node('span','player-turn',actor?'本步行动者':'观察 / 等待'));panel.append(head);
+    const head=node('div','player-heading');head.append(node('h2','',`玩家 ${p.player.replace(/^p/,'')}`),node('span','player-turn',actor?(snap.live?'当前行动者':'本轮行动者'):'观察 / 等待'));panel.append(head);
+    if(snap.live&&actor){const timer=node('span','replay-deadline');timer.dataset.player=p.player;head.append(timer);}
     const game=state.rollout.summary.gameId;
-    const hand=node('section','player-hand');hand.append(node('h3','',game==='sky-team'?'手中的骰子':game==='bomb-busters'?'面前的电线':game==='magic-maze'?'行动能力':'手里是什么牌'),node('span','audit-scope',game==='hanabi'?'审计可见 · 玩家不见牌面':'这个时点已记录的信息'));
+    const hand=node('section','player-hand'),handHead=node('div','compact-section-heading');handHead.append(node('h3','',game==='sky-team'?'骰子':game==='bomb-busters'?'电线':game==='magic-maze'?'行动能力':'手牌'),node('span','audit-scope',game==='hanabi'?'审计可见 · 本人不见牌面':'已记录信息'));hand.append(handHead);
     const backs=p.observation?.view?.cardBacks?.[p.player]?.hand;
     hand.append(cardRow(p.actual??(backs?.map(color=>({color}))),p.observation?'牌面未知 / 本游戏没有手牌':'历史视角缺失'));panel.append(hand);
-    const visibility=node('section',`player-visibility${game==='hanabi'?' hanabi-knowledge':''}`);visibility.append(node('h3','',game==='hanabi'?'自身提示 · 可见队友牌面':'它当时能看到什么'));
+    const visibility=node('section',`player-visibility${game==='hanabi'?' hanabi-knowledge':''}`),visibilityHead=node('div','compact-section-heading');visibilityHead.append(node('h3','',game==='hanabi'?'本人提示':'可见信息'));visibility.append(visibilityHead);
     if(state.rollout.summary.gameId==='hanabi'&&Array.isArray(p.hand)){
-      visibility.append(node('p','', '队友牌面与公共棋盘；自己的牌只知道提示。'));
       const knowledge=node('div','knowledge-row');
       for(const c of p.hand){
         const k=node('div','knowledge-card'),colors=c.possibleColors??[],values=c.possibleValues??[];
@@ -320,12 +320,13 @@
       const text=state.rollout.summary.gameId==='take-time'?v.hand===null?'太阳 / 月亮牌背及公开放牌位置；尚未看自己的点数。':'自己的手牌、公开牌背与放牌位置；队友暗牌点数未知。':`记录的合法视角 · 可选动作：${(p.observation.legalActions??[]).map(a=>a.type).join('、')||'无'}`;
       visibility.append(node('p','',text));
     }else visibility.append(node('p','muted','未保存这个时点的合法视角。'));
-    visibility.append(button(p.exact?'动作绑定的真实输入 ↗':'查看已录制的可见状态 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}),button('服务器签发原文 ↗',()=>showIssued(p.player)));panel.append(visibility);
+    visibilityHead.append(button('视角 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}),button('签发原文 ↗',()=>showIssued(p.player)));panel.append(visibility);
     const decision=node('section','player-decision'),status=seats[p.player];
     const recorded=status?.blocks??[],agent=recorded.some(b=>['prompt','input','output','reasoning','request'].includes(b.type));
+    if(agent)panel.classList.add('agent-panel');
     const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',agent?'Agent 完整轨迹':'行动理由'),node('span','decision-step',agent?'最新在上':p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
     if(agent){
-      decision.append(node('span','thinking-source','本席全局记录 · 独立于局面时间线'));
+      decisionHead.title='本席全局记录，包含行动理由与动作，独立于局面时间线';
       const list=node('div','trace-blocks');list.setAttribute('aria-label',`${p.player} 完整轨迹`);list.dataset.player=p.player;
       const savedReasons=state.rollout.frames.filter(f=>f.playerId===p.player&&f.action).map(f=>({id:'frame-'+f.seq,sequence:Infinity,at:f.at,type:'action',title:`服务器${f.error?'拒绝':'已确认'} · 第 ${f.seq} 步`,value:f.action,action:f.action,reason:f.decisionSummary??(f.automatic?'服务器超时默认动作':null)}));
       const blocks=[...recorded,...savedReasons].sort((a,b)=>(typeof b.at==='number'?b.at:Date.parse(b.at)||0)-(typeof a.at==='number'?a.at:Date.parse(a.at)||0)||b.sequence-a.sequence);
@@ -340,21 +341,33 @@
     if(status?.error||status?.loading||agent)decision.append(node('span','trace-status',status.error|| (status.loading?'正在读取轨迹…':`已载入 ${status.messages.length} 条记录${status.more?' · 还有记录待读取':' · 已读到当前末尾'}`)));
     if(status?.more||status?.error)decision.append(button(status.error?'重试读取轨迹':'继续读取完整轨迹',()=>void load(true,p.player)));
     panel.append(decision);
+    if(agent)return panel;
     const action=node('section',`player-action${p.decision?.error?' rejected-action':''}`);action.append(node('span','action-label',p.decisionIndex===state.index?'做了什么':'上次做了什么'),node('strong','action-description',p.decision?R.actionText(p.decision):'等待行动'));
     if(p.decision?.error)action.append(node('span','','服务器拒绝，未生效'));
-    if(p.decision&&p.decisionIndex!==state.index)action.append(button('跳到这一步',()=>{stopPlayback();selectFrame(p.decisionIndex);}));panel.append(action);return panel;
+    panel.append(action);return panel;
   }
   function render() {
     if(!state.rollout)return;document.body.dataset.audit='true';const snap=R.snapshot(state.rollout,state.index);
 
     $('open-create').hidden=!['operator','member'].includes(state.identity?.role);
-    setText('focus-timing',snap.frame?.action?'手牌 / 可见信息：动作前':'手牌 / 可见信息：此时点');
-    setText('focus-step-title',`${snap.frame?.seq===0?'初始局面':`第 ${snap.frame?.seq??0} 步`} · ${snap.frame?.playerId??'系统'} · ${R.actionText(snap.frame)}`);
+    setText('focus-timing',snap.live?'实时局面 · 当前待行动':snap.frame?.action?'手牌 / 可见信息：动作前':'手牌 / 可见信息：此时点');
+    setText('focus-step-title',snap.live?`实时局面 · ${snap.actors.length?`等待 ${snap.actors.join(' / ')} 行动`:'等待进展'} · 最近记录 #${snap.frame?.seq??0}`:`${snap.frame?.seq===0?'初始局面':`第 ${snap.frame?.seq??0} 步`} · ${snap.frame?.playerId??'系统'} · ${R.actionText(snap.frame)}`);
     const scrolls=new Map([...grid.querySelectorAll('.trace-blocks')].map(el=>[el.dataset.player,el.scrollTop]));grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);for(const el of grid.querySelectorAll('.trace-blocks'))el.scrollTop=scrolls.get(el.dataset.player)??0;
     const communications=state.rollout.frames.slice(0,state.index+1).map(f=>({frame:f,text:publicCommunication(f)})).filter(m=>m.text);
     const last=communications.at(-1);chat.replaceChildren(node('strong','','公开交流'),node('span','chat-preview',last?`${last.frame.playerId} · ${last.text}`:'截至这一步还没有公开交流。'));
     chat.append(button(`全部 ${communications.length} 条 ↗`,()=>{openEvidence();$('communication-panel').scrollIntoView({block:'start'});}));
+    updateCountdowns();
   }
+  function updateCountdowns(){
+    if(!state.rollout||document.body.dataset.view!=='replay')return;
+    const snap=R.snapshot(state.rollout,state.index),offset=state.replayClock?.session===state.session?state.replayClock.offset:0;
+    for(const timer of grid.querySelectorAll('.replay-deadline')){
+      const remaining=snap.live?R.remainingMs(snap.views[timer.dataset.player],Date.now()+offset):null;
+      timer.hidden=remaining===null;
+      if(remaining!==null){const seconds=Math.ceil(remaining/1000);timer.textContent=seconds?`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`:'等待服务器更新';timer.dataset.expired=String(seconds===0);timer.setAttribute('aria-label',seconds?`本轮剩余 ${seconds} 秒`:'本轮已到时，等待服务器更新');}
+    }
+  }
+  setInterval(updateCountdowns,250);
   let liveBusy=false;
   const liveButton=addButton('replay-refresh','刷新进展',()=>void refreshReplay(true));
   async function refreshReplay(manual=false){

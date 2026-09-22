@@ -45,6 +45,7 @@ import WebKit
             _=try await js("document.querySelector('#episode-list button').click();return true",app.host)
             try await wait("replay-rendered",{try await js("return !document.querySelector('#detail').hidden && document.querySelectorAll('#player-grid .player-panel').length>0",app.host) as? Bool == true})
             try await snapshot("replay",app.host)
+            try check(try await js("return !document.querySelector('.replay-deadline') && ![...document.querySelectorAll('.player-panel button')].some(b=>b.textContent.includes('跳到这一步'))",app.host) as? Bool == true,"completed-replay-hides-live-clock-and-jump-links")
             try check(try await js("const r=await window.coopTransport.request('/api/v1/rollouts');return r.ok",app.host) as? Bool == true,"owner-bridge-after-replay-hash")
             _=try await js("document.querySelector('#open-library').click();return true",app.host)
             _=try await js("document.querySelector('#open-create').click();document.querySelector('#create-players').value='2';document.querySelector('#create-name').value='iPhone 验收房间';return true",app.host)
@@ -94,6 +95,13 @@ import WebKit
             try check(runtime.data["pendingAction"] == nil,"human-action-acknowledged")
             try check(try await js("return !document.querySelector('#dictate-reason').hidden && !!document.querySelector('#decision-reason')",app.player) as? Bool == true,"human-reason-and-native-dictation-visible")
             try check((runtime.data["messages"] as? [JSON] ?? []).contains { (($0["message"] as? JSON)?["raw"] as? JSON)?["decisionSummary"] as? String == "合成 iOS 理由：提示红色。" },"human-reason-preserved-in-action-trace")
+            app.playerShown=false
+            _=try await js("await selectEpisode(\(jsonString(runtime.episode!)));return true",app.host)
+            try check(try await js("return state.rollout.summary.status==='active' && !!document.querySelector('.acting .replay-deadline') && document.querySelector('#focus-timing').textContent.includes('实时')",app.host) as? Bool == true,"live-replay-highlights-required-seat-and-deadline")
+            try await snapshot("replay-live",app.host)
+            _=try await js("selectFrame(0);return true",app.host)
+            try check(try await js("return !document.querySelector('.replay-deadline')",app.host) as? Bool == true,"historical-replay-hides-live-clock")
+            app.playerShown=true
             runtime.suspend();runtime.start()
             try await wait("resume-refreshes-seat",{runtime.status != "disconnected"})
             try await wait("trace-upload",{(runtime.data["acked"] as? Int ?? 0)>0})

@@ -174,7 +174,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
     const measured=await run(()=>{
       const inside=(parent,child)=>{const p=parent.getBoundingClientRect(),c=child.getBoundingClientRect();return c.top>=p.top-1&&c.bottom<=p.bottom+1&&c.right<=p.right+1;};
       return {width:innerWidth,height:innerHeight,pageFits:document.documentElement.scrollHeight<=innerHeight+1&&document.documentElement.scrollWidth<=innerWidth+1,
-        panels:[...document.querySelectorAll('.player-panel')].map(p=>({heights:[...p.children].map(e=>({name:e.className,height:e.getBoundingClientRect().height,bottom:e.getBoundingClientRect().bottom})),panel:p.getBoundingClientRect().toJSON(),actionFits:inside(p,p.querySelector('.player-action'))&&p.querySelector('.action-description').clientHeight>=20,handFits:inside(p,p.querySelector('.audit-hand')),thoughtFont:parseFloat(getComputedStyle(p.querySelector('.thinking-excerpt')).fontSize),thoughtHeight:p.querySelector('.thinking-excerpt').clientHeight})),
+        panels:[...document.querySelectorAll('.player-panel')].map(p=>({heights:[...p.children].map(e=>({name:e.className,height:e.getBoundingClientRect().height,bottom:e.getBoundingClientRect().bottom})),panel:p.getBoundingClientRect().toJSON(),actionFits:p.classList.contains('agent-panel')?!p.querySelector(':scope>.player-action')&&inside(p,p.querySelector('.trace-blocks'))&&p.querySelector('.trace-blocks').clientHeight>=150:inside(p,p.querySelector('.player-action'))&&p.querySelector('.action-description').clientHeight>=20,handFits:inside(p,p.querySelector('.audit-hand')),thoughtFont:parseFloat(getComputedStyle(p.querySelector('.thinking-excerpt')).fontSize),thoughtHeight:p.querySelector('.thinking-excerpt').clientHeight})),
         timelineFits:document.querySelector('.replay-panel').getBoundingClientRect().bottom<=innerHeight+1};
     });
     layout.push(measured);await capture(`replay-${width}x${height}.png`);
@@ -182,6 +182,17 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
     check(measured.pageFits&&measured.timelineFits&&measured.panels.every(p=>p.actionFits&&p.handFits&&p.thoughtFont>=15&&p.thoughtHeight>=24),`player hands, reasoning and actions fit ${width}x${height} without page scrolling`);
   }
   check(await run(()=>document.querySelector('.acting .trace-blocks').textContent.includes('原文结束标记')&&!document.querySelector('.acting .trace-blocks img')&&document.querySelector('.acting .trace-reason').textContent.includes('合成测试动作')),'colored trajectory blocks preserve complete recorded reasoning and highlight the submitted reason without executing markup');
+  check(await run(()=>!document.querySelector('.replay-deadline')&&![...document.querySelectorAll('.player-panel button')].some(b=>b.textContent.includes('跳到这一步'))),'completed replay hides countdowns and redundant jump links');
+  const restoreReplay=fixture.showWaitingReplay();
+  await run(id=>selectEpisode(id),fixture.id);
+  await wait(()=>run(()=>document.querySelector('.player-panel.acting')?.dataset.player==='p3'),'Live replay must highlight waiting p3 after p2 acted');
+  check(await run(()=>document.querySelectorAll('.acting').length===1&&document.querySelector('.replay-deadline')?.textContent.match(/^\d+:\d\d$/)&&document.getElementById('focus-timing').textContent.includes('实时')),'live head uses the post-action p3 turn and server deadline');
+  const beforeCountdown=await run(()=>document.querySelector('.replay-deadline').textContent);
+  await wait(()=>run(previous=>document.querySelector('.replay-deadline').textContent!==previous,beforeCountdown),'Live countdown did not tick');
+  await capture('replay-live-p3.png');
+  await run(()=>selectFrame(1));
+  check(await run(()=>document.querySelector('.acting')?.dataset.player==='p1'&&!document.querySelector('.replay-deadline')),'ongoing replay historical steps retain their own actor and hide the live clock');
+  restoreReplay();await run(id=>selectEpisode(id),fixture.id);
   check(await run(() => Number(document.getElementById('timeline').max) >= 2), 'recorded timeline renders');
   check(await run(() => !window.__smokeXss && !document.getElementById('annotation-form') && !document.getElementById('annotations')), 'review annotation UI removed');
   await run(() => document.getElementById('previous').click());
@@ -189,6 +200,8 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await run(() => document.getElementById('verify-replay').click());
   await wait(() => run(() => document.getElementById('verification-result').textContent.includes('synthetic-no-engine')), 'Replay UI failed.');
   checks.push('remote replay response renders (synthetic status only; engine not tested)');
+  await run(()=>document.getElementById('open-evidence').click());
+  await wait(()=>run(()=>Boolean(document.querySelector('[data-download-artifact]'))),'Reloaded replay attachment did not render');
   await run(() => document.querySelector('[data-download-artifact]').click());
   await wait(() => Promise.resolve(existsSync(join(dataDir, fixture.artifact.name))), 'Attachment was not downloaded.');
   await wait(() => {try{return readFileSync(join(dataDir,fixture.artifact.name)).equals(fixture.bytes);}catch(error){if(['ENOENT','EBUSY','EPERM'].includes(error.code))return false;throw error;}}, 'Downloaded attachment differs.');

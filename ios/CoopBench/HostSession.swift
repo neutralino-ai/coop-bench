@@ -109,7 +109,7 @@ import UIKit
             try capture(path:path,input:body ?? [:],value:value)
         }
         var headers: [String:String]=[:]
-        for name in ["Content-Type","Content-Disposition","Retry-After"] { if let value=response.value(forHTTPHeaderField:name) { headers[name]=value } }
+        for name in ["Content-Type","Content-Disposition","Retry-After","Date"] { if let value=response.value(forHTTPHeaderField:name) { headers[name]=value } }
         return ["status":response.statusCode,"headers":headers,"bodyBase64":bytes.base64EncodedString()]
     }
     func owner(_ path: String,_ body: JSON? = nil) async throws -> JSON {

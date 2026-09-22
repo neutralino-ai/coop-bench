@@ -129,3 +129,21 @@ body[data-view=home] #open-observations,body[data-view=home] #replay-refresh{dis
 .trace-reason{border-radius:7px;background:#fff;border:1px solid #bed8c5;padding:10px 12px;margin:8px 0;box-shadow:0 2px 5px #2c5f3910}.trace-reason>span{font-size:12px;font-weight:700;color:#397557}.trace-reason>p{margin:5px 0 0;font-size:16px;line-height:1.6;white-space:pre-wrap}
 .trace-action-name{font-size:15px;font-weight:650;margin:4px 0}.trace-content summary,.trace-field summary{cursor:pointer;font-size:13px;color:#4d6a5b;padding:4px 0}.trace-field{border-top:1px solid #dae3de;padding:6px 0}.trace-field>strong{font-size:12px;color:#658070}.trace-fields .trace-fields{padding-left:12px;border-left:1px solid #d8e0dd}.trace-status{font-size:12px;padding-top:5px}
 @media(max-width:760px){.player-decision .trace-blocks{max-height:420px}.owned-room>.section-heading{flex-direction:column;align-items:flex-start}.personal-room.owned-room{gap:12px;padding:16px}.owned-room>.button{padding:8px 12px}}
+
+/* Give recorded reasoning the remaining panel height, including the old action row. */
+.player-panel{gap:8px;grid-template-rows:26px auto auto minmax(90px,1fr) auto}
+.player-panel.agent-panel{grid-template-rows:26px auto auto minmax(0,1fr)}
+.compact-section-heading{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:5px;min-height:22px}
+.compact-section-heading h3{margin:0;white-space:nowrap;font-size:13px}
+.compact-section-heading .audit-scope{position:static;max-width:none;margin:0;font-size:11px;white-space:normal;line-height:1.3}
+.compact-section-heading .text-button{position:static!important;font-size:12px!important;min-height:22px;padding:0;white-space:nowrap}
+.compact-section-heading .text-button:first-of-type{margin-left:auto}
+.player-visibility{padding-top:5px}.knowledge-row{margin:0}.knowledge-card{padding:2px 1px;gap:1px}
+.player-decision{padding-top:6px}.decision-heading h3{margin-bottom:4px}
+.player-decision>.trace-blocks{flex:1;min-height:0;max-height:none}
+.player-decision>.trace-status{flex:none;font-size:11px;line-height:1.3;padding-top:3px}
+.player-decision>.thinking-excerpt{display:block;-webkit-line-clamp:unset;overflow:auto;line-height:1.55}
+.replay-deadline{font:700 16px/1.2 ui-monospace,monospace;color:#356247;white-space:nowrap}
+.replay-deadline[data-expired=true]{font:12px/1.2 system-ui;color:#986633}
+.player-heading .player-turn{margin-left:auto;white-space:nowrap}
+@media(max-width:760px){.player-panel.agent-panel{height:620px;min-height:540px}.player-panel{min-height:500px}.player-decision>.trace-blocks{max-height:none}}

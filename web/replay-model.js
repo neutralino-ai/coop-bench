@@ -6,12 +6,16 @@ globalThis.CoopReplay = (() => {
   const cardText = card => typeof card !== 'object' || card === null ? String(card ?? '?') : `${color(card.color ?? card.suit)} ${card.value ?? card.rank ?? '?'}`;
   function snapshot(rollout, index) {
     const frame = rollout.frames[index];
-    // An action's pre-state is the preceding recorded frame, including rejected
-    // actions. Do not use its post-state (draws/reveals can disclose new cards).
-    const source = frame?.action ? rollout.frames[index - 1] : frame;
+    // Historical actions use the preceding state, including rejected actions.
+    // Only the live head shows the current post-state; never backfill history.
+    const live = rollout.summary.status === 'active' && index === rollout.frames.length - 1;
+    const source = !live && frame?.action ? rollout.frames[index - 1] : frame;
     const views = source?.views ?? {};
-    return {frame, source, views, players: rollout.players.map(player => {
-      const exact = frame?.playerId === player && frame?.action ? frame.observed : null;
+    const required = rollout.players.filter(player => views[player]?.control?.required === true);
+    const current = Object.values(views).flatMap(o => [o.view?.currentPlayerId, o.view?.current, ...(o.view?.activePlayerIds ?? o.view?.activePlayers ?? [])]).filter(p => rollout.players.includes(p));
+    const actors = live ? (Object.values(views).some(o => typeof o.control?.required === 'boolean') ? required : [...new Set(current)]) : frame?.playerId ? [frame.playerId] : required;
+    return {frame, source, views, live, actors, players: rollout.players.map(player => {
+      const exact = !live && frame?.playerId === player && frame?.action ? frame.observed : null;
       const observation = exact ?? views[player] ?? null;
       const view = observation?.view;
       const hand = view && Object.hasOwn(view,'hand') ? view.hand : view?.hands?.[player] ?? view?.myDice ?? (view?.stands
@@ -35,6 +39,12 @@ globalThis.CoopReplay = (() => {
       return {player, observation, exact: !!exact, hand, actual,
         decision: decisionIndex >= 0 ? rollout.frames[decisionIndex] : null, decisionIndex};
     })};
+  }
+  function remainingMs(observation, now) {
+    const control=observation?.control;
+    if(control?.required !== true)return null;
+    const deadlines=[control.deadlineAt,control.episodeDeadlineAt].filter(value=>typeof value==='number'&&Number.isFinite(value));
+    return deadlines.length ? Math.max(0,Math.min(...deadlines)-now) : null;
   }
   function actionText(frame) {
     if (frame?.automatic) return '超时默认动作 · ' + actionText({...frame,automatic:null});
@@ -93,5 +103,5 @@ globalThis.CoopReplay = (() => {
     }
     return sections.filter((s,i) => sections.findIndex(other => other.text === s.text && other.label === s.label) === i);
   }
-  return Object.freeze({snapshot, actionText, linkedMessages, reasoning, color, cardText});
+  return Object.freeze({snapshot, remainingMs, actionText, linkedMessages, reasoning, color, cardText});
 })();
