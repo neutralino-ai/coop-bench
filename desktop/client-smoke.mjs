@@ -91,7 +91,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(loadingUi.startupHidden&&loadingUi.detailHidden&&(loadingUi.animation==='loading-spin'||loadingUi.reduced),`startup finishes and replay loader honors motion preference: ${JSON.stringify(loadingUi)}`);
   await capture('client-replay-loading.png');
   await wait(()=>run(()=>!document.getElementById('detail').hidden&&document.getElementById('player-grid').dataset.messages==='ready'),'Board/current decision failed to render');
-  check(!apiReads.some(path=>/\/artifacts/.test(path)||/limit=25/.test(path)||/playerId=p[23]/.test(path)),'first board does not prefetch attachments, duplicate raw-message pages, or idle players');
+  check(!apiReads.some(path=>/\/artifacts/.test(path)||/limit=25/.test(path)),'first board reads each seat trajectory without prefetching attachments or duplicate raw-message pages');
   await run(()=>document.getElementById('open-observations').click());
   await wait(()=>run(()=>document.querySelector('#issued-list pre')?.textContent.includes('possibleColors')),'Raw issued observation did not load');
   check(await run(()=>{const raw=JSON.parse(document.querySelector('#issued-list pre').textContent);return raw.playerId==='p1'&&!raw.decisionToken&&raw.updates.length>0&&raw.view.hands.p1.every(c=>c.color===undefined);}), 'raw server observations preserve updates and hidden own cards without credentials');
@@ -150,7 +150,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await run(()=>{const timeline=document.getElementById('timeline');timeline.value=timeline.max;timeline.dispatchEvent(new Event('input'));});
   check(await run(()=>document.getElementById('hint-counter').textContent.includes('剩余提示 8 / 8')),'later view restores one shared hint after discard without changing earlier frames');
   await run(index => {document.getElementById('timeline').value=index;document.getElementById('timeline').dispatchEvent(new Event('input'));document.getElementById('message').hidden=true;},frames.findIndex(f=>f.kind==='accepted'&&f.action?.type==='play'));
-  check(await run(() => document.querySelectorAll('.player-panel').length===3 && document.querySelector('.acting .thinking-excerpt').textContent.includes('合成布局测试') && !window.__thinkingXss),'three synchronized player columns show linked reasoning as safe text');
+  check(await run(() => document.querySelectorAll('.player-panel').length===3 && document.querySelector('.acting .trace-reasoning')?.textContent.includes('合成布局测试') && !window.__thinkingXss),'three synchronized player columns show linked reasoning as safe text: '+await run(()=>document.querySelector('.acting .player-decision')?.textContent));
   const layout=[];
   for(const [width,height] of [[1440,900],[1280,800]]){
     window.setContentSize(width,height);
@@ -165,9 +165,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
     writeFileSync(join(dataDir,'replay-layout.json'),JSON.stringify(layout,null,2));
     check(measured.pageFits&&measured.timelineFits&&measured.panels.every(p=>p.actionFits&&p.handFits&&p.thoughtFont>=15&&p.thoughtHeight>=24),`player hands, reasoning and actions fit ${width}x${height} without page scrolling`);
   }
-  await run(()=>document.querySelector('.acting .player-decision .text-button').click());
-  check(await run(()=>document.getElementById('decision-dialog').open&&document.getElementById('decision-dialog').textContent.includes('原文结束标记')&&!document.getElementById('decision-dialog').querySelector('img')),'full decision dialog preserves long original reasoning and does not execute uploaded markup');
-  await run(()=>document.getElementById('decision-dialog').close());
+  check(await run(()=>document.querySelector('.acting .trace-blocks').textContent.includes('原文结束标记')&&!document.querySelector('.acting .trace-blocks img')&&document.querySelector('.acting .trace-reason').textContent.includes('合成测试动作')),'colored trajectory blocks preserve complete recorded reasoning and highlight the submitted reason without executing markup');
   check(await run(() => Number(document.getElementById('timeline').max) >= 2), 'recorded timeline renders');
   check(await run(() => !window.__smokeXss && !document.getElementById('annotations').querySelector('img')), 'untrusted annotation rendered as text');
   await run(() => document.getElementById('previous').click());
@@ -277,7 +275,8 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(await run(()=>document.getElementById('room-panel').textContent.includes('Synthetic teammate') && getComputedStyle(document.getElementById('start-room')).cursor!=='wait'), 'creator sees joined members and start button uses a normal cursor');
   await capture('client-room-ready.png');
   await run(()=>document.getElementById('start-room').click());
-  await wait(()=>run(()=>document.getElementById('room-open-replay')),'Creator start did not finish.');
+  await wait(()=>run(()=>document.getElementById('end-room')?.textContent==='强制结束游戏'),'Creator start did not finish.');
+  check(await run(()=>!document.getElementById('room-open-replay')&&!document.getElementById('room-open-messages')),'room management has no replay or input audit entrances');
   await wait(()=>run(()=>!document.getElementById('message').hidden&&document.getElementById('message').textContent.includes('游戏已开始。')),'Start success toast did not appear.');
   await wait(()=>run(()=>document.getElementById('message').hidden),'Start success toast did not dismiss itself.');
   check(true,'room-start success notice automatically disappears');
@@ -387,9 +386,13 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(await run(()=>document.querySelector('#confirm-end-room').closest('dialog').open),'host termination requires an explicit confirmation');
   await run(()=>document.getElementById('confirm-end-room').click());
   await wait(async()=>(await fixture.call(`/rooms/${agentRoomId}/admin`)).status==='truncated','Host termination failed');
+  check(fixture.requests.filter(r=>r.path.endsWith('/actions')&&r.body?.decisionSummary).some(r=>r.body.decisionSummary==='合成测试：提示红色以帮助队友。'),'built-in agent submits its Chinese reason to the game API');
   check((await fixture.call(`/rollouts/${builtInEpisode}/messages?playerId=p1`)).messages.length>0,'host termination keeps original agent messages');
   await hostSeats.close();
   await run(()=>document.querySelector('#create-dialog').close());
+  await run(()=>window.CoopLobby.home());
+  await wait(()=>run(id=>!document.querySelector(`#my-created-rooms [data-room-id="${id}"]`),agentRoomId),'Ended created room remained in the active room list');
+  check(await run(()=>[...document.querySelectorAll('#my-created-rooms .personal-room')].every(el=>{const button=el.querySelector('button'),row=el.querySelector('.section-heading');return button.getBoundingClientRect().left>=row.getBoundingClientRect().right-1;})),'created rooms exclude finished games and place management buttons on the right');
   checks.push('packaged host prompt, built-in model harness, token copy, kick, revoked key, rejoin, ready and action verified');
   if (remote.store.encryption.isEncryptionAvailable()) {
     const sessionKey=remote.token;await remote.connect({ apiUrl: fixture.apiUrl, token: sessionKey, remember: true });

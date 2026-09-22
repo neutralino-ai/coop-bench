@@ -50,13 +50,13 @@ import Foundation
     }
     func decide(_ context: JSON,runtime: SeatRuntime,timeout: Double) async throws -> JSON {
         let deadline=Date().addingTimeInterval(timeout),id=(context["observation"] as? JSON)?["observationId"] as? String
-        var history=runtime.data["modelHistory"] as? [JSON] ?? [["role":"system","content":"You are one Coop Bench player. Use only the supplied service API rules, your own observation and legalActions. Read every visible update. Never use external rules, hidden information, or side-channel communication. Call exactly one act with a legal JSON action, or wait only when strategic waiting is legal. New rooms default to 3 minutes: obey the actual control.deadlineAt and control.decisionTimeoutSeconds. Waiting does not extend deadlines. With default-action-v1 the server executes control.timeoutAction on timeout and continues. Hanabi discards the first card when legal, otherwise uses a legal hint. Refresh observation after timeout; never replay stale actions. Official clocks and episode limits still apply."]]
+        var history=runtime.data["modelHistory"] as? [JSON] ?? [["role":"system","content":"You are one Coop Bench player. Use only the supplied service API rules, your own observation and legalActions. Read every visible update. Never use external rules, hidden information, or side-channel communication. Every act must include decisionSummary: a concise Chinese reason of 1–1200 characters, based only on visible information, not private chain-of-thought. Call exactly one act with a legal JSON action, or wait only when strategic waiting is legal. New rooms default to 3 minutes: obey the actual control.deadlineAt and control.decisionTimeoutSeconds. Waiting does not extend deadlines. With default-action-v1 the server executes control.timeoutAction on timeout and continues. Hanabi discards the first card when legal, otherwise uses a legal hint. Refresh observation after timeout; never replay stale actions. Official clocks and episode limits still apply."]]
         if let pending=runtime.data["modelPending"] as? [JSON] {
             for call in pending { history.append(try receipt(call,call["name"] as? String == "wait" ? ["waiting":true] : runtime.data["lastActionResult"] ?? ["accepted":false])) }
             runtime.data.removeValue(forKey:"modelPending")
         }
         history.append(["role":"user","content":try jsonString(context)])
-        let tools: [JSON]=[["type":"function","name":"act","description":"Submit one legal action. actionJson contains its entire JSON object.","parameters":["type":"object","properties":["actionJson":["type":"string"]],"required":["actionJson"],"additionalProperties":false]],
+        let tools: [JSON]=[["type":"function","name":"act","description":"Submit one legal action. actionJson contains its entire JSON object.","parameters":["type":"object","properties":["actionJson":["type":"string"],"decisionSummary":["type":"string","minLength":1,"maxLength":1200,"description":"A concise reason in Chinese, using only seat-visible information."]],"required":["actionJson","decisionSummary"],"additionalProperties":false]],
                           ["type":"function","name":"wait","description":"Wait only when strategic waiting is legal.","parameters":["type":"object","properties":[:],"additionalProperties":false]]]
         for _ in 0..<2 {
             runtime.data["modelHistory"]=history;try runtime.save()
@@ -65,14 +65,14 @@ import Foundation
             var answer: JSON?
             if functions.count == 1,let call=functions.first,call["call_id"] is String {
                 if call["name"] as? String == "wait",((context["observation"] as? JSON)?["control"] as? JSON)?["required"] as? Bool != true { answer=["wait":true] }
-                else if call["name"] as? String == "act",let text=call["arguments"] as? String,let args=(try? JSONSerialization.jsonObject(with:Data(text.utf8))) as? JSON,let actionText=args["actionJson"] as? String,let action=(try? JSONSerialization.jsonObject(with:Data(actionText.utf8))) as? JSON,action["type"] is String { answer=["action":action] }
+                else if call["name"] as? String == "act",let text=call["arguments"] as? String,let args=(try? JSONSerialization.jsonObject(with:Data(text.utf8))) as? JSON,let actionText=args["actionJson"] as? String,let action=(try? JSONSerialization.jsonObject(with:Data(actionText.utf8))) as? JSON,action["type"] is String,let reason=args["decisionSummary"] as? String,!reason.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,reason.utf16.count<=1200,reason.range(of:"[\\u3400-\\u9fff]",options:.regularExpression) != nil { answer=["action":action,"decisionSummary":reason.trimmingCharacters(in:.whitespacesAndNewlines)] }
             }
             if let answer {
                 runtime.data["modelPending"]=functions
                 if answer["action"] != nil { runtime.data["lastActionResult"]=["accepted":false,"reason":"action-not-submitted"] }
                 try runtime.save();return answer
             }
-            for call in functions { history.append(try receipt(call,["accepted":false,"error":"Call exactly one legal act; wait is not allowed when required."])) }
+            for call in functions { history.append(try receipt(call,["accepted":false,"error":"Call exactly one legal act including decisionSummary with a concise Chinese reason (1–1200 characters); wait is not allowed when required."])) }
             history.append(["role":"user","content":"Return one valid tool call from the provided legal actions. There is no deadline extension."])
             runtime.data["modelHistory"]=history;try runtime.save()
         }

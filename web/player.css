@@ -28,3 +28,5 @@ button.card.hint-excluded{opacity:.55}
 #action-form{margin-top:20px}
 @media(max-width:480px){.card-action-panel{padding:12px}.card-action-heading{align-items:flex-start}.card-action-step{max-width:90px;text-align:right}.card-action-buttons button{flex:1}.card-mark{right:3px;top:5px;padding:4px;font-size:10px}}
 @media(prefers-reduced-motion:reduce){button.card{transition:none}}
+
+.reason-panel{margin:16px 0;padding:18px;background:#fff;border:1px solid #dbe5df;border-radius:14px}.reason-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.reason-heading label{font-weight:650;margin:0}.reason-heading label span{font-weight:400;color:#8b9992;font-size:12px;margin-left:6px}.reason-panel textarea{width:100%;box-sizing:border-box;min-height:94px;resize:vertical;border:1px solid #dbe5df;border-radius:9px;padding:12px;font:16px/1.6 system-ui;background:#f9fbfa}.reason-panel small{display:block;margin-top:8px;color:#73857b;font-size:12px;line-height:1.5}.reason-heading button{font-size:13px;padding:6px 10px}

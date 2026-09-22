@@ -109,7 +109,7 @@ export async function startMockApi() {
         const tool=body.tools[0],previous=body.input.find(i=>i.type==='function_call');
         if(previous){assert.ok(body.input.some(i=>i.type==='reasoning'&&i.content[0].text==='Synthetic responses reasoning.'));assert.ok(body.input.some(i=>i.type==='function_call_output'&&i.call_id===previous.call_id));}
         if(tool.name==='act'&&previous&&body.model==='synthetic-thinking-model')return fail(res,401,'SYNTHETIC_MODEL_AUTH_FAILURE');
-        const args=tool.name==='connection_check'?{nonce:tool.parameters.properties.nonce.enum[0]}:{actionJson:JSON.stringify({type:'hint',target:'p2',kind:'color',value:'red'})};
+        const args=tool.name==='connection_check'?{nonce:tool.parameters.properties.nonce.enum[0]}:{actionJson:JSON.stringify({type:'hint',target:'p2',kind:'color',value:'red'}),decisionSummary:'合成测试：提示红色以帮助队友。'};
         return respond(res,{object:'response',status:'completed',output:[{type:'reasoning',content:[{type:'reasoning_text',text:'Synthetic responses reasoning.'}]},{type:'function_call',call_id:randomUUID(),name:tool.name,arguments:JSON.stringify(args)}]});
       }
       if(path==='/model/chat/completions'){
@@ -119,7 +119,7 @@ export async function startMockApi() {
           const previous=body.messages.find(m=>m.role==='assistant');
           if(previous){assert.equal(previous.reasoning_content,'Synthetic thinking trace.');assert.equal(previous.content,'');return fail(res,401,'SYNTHETIC_MODEL_AUTH_FAILURE');}
         }
-        return respond(res,{choices:[{message:{role:'assistant',content:null,reasoning_content:'Synthetic thinking trace.',tool_calls:[{id:'synthetic-call',type:'function',function:{name:'act',arguments:JSON.stringify({actionJson:JSON.stringify({type:'hint',target:'p2',kind:'color',value:'red'})})}}]}}]});
+        return respond(res,{choices:[{message:{role:'assistant',content:null,reasoning_content:'Synthetic thinking trace.',tool_calls:[{id:'synthetic-call',type:'function',function:{name:'act',arguments:JSON.stringify({actionJson:JSON.stringify({type:'hint',target:'p2',kind:'color',value:'red'}),decisionSummary:'合成测试：提示红色以帮助队友。'})}}]}}]});
       }
       if (!url.pathname.startsWith('/api/v1/')) return fail(res, 404, 'MOCK_ROUTE_NOT_FOUND');
       if (path === '/health') return respond(res, { ok: true, service: 'coop-bench', apiVersion: 'v1', backend: 'mock' });

@@ -29,7 +29,7 @@ export class LobbyPlayer {
           await this.runtime.roomCommand('leave');await this.stop();
           const file=this.file(this.scope);if(existsSync(file))unlinkSync(file);this.credentials=null;
         }
-        else if(name==='act')await this.runtime.act(input.action,input.observationId);
+        else if(name==='act')await this.runtime.act(input.action,input.observationId,input.decisionSummary);
         else throw Error('请在大厅选择对局；此窗口由你自己操作。');
         return {ok:true,value:this.snapshot()};
       } catch(error) {return {ok:false,error:error.code?this.error(error.code):String(error.message).slice(0,200)};}

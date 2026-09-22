@@ -38,9 +38,9 @@
   try{
    const [result,mine]=await Promise.all([request('/lobby'),request('/lobby/mine')]);if(version!==serial||session!==state.session)return;
    for(const [target,values,owned] of [[createdList,mine.created,true],[participatingList,mine.participating,false]]){
-    target.replaceChildren();if(!values?.length)target.append(node('p','muted',owned?'创建房间后，在这里管理。':'加入房间后，在这里继续。'));
-    for(const room of values??[]){const card=node('article','lobby-room personal-room');card.dataset.roomId=room.roomId;const row=node('div','section-heading');row.append(node('h3','',room.name),node('span','badge neutral',({waiting:'等待开始',active:'进行中',completed:'已结束',truncated:'已中止',cancelled:'已取消',expired:'已过期'})[room.status]??room.status));card.append(row);
-     const open=node('button','button subtle',owned?'管理房间':['waiting','active'].includes(room.status)?'继续对局':'查看回放');open.type='button';open.onclick=()=>{if(owned)void window.CoopRooms?.open(room.roomId);else if(['waiting','active'].includes(room.status))void openPlayer({roomId:room.roomId});else if(room.episodeId)void selectEpisode(room.episodeId);};card.append(open);
+    const visible=(values??[]).filter(room=>!owned||['waiting','active'].includes(room.status));target.replaceChildren();if(!visible.length)target.append(node('p','muted',owned?'创建房间后，在这里管理。':'加入房间后，在这里继续。'));
+    for(const room of visible){const card=node('article','lobby-room personal-room');card.dataset.roomId=room.roomId;const row=node('div','section-heading');row.append(node('h3','',room.name),node('span','badge neutral',({waiting:'等待开始',active:'进行中',completed:'已结束',truncated:'已中止',cancelled:'已取消',expired:'已过期'})[room.status]??room.status));card.append(row);
+     const open=node('button','button subtle',owned?'管理房间':['waiting','active'].includes(room.status)?'继续对局':'查看回放');open.type='button';open.onclick=()=>{if(owned)void window.CoopRooms?.open(room.roomId);else if(['waiting','active'].includes(room.status))void openPlayer({roomId:room.roomId});else if(room.episodeId)void selectEpisode(room.episodeId);};if(owned){card.classList.add('owned-room');card.append(open);}else card.append(open);
      if(!owned&&room.status==='waiting'){const release=node('button','button ghost','释放席位');release.type='button';release.onclick=async()=>{release.disabled=true;try{await request(`/lobby/${room.roomId}/leave`,{});await load();}catch(error){status.textContent=issue(error);}finally{release.disabled=false;}};card.append(release);}
      target.append(card);
     }

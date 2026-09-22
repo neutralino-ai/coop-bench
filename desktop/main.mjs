@@ -36,7 +36,7 @@ import { PlayerRuntime,MinimalAgent,invitation } from '../runtime/coop-bench/cli
     remote = new RemoteSession({ fetcher: (url, options) => apiSession.fetch(url, options), store: new ConnectionStore(join(dataDir, 'remote-connection.json'), safeStorage) });
     player = new LobbyPlayer({remote,directory:join(dataDir,'lobby-seats'),preload:join(here,'player-preload.cjs'),show:!smoke});
     hostSeats=new HostSeats({remote,directory:join(dataDir,'host-seats'),encryption:safeStorage,Runtime:PlayerRuntime,Agent:MinimalAgent});
-    Object.assign(assets,{'/room-seats.js':'room-seats.js','/lobby.js':'lobby.js','/player.html':'player.html','/player.js':'player.js','/player.css':'player.css'});
+    Object.assign(assets,{'/replay-trace.js':'replay-trace.js','/room-seats.js':'room-seats.js','/lobby.js':'lobby.js','/player.html':'player.html','/player.js':'player.js','/player.css':'player.css'});
     if (smoke) {
       const { startClientFixture } = await import('./client-smoke.mjs');
       fixture = await startClientFixture(dataDir);

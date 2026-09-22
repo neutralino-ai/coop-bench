@@ -106,8 +106,8 @@ export async function runPlayerSmoke({window,directory}) {
     assert.deepEqual(await js("[...document.querySelectorAll('.player-hand:first-of-type .card-face small')].map(o=>o.textContent)"),[1,2,3,4,5].map(i=>`第 ${i} 张`));
     await js("document.querySelector('.card[data-player=p1][data-index=\"4\"]').click();document.querySelector('[data-choice=play]').click();document.querySelector('#confirm-card-action').click()");await until("!document.querySelector('#act').disabled");
     assert.deepEqual(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.action,{type:'play',index:4});
-    await js("document.querySelector('.card[data-player=p1][data-index=\"4\"]').click();document.querySelector('[data-choice=discard]').click();document.querySelector('#confirm-card-action').click()");await until("!document.querySelector('#act').disabled");
-    assert.deepEqual(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.action,{type:'discard',index:4});checks.push('direct card positions display 1–5 and play or discard the fifth card with protocol index 4');
+    await js("document.querySelector('.card[data-player=p1][data-index=\"4\"]').click();document.querySelector('[data-choice=discard]').click();document.querySelector('#decision-reason').value='合成理由：弃掉第五张牌。';document.querySelector('#confirm-card-action').click()");await until("!document.querySelector('#act').disabled");
+    assert.deepEqual(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.action,{type:'discard',index:4});assert.equal(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.decisionSummary,'合成理由：弃掉第五张牌。');assert.equal(await js("document.querySelector('#decision-reason').value"),'');checks.push('direct card positions display 1–5 and play or discard the fifth card with protocol index 4');
     await js("document.querySelector('.card[data-player=p1][data-index=\"0\"]').click();document.querySelector('[data-choice=play]').click()");
     await js("window.coopPlayer.command('status').then(s=>render({...s,clockOffsetMs:200000}))");
     assert.equal(await js("document.querySelector('#confirm-card-action').disabled"),true);

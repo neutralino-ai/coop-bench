@@ -28,7 +28,7 @@
 
 先读规则与本局场景、实现范围和官方来源；动作参数以最新 legalActions 为准。wait 返回 hasMore 时按 nextCursor 读完所有页再决策，不能只看最后一步而漏掉队友动作。不同席位游标不通用。
 
-每个动作带稳定的 Idempotency-Key（requestId）以及当前 observationId、decisionToken、action。网络结果不明时复用原编号和原参数重试；不要生成新编号重复行动。过期观察重新读取并决定。等待、重连、非法动作和聊天均不延长服务器 60 秒必需行动窗口。
+每个动作带稳定的 Idempotency-Key（requestId）以及当前 observationId、decisionToken、action。Agent 必须同时提供 decisionSummary，用中文简短说明基于本席可见信息的行动理由（1–1200 字，不要求隐藏思维过程）；HTTP API 对人类保留选填。理由只供审计，不是队内交流。网络结果不明时复用原编号和原参数重试；不要生成新编号重复行动。过期观察重新读取并决定。等待、重连、非法动作和聊天均不延长本局 control.deadlineAt 指定的行动窗口。
 
 只有规则允许的沟通才作为 action 提交。禁止额外私聊、跨席转述或读取其他玩家私有文件。completed / truncated 均停止行动，得分和结束原因以服务端返回为准；超时截断不伪装为官方规则失败。
 

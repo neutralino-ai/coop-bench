@@ -148,7 +148,7 @@ async function selectEpisode(id){
  try{
   const data=await request(`/rollouts/${encodeURIComponent(id)}`,undefined,{signal});
   if(serial!==state.detailRequest||session!==state.session)return;
-  state.rollout=data;window.CoopFocus?.selected();state.index=Math.max(0,data.frames.findIndex(f=>f.action));history.replaceState(null,'',`#episode=${encodeURIComponent(id)}`);
+  state.rollout=data;window.CoopFocus?.selected();state.index=data.summary.status==='active'?Math.max(0,data.frames.length-1):Math.max(0,data.frames.findIndex(f=>f.action));history.replaceState(null,'',`#episode=${encodeURIComponent(id)}`);
   options('player-view',[['actor','跟随行动者'],...data.players.map(p=>[p,`${p} 玩家`])],'actor');options('annotation-player',[['','全队'],...data.players.map(p=>[p,p])]);options('model-message-player',data.players.map(p=>[p,p]));state.modelMessagePlayer=data.players[0]??'';
   $('observation-mode').value='after';$('annotation-text').value='';setText('verification-result','');
   renderHeader();renderTimeline();renderFrame();renderAnnotations();renderRules();renderLibrary();$('replay-loading').hidden=true;$('detail').hidden=false;
@@ -452,7 +452,7 @@ window.addEventListener('DOMContentLoaded',()=>{if(window.CoopFocus)window.CoopS
    panel.append(node('p','small muted',`人类和内置 Agent 入席后自动准备，外部 Agent 按玩家文档准备。每次必需行动最多 ${room.decisionTimeoutSeconds??60} 秒。所有人准备就绪后由房主开始。`));
    const copy=node('button','button subtle','复制邀请链接');copy.onclick=guarded(async()=>{await request(`/rooms/${room.roomId}/admin-invite`,{});await transport.copyText('coopbench://join#'+new URLSearchParams({api:apiUrl,room:room.roomId}));message('房间链接已复制。打开后仍需输入房主发放的 seat token。');});
    const start=node('button','button primary','开始游戏');start.id='start-room';start.disabled=room.members.length!==room.playerCount||!room.members.every(p=>p.ready);start.title=start.disabled?'等待所有玩家入席并连接就绪':'开始游戏';start.onclick=guarded(async session=>{if(start.disabled)return;start.disabled=true;const data=await request(`/rooms/${room.roomId}/admin-start`,{});if(session!==state.session)return;room=data;invite='';renderRoom();await loadList();message('游戏已开始。');});panel.append(copy,start);
-  }else if(room.episodeId){panel.append(node('p','',room.status==='active'?'游戏进行中。':'游戏已结束，回放与原始消息已保留。'));const replay=node('button','button primary','观战 / 决策回放');replay.id='room-open-replay';replay.onclick=guarded(async()=>{document.getElementById('create-dialog')?.close();await selectEpisode(room.episodeId);});const monitor=node('button','button subtle','输入审计');monitor.id='room-open-messages';monitor.onclick=guarded(async()=>{document.getElementById('create-dialog')?.close();await selectEpisode(room.episodeId);window.CoopFocus?.openMessages();});panel.append(replay,monitor);}
+  }else if(room.episodeId){panel.append(node('p','',room.status==='active'?'游戏进行中。':'游戏已结束。'));}
   else panel.append(node('p','','邀请已过期，请创建新房间。'));
   if(['waiting','active'].includes(room.status)){
    const end=node('button','button danger',room.status==='waiting'?'取消房间':'强制结束游戏');end.id='end-room';end.type='button';end.onclick=()=>{

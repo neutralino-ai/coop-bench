@@ -82,7 +82,7 @@ import WebKit
             try await wait("model-failure-is-visible",{app.session.agents.values.first?.warning?.contains("停止") == true})
             let runtime=app.session.player!
             try check(runtime.snapshot()["decisionToken"] == nil && (runtime.snapshot()["observation"] as? JSON)?["decisionToken"] == nil,"snapshot-hides-decision-capability")
-            _=try await runtime.act(["type":"hint","target":"p2","kind":"color","value":"red"],observationID:runtime.observation!["observationId"] as! String)
+            _=try await runtime.act(["type":"hint","target":"p2","kind":"color","value":"red"],observationID:runtime.observation!["observationId"] as! String,decisionSummary:"合成 iOS 理由：提示红色。")
             try check(runtime.data["pendingAction"] == nil,"human-action-acknowledged")
             runtime.suspend();runtime.start()
             try await wait("resume-refreshes-seat",{runtime.status != "disconnected"})

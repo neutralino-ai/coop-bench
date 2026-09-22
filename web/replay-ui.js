@@ -110,7 +110,7 @@
     rules.content.replaceChildren();
     grid.replaceChildren();shared.replaceChildren();chat.replaceChildren();full.content.replaceChildren();more.hidden=true;
   }
-  async function load(all=false) {
+  async function load(all=false,onlyPlayer) {
     const id=state.rollout?.summary.episodeId;if(!id||!state.token)return;
     void loadRecording();
     if(episode!==id){epoch++;episode=id;seats={};busy=false;}
@@ -121,10 +121,11 @@
     // in the paginated original-message viewer rather than freezing the renderer.
     const selectedIndex=state.index,targets=R.snapshot(state.rollout,state.index).players;
     for(const {player,decision} of targets){
+      if(onlyPlayer&&player!==onlyPlayer)continue;
       const seat=seats[player]??(seats[player]={messages:[],bytes:0,after:-1,more:true,error:'',loading:true});
-      const available=()=>R.linkedMessages(seat.messages,decision,player).some(m=>m.kind==='model-output');
+      const available=()=>seat.blocks?.length>0;
       seat.loading=false;
-      if(seat.capped||!seat.more||!all&&(!decision||seat.error||available()))continue;
+      if(!seat.more||!all&&(seat.error||available()))continue;
       seat.loading=true;seat.error='';render();
       try{
         for(let page=0;page<5;page++){
@@ -139,11 +140,11 @@
           const next=data.nextAfter;
           if(data.hasMore&&(!Number.isInteger(next)||next<=seat.after))throw Error('消息分页游标未前进');
           const bytes=JSON.stringify(data.messages).length;
-          if(seat.bytes+bytes>8*1024*1024||seat.messages.length+data.messages.length>2000){seat.capped=true;seat.more=false;break;}
+
           seat.messages.push(...data.messages);seat.bytes+=bytes;seat.after=Number.isInteger(next)?next:seat.after;seat.more=!!data.hasMore;
-          seat.completion=data.completion;render();if(!seat.more||!all&&available())break;
+          seat.completion=data.completion;seat.decoded=await CoopTrace.decode(seat.messages);if(!valid())return;seat.blocks=CoopTrace.blocks(seat.decoded);render();if(!seat.more||!all&&available())break;
         }
-      }catch(error){if(valid())seat.error=error.status===429?'读取频率已达上限；稍后在完整记录中重试。':'消息读取失败，可在完整记录中重试。';}
+      }catch(error){if(valid())seat.error=error.status===429?'读取频率已达上限；稍后重试。':`轨迹读取失败：${error.message}`;}
       finally{if(valid()){seat.loading=false;render();}}
     }
     if(valid()){busy=false;grid.dataset.messages='ready';more.hidden=!Object.values(seats).some(s=>s.more||s.error);more.textContent=Object.values(seats).some(s=>s.error)?'重试读取消息':'读取更多消息';render();if(state.index!==selectedIndex)void load();}
@@ -273,6 +274,28 @@
       }
     };choices.onchange=render;render();rules.box.showModal();
   }
+  const traceLabels={observation:'本席观察',view:'可见局面',updates:'可见历史',legalActions:'合法动作',control:'时限与控制',rules:'游戏规则',action:'动作',decisionSummary:'提交理由',accepted:'是否接受',error:'错误',model:'模型',tools:'可用工具',parameters:'参数',required:'必填字段',properties:'字段',description:'说明',type:'类型',name:'名称',lastActionResult:'上次动作结果'};
+  function traceValue(value){
+    value=CoopTrace.parsed(value);
+    if(value===null||typeof value!=='object')return node('p','trace-text',value===null?'空':String(value));
+    const list=node('div','trace-fields'),entries=Object.entries(value);let offset=0;
+    const more=node('button','text-button','显示更多字段');more.type='button';
+    function append(){more.remove();for(const [key,item] of entries.slice(offset,offset+30)){
+      if(item&&typeof item==='object'){
+        const detail=node('details','trace-field'),title=node('summary','',`${traceLabels[key]??key}${Array.isArray(item)?' · '+item.length+' 项':''}`);detail.append(title);detail.addEventListener('toggle',()=>{if(detail.open&&!detail.dataset.loaded){detail.dataset.loaded='true';detail.append(traceValue(item));}});list.append(detail);
+      }else{const row=node('div','trace-field');row.append(node('strong','',traceLabels[key]??key),traceValue(item));list.append(row);}
+    }offset+=30;if(offset<entries.length)list.append(more);}
+    more.onclick=append;append();return list;
+  }
+  function traceBlock(block){
+    const item=node('article',`trace-block trace-${block.type}`);item.dataset.traceId=block.id;
+    const head=node('header','trace-block-head');head.append(node('strong','',block.title),node('time','',date(block.at,true)));item.append(head);
+    if(block.action)item.append(node('p','trace-action-name',R.actionText({action:block.action})));
+    if(block.reason){const reason=node('div','trace-reason');reason.append(node('span','','提交理由'),node('p','',block.reason));item.append(reason);}
+    if(typeof block.value==='string')item.append(node('p','trace-text thinking-excerpt',block.value));
+    else{const detail=node('details','trace-content');detail.append(node('summary','',block.action?'动作字段':'展开内容'));detail.addEventListener('toggle',()=>{if(detail.open&&!detail.dataset.loaded){detail.dataset.loaded='true';detail.append(traceValue(block.value));}});item.append(detail);}
+    return item;
+  }
   function renderPlayer(p,snap) {
     const actor=snap.frame?.playerId===p.player;
     const panel=node('article',`player-panel${actor?' acting':''}`);panel.dataset.player=p.player;
@@ -298,15 +321,25 @@
       visibility.append(node('p','',text));
     }else visibility.append(node('p','muted','未保存这个时点的合法视角。'));
     visibility.append(button(p.exact?'动作绑定的真实输入 ↗':'查看已录制的可见状态 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}),button('服务器签发原文 ↗',()=>showIssued(p.player)));panel.append(visibility);
-    const decision=node('section','player-decision');
-    const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',p.decisionIndex===state.index?'这一步怎么想':'最近一次决策'),node('span','decision-step',p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
-    const matched=R.linkedMessages(seats[p.player]?.messages??[],p.decision,p.player),thoughts=R.reasoning(matched);
-    const reasoning=thoughts.length?thoughts.map(t=>t.text).join('\n'):p.decision?.decisionSummary;
-    decision.append(node('span','thinking-source',thoughts.length?`${thoughts[0].label} · 客户端来源未核验`:p.decision?.decisionSummary?'决策简述 · 非完整 thinking':'没有已记录的决策简述'));
-    const status=seats[p.player];
-    decision.append(node('p','thinking-excerpt',reasoning??(p.decision?status?.more!==false?'正在查找该步的模型记录…':'该步没有可读的思考记录。':'还没有轮到它行动。')));
-    if(p.decision&&(status?.error||status?.loading||status?.more||status?.capped))decision.append(node('span','trace-status',status.error|| (status.capped?'大轨迹 · 在完整记录中分页查看':status.loading?'正在读取对应消息…':'已载入部分消息 · 完整记录中可继续读取')));
-    decision.append(button('决策原文 / reasoning ↗',()=>showOriginal(p)));panel.append(decision);
+    const decision=node('section','player-decision'),status=seats[p.player];
+    const recorded=status?.blocks??[],agent=recorded.some(b=>['prompt','input','output','reasoning','request'].includes(b.type));
+    const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',agent?'Agent 完整轨迹':'行动理由'),node('span','decision-step',agent?'最新在上':p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
+    if(agent){
+      decision.append(node('span','thinking-source','本席全局记录 · 独立于局面时间线'));
+      const list=node('div','trace-blocks');list.setAttribute('aria-label',`${p.player} 完整轨迹`);list.dataset.player=p.player;
+      const savedReasons=state.rollout.frames.filter(f=>f.playerId===p.player&&f.action).map(f=>({id:'frame-'+f.seq,sequence:Infinity,at:f.at,type:'action',title:`服务器${f.error?'拒绝':'已确认'} · 第 ${f.seq} 步`,value:f.action,action:f.action,reason:f.decisionSummary??(f.automatic?'服务器超时默认动作':null)}));
+      const blocks=[...recorded,...savedReasons].sort((a,b)=>(typeof b.at==='number'?b.at:Date.parse(b.at)||0)-(typeof a.at==='number'?a.at:Date.parse(a.at)||0)||b.sequence-a.sequence);
+      const limit=status.displayLimit??80;
+      status.nodes??=new Map();
+      for(const block of blocks.slice(0,limit)){let item=status.nodes.get(block.id);if(!item){item=traceBlock(block);status.nodes.set(block.id,item);}list.append(item);}
+      if(blocks.length>limit)list.append(button(`展开更早的 ${Math.min(80,blocks.length-limit)} 个记录块`,()=>{status.displayLimit=limit+80;render();}));
+      decision.append(list);
+    }else{
+      decision.append(node('p','thinking-excerpt',p.decision?.decisionSummary??(p.decision?.automatic?'服务器超时默认动作':p.decision?'本步未填写理由。':'尚未提交动作。')));
+    }
+    if(status?.error||status?.loading||agent)decision.append(node('span','trace-status',status.error|| (status.loading?'正在读取轨迹…':`已载入 ${status.messages.length} 条记录${status.more?' · 还有记录待读取':' · 已读到当前末尾'}`)));
+    if(status?.more||status?.error)decision.append(button(status.error?'重试读取轨迹':'继续读取完整轨迹',()=>void load(true,p.player)));
+    panel.append(decision);
     const action=node('section',`player-action${p.decision?.error?' rejected-action':''}`);action.append(node('span','action-label',p.decisionIndex===state.index?'做了什么':'上次做了什么'),node('strong','action-description',p.decision?R.actionText(p.decision):'等待行动'));
     if(p.decision?.error)action.append(node('span','','服务器拒绝，未生效'));
     if(p.decision&&p.decisionIndex!==state.index)action.append(button('跳到这一步',()=>{stopPlayback();selectFrame(p.decisionIndex);}));panel.append(action);return panel;
@@ -317,11 +350,28 @@
     $('open-create').hidden=state.identity?.role==='auditor';
     setText('focus-timing',snap.frame?.action?'手牌 / 可见信息：动作前':'手牌 / 可见信息：此时点');
     setText('focus-step-title',`${snap.frame?.seq===0?'初始局面':`第 ${snap.frame?.seq??0} 步`} · ${snap.frame?.playerId??'系统'} · ${R.actionText(snap.frame)}`);
-    grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);
+    const scrolls=new Map([...grid.querySelectorAll('.trace-blocks')].map(el=>[el.dataset.player,el.scrollTop]));grid.dataset.count=String(snap.players.length);grid.replaceChildren(...snap.players.map(p=>renderPlayer(p,snap)));renderShared(snap);for(const el of grid.querySelectorAll('.trace-blocks'))el.scrollTop=scrolls.get(el.dataset.player)??0;
     const communications=state.rollout.frames.slice(0,state.index+1).map(f=>({frame:f,text:publicCommunication(f)})).filter(m=>m.text);
     const last=communications.at(-1);chat.replaceChildren(node('strong','','公开交流'),node('span','chat-preview',last?`${last.frame.playerId} · ${last.text}`:'截至这一步还没有公开交流。'));
     chat.append(button(`全部 ${communications.length} 条 ↗`,()=>{openEvidence();$('communication-panel').scrollIntoView({block:'start'});}));
   }
+  let liveBusy=false;
+  const liveButton=addButton('replay-refresh','刷新进展',()=>void refreshReplay(true));
+  async function refreshReplay(manual=false){
+    if(liveBusy||!state.rollout||document.body.dataset.view!=='replay'||document.hidden||!manual&&state.rollout.summary.status!=='active')return;
+    const id=state.rollout.summary.episodeId,session=state.session,serial=state.detailRequest;liveBusy=true;liveButton.disabled=true;
+    try{
+      const data=await request(`/rollouts/${encodeURIComponent(id)}`);
+      if(session!==state.session||serial!==state.detailRequest||state.rollout?.summary.episodeId!==id)return;
+      const follow=state.index===state.rollout.frames.length-1;state.rollout=data;if(follow)state.index=Math.max(0,data.frames.length-1);
+      renderHeader();renderTimeline();renderFrame();
+      for(const seat of Object.values(seats)){seat.more=true;seat.error='';}
+      await load(true);
+      liveButton.textContent=data.summary.status==='active'?'实时更新中 · 刷新':'刷新进展';
+    }catch(error){liveButton.textContent='刷新失败 · 重试';}
+    finally{liveBusy=false;liveButton.disabled=false;}
+  }
+  setInterval(()=>void refreshReplay(),5000);
   window.CoopFocus={clear,load,render,openMessages:openStream,selected(){clearStream();if(streamDialog.box.open)streamDialog.box.close();issuedController?.abort();issuedEpoch++;if(issuedDialog.box.open)issuedDialog.box.close();controller?.abort();epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();if(evidence.box.open)evidence.box.close();full.content.replaceChildren();}};
   window.addEventListener('keydown',event=>{
     if(!state.rollout||document.querySelector('dialog[open]')||['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName))return;

@@ -60,7 +60,7 @@ async function main() {
         else if(name==='leave'){await runtime.roomCommand('leave');await runtime.close();runtime=null;if(existsSync(sessionFile))unlinkSync(sessionFile);value={status:'disconnected',canResume:false};}
         else if(name==='kick')value=await runtime.roomCommand('kick',{playerId:input.playerId});
         else if(name==='invite'){const room=await runtime.roomCommand('invite');clipboard.writeText(inviteUrl({...room,apiUrl:runtime.credentials().apiUrl}));value={copied:true};}
-        else if(name==='act')value=await runtime.act(input.action,input.observationId);
+        else if(name==='act')value=await runtime.act(input.action,input.observationId,input.decisionSummary);
         else throw Error('不支持此操作。');
       }
       // Runtime act responses contain decisionToken; the human renderer gets only its safe snapshot.

@@ -110,15 +110,18 @@ import Foundation
         observation=next
         notify(next["status"] as? String != "active" ? "ended" : (next["control"] as? JSON)?["required"] as? Bool == true ? "your-turn":"waiting")
     }
-    func act(_ action: JSON,observationID: String) async throws -> JSON {
+    func act(_ action: JSON,observationID: String,decisionSummary: String?=nil) async throws -> JSON {
+        try require((decisionSummary?.utf16.count ?? 0)<=1200,"理由最多 1200 字。")
         try require(!actionBusy,"动作正在提交，请稍候。")
         try require(data["pendingAction"] == nil,"上一个动作结果尚未确认，正在使用原请求重试。","ACTION_PENDING")
         try require(observation?["status"] as? String == "active" && observation?["hasMore"] as? Bool != true,"请等待完整的最新观察。")
         try require(observation?["observationId"] as? String == observationID,"局面已改变，请使用最新观察。","STALE_OBSERVATION")
         if data["pendingAction"] == nil {
             guard let decisionToken=observation?["decisionToken"] as? String else { throw ClientFailure("INVALID_RESPONSE","观察缺少决策令牌。") }
-            let key=UUID().uuidString;data["pendingAction"]=["key":key,"command":["observationId":observationID,"decisionToken":decisionToken,"action":action]]
-            try record("tool-call",["tool":"act","action":action],observationID:observationID,requestID:key);try save()
+            let key=UUID().uuidString;var command: JSON=["observationId":observationID,"decisionToken":decisionToken,"action":action],call: JSON=["tool":"act","action":action]
+            if let reason=decisionSummary,!reason.isEmpty { command["decisionSummary"]=reason;call["decisionSummary"]=reason }
+            data["pendingAction"]=["key":key,"command":command]
+            try record("tool-call",call,observationID:observationID,requestID:key);try save()
         }
         return try await sendPending()
     }
@@ -219,7 +222,7 @@ import Foundation
             let remaining: Double=min(120,(timeoutAt-now)/1000)
             let answer=try await agent.decide(context,runtime:self,timeout:max(0.1,remaining))
             try Task.checkCancellation();try require(running == generation,"运行已暂停。","CANCELLED")
-            if let action=answer["action"] as? JSON { _=try await act(action,observationID:id) }
+            if let action=answer["action"] as? JSON { _=try await act(action,observationID:id,decisionSummary:answer["decisionSummary"] as? String) }
         } catch {
             if !Task.isCancelled {
                 let failure=publicFailure(error);warning=failure.message

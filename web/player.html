@@ -14,6 +14,7 @@
     <strong id="deadline" role="timer" aria-live="off"></strong>
     <p id="timeout-policy" class="timeout-policy"></p>
    </section>
+   <section id="reason-panel" class="reason-panel"><div class="reason-heading"><label for="decision-reason">行动理由 <span>选填</span></label><button id="dictate-reason" type="button" hidden>语音填写</button></div><textarea id="decision-reason" rows="3" maxlength="1200" placeholder="为什么这样出牌、弃牌或提示？" aria-describedby="reason-help"></textarea><small id="reason-help">仅供回放审阅，不发给队友。确认动作时一起提交。</small></section>
    <form id="action-form" hidden><label>动作<select id="action-type"></select></label><p id="action-description"></p><div id="action-fields"></div><button id="act" type="submit">提交动作</button></form>
   </section>
  </div>

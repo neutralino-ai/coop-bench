@@ -10,12 +10,24 @@ function recorder(){
 }
 const context=(id:string)=>({rules:{rulesText:'Synthetic rules only.'},observation:{observationId:id,legalActions:[{type:'fixture-action'}]},lastActionResult:{accepted:true}});
 const reply=(id:string)=>({choices:[{message:{role:'assistant',content:null,reasoning_content:`Synthetic reasoning ${id}`,
- tool_calls:[{id,type:'function',function:{name:'act',arguments:JSON.stringify({actionJson:JSON.stringify({type:'fixture-action'})})}}]}}]});
+ tool_calls:[{id,type:'function',function:{name:'act',arguments:JSON.stringify({actionJson:JSON.stringify({type:'fixture-action'}),decisionSummary:'合成中文理由'})}}]}}]});
 const config={baseUrl:'https://api.deepseek.com',model:'deepseek-flash',apiKey:'synthetic-key'};
 
 const responsesReply=(name:string,args:any,id='call-1')=>({object:'response',status:'completed',output:[
  {type:'reasoning',content:[{type:'reasoning_text',text:'Synthetic Responses reasoning.'}]},
  {type:'function_call',call_id:id,name,arguments:JSON.stringify(args)}]});
+
+test('agent requires a Chinese reason and repairs omissions before returning an action',async()=>{
+ for(const reason of [undefined,'','English only']){
+  const {runtime,captures}=recorder();let count=0;
+  const agent=new MinimalAgent({...config,api:'responses'},{fetchImpl:async(_url:string,init:any)=>{
+   const body=JSON.parse(init.body);assert.ok(body.tools[0].parameters.required.includes('decisionSummary'));
+   return Response.json(responsesReply('act',{actionJson:'{"type":"fixture-action"}',decisionSummary:++count===1?reason:'仅根据可见信息选择此动作。'}));
+  }});
+  const result=await agent.decide(context('o1'),{runtime});assert.equal(count,2);assert.equal(result.decisionSummary,'仅根据可见信息选择此动作。');
+  assert.ok(captures.some(c=>c.kind==='request'&&JSON.stringify(c.raw).includes('Chinese')));
+ }
+});
 
 test('Responses preflight exercises tool results and reasoning in two real request bodies without game context',async()=>{
  const requests:any[]=[];
@@ -34,16 +46,16 @@ test('Responses game history preserves exact output and matching tool receipts a
  const agent=new MinimalAgent({...config,api:'responses'},{fetchImpl:async(_url:string,init:any)=>{
   const body=JSON.parse(init.body);count++;
   if(count===2){assert.equal(body.input[2].type,'reasoning');assert.equal(body.input[4].type,'function_call_output');assert.equal(body.input[4].call_id,'call-1');}
-  return Response.json(responsesReply('act',{actionJson:'{"type":"fixture-action"}'},`call-${count}`));
+  return Response.json(responsesReply('act',{actionJson:'{"type":"fixture-action"}',decisionSummary:'合成中文理由'},`call-${count}`));
  }});
- for(const id of ['o1','o2'])assert.deepEqual(await agent.decide(context(id),{runtime}),{action:{type:'fixture-action'}});
+ for(const id of ['o1','o2'])assert.deepEqual(await agent.decide(context(id),{runtime}),{action:{type:'fixture-action'},decisionSummary:'合成中文理由'});
  assert.equal(count,2);assert.equal(captures[1].raw.output[0].content[0].text,'Synthetic Responses reasoning.');
 });
 
 test('empty output and required-turn wait are bounded; incomplete responses never submit actions',async()=>{
  for(const mode of ['empty','wait','incomplete']){
   const {runtime}=recorder();let count=0;
-  const agent=new MinimalAgent({...config,api:'responses'},{fetchImpl:async()=>{count++;return Response.json(mode==='empty'?{status:'completed',output:[]}:mode==='incomplete'?{...responsesReply('act',{actionJson:'{"type":"fixture-action"}'}),status:'incomplete'}:responsesReply('wait',{}));}});
+  const agent=new MinimalAgent({...config,api:'responses'},{fetchImpl:async()=>{count++;return Response.json(mode==='empty'?{status:'completed',output:[]}:mode==='incomplete'?{...responsesReply('act',{actionJson:'{"type":"fixture-action"}',decisionSummary:'合成中文理由'}),status:'incomplete'}:responsesReply('wait',{}));}});
   await assert.rejects(agent.decide({...context('o1'),observation:{...context('o1').observation,control:{required:true}}},{runtime}),{code:mode==='incomplete'?'MODEL_INCOMPLETE':'MODEL_TOOL_FORMAT'});
   assert.equal(count,mode==='incomplete'?1:2);
  }
@@ -68,7 +80,7 @@ test('thinking provider accepts consecutive decisions without forced tool choice
   }
   return Response.json(reply(`call-${requests}`));
  }});
- for(const id of ['o1','o2'])assert.deepEqual(await agent.decide(context(id),{runtime}),{action:{type:'fixture-action'}});
+ for(const id of ['o1','o2'])assert.deepEqual(await agent.decide(context(id),{runtime}),{action:{type:'fixture-action'},decisionSummary:'合成中文理由'});
  assert.equal(requests,2);assert.equal(captures.filter(c=>c.kind==='response').length,2);
  assert.equal(captures.find(c=>c.kind==='response').raw.choices[0].message.content,null,'Capture retains the exact provider response.');
  assert.ok(!JSON.stringify(captures).includes(config.apiKey));

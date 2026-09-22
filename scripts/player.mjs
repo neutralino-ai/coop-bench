@@ -21,7 +21,8 @@ else {
   // or other seat's context crosses this boundary. Stdin never runs shell code.
   const pending=new Map(),lines=createInterface({input:process.stdin,crlfDelay:Infinity});
   lines.on('line',line=>{try{if(line.length>65536)throw Error();const data=JSON.parse(line),entry=pending.get(data.id);if(!entry)return;
-    pending.delete(data.id);entry.resolve(data.action?{action:data.action}:{wait:true});}catch{output({type:'input-error',message:'Expected JSON {id,action} (64 KiB maximum).'});}});
+    if(data.action&&(typeof data.decisionSummary!=='string'||!data.decisionSummary.trim()||data.decisionSummary.length>1200))throw Error();
+    pending.delete(data.id);entry.resolve(data.action?{action:data.action,decisionSummary:data.decisionSummary}:{wait:true});}catch{output({type:'input-error',message:'Expected JSON {id,action,decisionSummary}: include a concise Chinese reason (1–1200 characters; 64 KiB maximum).'});}});
   runtime.attachAgent({decide(context,{signal}) {return new Promise((resolve,reject)=>{const id=randomUUID();
     const abort=()=>{pending.delete(id);reject(Error('Decision cancelled.'));};signal.addEventListener('abort',abort,{once:true});
     pending.set(id,{resolve:value=>{signal.removeEventListener('abort',abort);resolve(value);}});output({type:'decision',id,context});});}});

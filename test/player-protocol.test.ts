@@ -102,7 +102,7 @@ test('actual stdio MCP exposes rules/wait/act and performs a seat-authenticated 
     assert.ok(!JSON.stringify(listed).includes('seat_token'));assert.ok(!JSON.stringify(listed).includes(token));
     const rules:any=await client.callTool({name:'rules',arguments:{}});assert.match(rules.content[0].text,/Synthetic fixture/);
     const view:any=await client.callTool({name:'wait',arguments:{timeoutMs:0}});assert.equal(view.structuredContent.nextCursor,1);
-    const result:any=await client.callTool({name:'act',arguments:{requestId:'mcp-intent-1',decisionToken:view.structuredContent.observation.decisionToken,action:{type:'play',card:0}}});
+    const result:any=await client.callTool({name:'act',arguments:{requestId:'mcp-intent-1',decisionToken:view.structuredContent.observation.decisionToken,action:{type:'play',card:0},decisionSummary:'合成理由：选择此动作。'}});
     assert.equal(result.structuredContent.accepted,true);assert.equal(received.find(req=>req.url.endsWith('/actions')).headers['idempotency-key'],'mcp-intent-1');
     assert.ok(!JSON.stringify([rules,view,result]).includes(token));
   }finally{await client.close();http.closeAllConnections();await new Promise<void>(resolve=>http.close(()=>resolve()));}
@@ -132,5 +132,4 @@ test('building external-agent context alone does not consume unacknowledged visi
     assert.ok(!JSON.stringify(retried).includes(token));assert.equal(retried.observation.decisionToken,undefined);
   }finally{await runtime.close();}
 });
-
 

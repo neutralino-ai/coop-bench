@@ -185,6 +185,7 @@ export class PlayerRuntime extends EventEmitter {
     }
   }
   async act(action,observationId,decisionSummary) {
+    if(decisionSummary!==undefined&&(typeof decisionSummary!=='string'||decisionSummary.length>1200))throw Error('理由最多 1200 字。');
     if(this.#actionBusy)throw Error('Action already submitting.');
     if(!this.observation||this.observation.status!=='active')throw Error('No active game.');
     if(this.observation.hasMore)throw Object.assign(Error('Observation history is still downloading.'),{code:'HISTORY_INCOMPLETE'});
