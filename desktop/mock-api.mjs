@@ -225,6 +225,22 @@ export async function startMockApi({role='operator'}={}) {
       if (!episode) return fail(res, 404, 'UNKNOWN_EPISODE');
       const player = episode.credentials.get(credential), admin = isAdmin(credential);
       if (!admin && !player) return fail(res, 401, 'UNAUTHORIZED');
+      // Match the message API contract so native startup cannot silently use wait's 500-item limit.
+      let messageAfter, messageLimit;
+      if (operation === 'messages' && req.method === 'GET') {
+        const allowed = category === 'rollouts' ? ['after','limit','playerId','kind'] : ['after','limit','kind'];
+        messageAfter = Number(url.searchParams.get('after') ?? -1);
+        messageLimit = Number(url.searchParams.get('limit') ?? 50);
+        if ([...url.searchParams.keys()].some(key => !allowed.includes(key) || url.searchParams.getAll(key).length !== 1)
+          || !Number.isSafeInteger(messageAfter) || messageAfter < -1
+          || !Number.isInteger(messageLimit) || messageLimit < 1 || messageLimit > 100
+          || (url.searchParams.has('kind') && url.searchParams.get('kind') !== 'model-input')) return fail(res, 400, 'INVALID_REQUEST');
+      }
+      const messagePage = (messages, completion) => {
+        const remaining = messages.filter(m => m.sequence > messageAfter && (!url.searchParams.has('kind') || m.kind === url.searchParams.get('kind')));
+        const page = remaining.slice(0, messageLimit);
+        return {messages:page,nextAfter:page.at(-1)?.sequence ?? messageAfter,hasMore:remaining.length > page.length,completion:completion ?? null};
+      };
       if (category === 'rollouts') {
         if (!admin) return fail(res, 403, 'AUDIT_FORBIDDEN');
         if (!operation) return respond(res, episode.rollout);
@@ -236,8 +252,7 @@ export async function startMockApi({role='operator'}={}) {
         if (operation === 'messages') {
           const seat = url.searchParams.get('playerId');
           if (!seat) return respond(res, { seats: episode.players.map(playerId => ({ playerId, messageCount: episode.messages.get(playerId)?.length ?? 0, lastSequence:episode.messages.get(playerId)?.at(-1)?.sequence??-1, lastInputSequence:episode.messages.get(playerId)?.filter(m=>m.kind==='model-input').at(-1)?.sequence??-1, completion: episode.completions.get(playerId) ?? null })) });
-          const messages = (episode.messages.get(seat) ?? []).filter(m => m.sequence > Number(url.searchParams.get('after') ?? -1)&&(!url.searchParams.has('kind')||m.kind===url.searchParams.get('kind')));
-          return respond(res, { messages, nextAfter: messages.at(-1)?.sequence ?? Number(url.searchParams.get('after')??-1), hasMore: false, completion: episode.completions.get(seat) ?? null });
+          return respond(res, messagePage(episode.messages.get(seat) ?? [], episode.completions.get(seat)));
         }
         if (operation === 'artifacts') return respond(res, { artifacts: episodeId === id ? [artifact] : [] });
         if (operation === `artifacts/${artifact.id}/content` && episodeId === id) { res.writeHead(200, { 'Content-Type': 'application/octet-stream' }); return res.end(bytes); }
@@ -249,8 +264,7 @@ export async function startMockApi({role='operator'}={}) {
       if (operation === 'messages' && player) {
         const messages = episode.messages.get(player) ?? [];
         if(req.method==='GET'){
-          const page=messages.filter(m=>m.sequence>Number(url.searchParams.get('after')??-1));
-          return respond(res,{messages:page,nextAfter:page.at(-1)?.sequence??Number(url.searchParams.get('after')??-1),hasMore:false,completion:episode.completions.get(player)??null});
+          return respond(res,messagePage(messages,episode.completions.get(player)));
         }
         const existing=messages.find(m=>m.sequence===body.sequence);
         if(!existing)messages.push({ ...body, playerId: player, createdAt: stamp });

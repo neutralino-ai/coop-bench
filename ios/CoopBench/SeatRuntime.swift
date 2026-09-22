@@ -50,7 +50,8 @@ import Foundation
                         if self.data["traceBase"] == nil {
                             var after = -1;var more=true
                             while more {
-                                let page=try await self.request("/episodes/\(episode)/messages?after=\(after)&limit=500")
+                                // Message history is capped at 100 per page (wait updates allow 500).
+                                let page=try await self.request("/episodes/\(episode)/messages?after=\(after)&limit=100")
                                 after=page["nextAfter"] as? Int ?? after;more=page["hasMore"] as? Bool ?? false
                                 if page["completion"] is JSON { throw ClientFailure("TRACE_SEALED","本席轨迹已封存，不能继续写入。") }
                             }
