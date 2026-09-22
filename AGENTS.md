@@ -1,5 +1,8 @@
 # Coop Bench 公开客户端接手指南
 
+**2026-09-22 / 0.11.1 已正式发布**：创建新房间及房间成员弹窗统一白底，标题与内容不再出现两层背景。版本/tag `a96c60a`，分支 `codex/room-background`，工作树 `client/artifacts/member-login`。四平台、Mac签名公证及TestFlight发布CI `35692621925` 全通过；管理端120/Player25、iOS模拟器59项，12个公开附件和0.11.0更新器真实下载校验通过。iOS `0.11.1 (22.1)` 已 VALID / IN_BETA_TESTING。未操作服务端或对局，实体设备未验收。详见 [交付记录](docs/room-background-delivery-2026-09-22.md)。
+
+
 **2026-09-22 / 0.11.0 已正式发布**：operator/member 两种角色、管理员用户/邀请码/批量对局操作、member 登录修复及任意对局回放导出，移除客户端审阅批注。删除账号保留历史署名，删除对局只允许终局。版本/tag `e9d4bd7`，四平台签名 CI `35690859160` 全成功；每平台管理端120/Player25、iOS模拟器58项通过，12个公开附件与0.10.3更新器真实下载校验通过。iOS `0.11.0 (20.1)` 为 VALID / IN_BETA_TESTING，实体设备未验收。详见 [交付记录](docs/operator-member-delivery-2026-09-22.md)。
 
 
