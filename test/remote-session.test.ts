@@ -156,9 +156,13 @@ test('explicit cancellation and logout cancel pending requests; logout forgets r
 
 test('timeouts release pending requests and do not automatically retry',async t=>{
   const release=deferred();const f=await fixture(t,async(req,res)=>{if(req.url==='/api/v1/games'){await release.promise;json(res,{games:[]});return true;}return false;});
-  const session=new RemoteSession({fetcher:fetch,store:memoryStore(f.apiUrl),timeoutMs:20});
+  let attempts=0;
+  const fetcher:typeof fetch=(...args)=>{attempts++;return fetch(...args);};
+  const session=new RemoteSession({fetcher,store:memoryStore(f.apiUrl),timeoutMs:20});
   await assert.rejects(session.request(request('timeout','/api/v1/games')),(e:any)=>e.code==='TIMEOUT' && /请求超时/.test(e.message));release.resolve();
-  assert.equal(f.requests.length,1);assert.equal(session.pending.size,0);
+  // The deadline can abort before the server accepts the socket on busy CI.
+  // Count transport attempts to test retry behavior independently of arrival.
+  assert.equal(attempts,1);assert.ok(f.requests.length<=1);assert.equal(session.pending.size,0);
 });
 
 test('persistent ciphertext is bound to the normalized API, unavailable encryption fails closed, and not-remembering erases the saved secret',()=>{

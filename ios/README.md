@@ -2,7 +2,13 @@
 
 原生 SwiftUI + WKWebView 应用，最低 iOS 17。复用仓库中的大厅、回放与玩家界面；网络、钥匙串、席位运行器和 Responses Agent 由 Swift 实现。只连接远程 API，不包含游戏引擎。
 
-## 用自己的 Mac / Xcode 安装
+## 通过 TestFlight 安装和更新
+
+受邀测试者在 iPhone/iPad 安装 Apple 的 TestFlight，接受邀请后安装 Coop Bench。后续版本在 TestFlight 中更新，不需要自己的 Mac。正式 App Store 分发需要另行审核，不能把成功上传等同于已经上架。
+
+签名构建由统一客户端 CI 执行，四平台验收全部通过才上传到 App Store Connect；Apple 处理完成后才可测试。签名配置见 [Apple signing](../docs/apple-signing.md)。GitHub 上的 Xcode ZIP 仍是工程源码，不是可直接安装的 iPhone 应用。
+
+## 可选：用自己的 Mac / Xcode 安装
 
 也可从 [统一客户端构建记录](https://github.com/neutralino-ai/coop-bench/actions/workflows/desktop-build.yml) 中成功的运行下载 `ios-xcode-project`，解压其中 `Coop-Bench-<版本号>-iOS-Xcode.zip`，直接打开 `ios/CoopBench.xcodeproj`，然后从下面第 4 步继续。正式发布时，此压缩包与桌面安装包一起附在同一个 Release 中，包含已准备好的网页资源，首次安装无需 Node 或 XcodeGen。
 
@@ -22,7 +28,7 @@
 5. 连接 iPhone，在手机上信任 Mac，并根据 Xcode 的提示开启“设置 → 隐私与安全性 → 开发者模式”。选择该手机作为运行目标，点击 ▶ Run。
 6. 打开后使用 Coop Bench 用户名和密码登录。新用户先用一次性注册 token 创建账号。默认服务器为 `https://coop.neutrinophysics.cn:34936/api/v1`；可在“账号与服务器设置”修改。0.10.0 需要支持账号归属的新后端。
 
-个人 Apple ID 可用于个人设备开发测试；Personal Team 的签名通常 7 天到期，需要重新构建安装，见 [Apple 说明](https://developer.apple.com/help/account/basics/about-your-developer-account)。此流程不需要 TestFlight；CI 构建不包含你的签名，不能把模拟器产物直接装到手机。
+个人 Apple ID 可用于个人设备开发测试；Personal Team 的签名通常 7 天到期，需要重新构建安装，见 [Apple 说明](https://developer.apple.com/help/account/basics/about-your-developer-account)。此自签流程不需要 TestFlight。模拟器产物不能直接装到手机；App Store 分发 IPA 应通过 TestFlight 或 App Store 安装。
 
 ## 使用与边界
 
@@ -36,6 +42,6 @@
 
 ## 验证
 
-`.github/workflows/ios-build.yml` 在 macOS 编译、运行原生单元测试、在 iPhone 模拟器连接合成 HTTP / 模型夹具，并编译未签名的真机 Release。合成测试不是完整游戏引擎或真实模型测试，模拟器结果不能替代实际 iPhone 安装验收。
+`.github/workflows/ios-build.yml` 在 macOS 编译、运行原生单元测试、在 iPhone 模拟器连接合成 HTTP / 模型夹具，并编译真机 Release。签名模式还会归档、导出 App Store IPA 并核验证书；普通 PR 只编译未签名的真机版本。合成测试不是完整游戏引擎或真实模型测试，模拟器结果不能替代实际 iPhone 安装验收。
 
 工程由 `project.yml` 生成；`Web/`、`.xcodeproj`、DerivedData 和签名产物不提交。修改共享网页后执行 `node scripts/build-ios.mjs`。

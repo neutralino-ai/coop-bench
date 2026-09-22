@@ -53,7 +53,11 @@ cp "$sign_dir/profile.mobileprovision" "$profile_path"
 build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
 xcodebuild archive -project ios/CoopBench.xcodeproj -scheme CoopBench -configuration Release -destination 'generic/platform=iOS' -archivePath artifacts/ios-archive/CoopBench.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER="$uuid" CURRENT_PROJECT_VERSION="$build_number" OTHER_CODE_SIGN_FLAGS="--keychain $keychain"
 xcodebuild -exportArchive -archivePath artifacts/ios-archive/CoopBench.xcarchive -exportPath artifacts/ios-export -exportOptionsPlist "$sign_dir/ExportOptions.plist"
-app=artifacts/ios-archive/CoopBench.xcarchive/Products/Applications/CoopBench.app
+ipa_files=(artifacts/ios-export/*.ipa)
+[ "${#ipa_files[@]}" -eq 1 ] && [ -f "${ipa_files[0]}" ]
+mkdir "$sign_dir/exported"
+unzip -q "${ipa_files[0]}" -d "$sign_dir/exported"
+app="$sign_dir/exported/Payload/CoopBench.app"
 codesign --verify --deep --strict "$app"
 codesign -d --entitlements :- "$app" > "$sign_dir/app-entitlements.plist"
 python3 - <<'PY'
@@ -61,7 +65,7 @@ import os,plistlib,pathlib,json
 p=pathlib.Path(os.environ['SIGN_DIR']);e=plistlib.loads((p/'app-entitlements.plist').read_bytes())
 assert e['application-identifier']==os.environ['APPLE_TEAM_ID']+'.org.coopbench.ios'
 assert not e.get('get-task-allow',False)
-info=plistlib.loads(pathlib.Path('artifacts/ios-archive/CoopBench.xcarchive/Products/Applications/CoopBench.app/Info.plist').read_bytes())
+info=plistlib.loads((p/'exported/Payload/CoopBench.app/Info.plist').read_bytes())
 out=pathlib.Path('artifacts/apple-signing');out.mkdir(parents=True,exist_ok=True)
 (out/'ios-verification.json').write_text(json.dumps({'ok':True,'bundleId':info['CFBundleIdentifier'],'version':info['CFBundleShortVersionString'],'build':info['CFBundleVersion'],'team':os.environ['APPLE_TEAM_ID']}))
 PY

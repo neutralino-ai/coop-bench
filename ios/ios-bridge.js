@@ -11,6 +11,6 @@
  window.addEventListener('DOMContentLoaded',()=>{
   document.body.classList.add('ios-client');
   const note=document.createElement('p');note.className='ios-foreground-note';note.textContent='参赛时保持应用在前台；切到后台不会暂停服务器倒计时。';document.body.append(note);
-  const updates=document.querySelector('.update-section');if(updates){const section=document.createElement('section');section.className='settings-section';const title=document.createElement('h3');title.textContent='iOS 客户端';const hint=document.createElement('p');hint.textContent='在 Mac 更新代码后，通过 Xcode 重新构建安装。';section.append(title,hint);updates.after(section);}
+  const updates=document.querySelector('.update-section');if(updates){const section=document.createElement('section');section.className='settings-section';const title=document.createElement('h3');title.textContent='iOS 客户端';const hint=document.createElement('p');hint.textContent='通过 TestFlight 安装的版本，请在 TestFlight 中更新。自行构建的版本可通过 Xcode 更新。';section.append(title,hint);updates.after(section);}
  });
 })();

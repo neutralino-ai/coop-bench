@@ -97,8 +97,13 @@ jobs:
       - name: Audit management package file boundary
         run: node scripts/verify-package.mjs "${{ matrix.asar }}"
       - name: Verify actual packaged management client with mock API
+        if: runner.os != 'macOS'
         timeout-minutes: 3
         run: node desktop/ci-client-smoke.mjs "${{ matrix.executable }}" artifacts/ci-packaged-smoke "${{ matrix.arch }}"
+      - name: Verify actual packaged macOS client with isolated test keychain
+        if: runner.os == 'macOS'
+        timeout-minutes: 4
+        run: node scripts/with-mac-test-keychain.mjs desktop/ci-client-smoke.mjs "${{ matrix.executable }}" artifacts/ci-packaged-smoke "${{ matrix.arch }}"
       - name: Package Player client
         if: runner.os != 'macOS' || env.SIGN_APPLE != 'true'
         run: pnpm exec electron-builder --config build/player-electron-builder.json ${{ matrix.build-args }} --publish never
@@ -115,8 +120,13 @@ jobs:
       - name: Audit Player package file boundary
         run: node scripts/verify-package.mjs "${{ matrix.player-asar }}"
       - name: Verify actual packaged Player with mock API
+        if: runner.os != 'macOS'
         timeout-minutes: 3
         run: node desktop/ci-player-smoke.mjs "${{ matrix.player-executable }}" artifacts/ci-player-smoke "${{ matrix.arch }}"
+      - name: Verify actual packaged macOS Player with isolated test keychain
+        if: runner.os == 'macOS'
+        timeout-minutes: 4
+        run: node scripts/with-mac-test-keychain.mjs desktop/ci-player-smoke.mjs "${{ matrix.player-executable }}" artifacts/ci-player-smoke "${{ matrix.arch }}"
       - name: Verify signatures and Gatekeeper on final macOS packages
         if: runner.os == 'macOS' && env.SIGN_APPLE == 'true'
         env:
