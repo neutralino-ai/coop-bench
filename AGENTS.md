@@ -1,5 +1,7 @@
 # Coop Bench 公开客户端接手指南
 
+**2026-09-22 / 0.11.8 已正式发布**：统一牌局/轨迹/观测/附件读取额度，去掉重复刷新，限流不误报断线；修复慢登录响应覆盖用户回放导航。tag `2e3f888`，118单元、各桌面管理端126/Player25、iOS模拟器68通过。CI `35705482603` 四平台及TestFlight上传通过，Apple Silicon一次测试竞态重跑；发布阶段因说明文件缺失后单独补发原包，12附件SHA-256全匹配，不称整条CI全绿。TestFlight `0.11.8（30.1）` 已 VALID / IN_BETA_TESTING。没有后端部署或中断对局，实体设备未验收。详见 [交付记录](docs/release-0.11.8-delivery-2026-09-22.md)。
+
 **2026-09-22 / 0.11.5 已正式发布**：手机开局HTTP400修复、实时回放行动者和倒计时、菜单绿灯强制检查、单行拖动时间条、五色紧凑轨迹卡和本轮tool use高亮。版本/tag `3eb50a0`，四平台签名/公证/TestFlight/发布CI `35698630310` 全通过；110单元、管理端126/Player25、iOS模拟器68，12公开附件和旧更新器实际下载校验通过。TestFlight `0.11.5（27.1）` 已 VALID / IN_BETA_TESTING，真机未验收。详见 [交付记录](docs/release-0.11.5-delivery-2026-09-22.md)。
 
 **2026-09-22 / 0.11.1 已正式发布**：创建新房间及房间成员弹窗统一白底，标题与内容不再出现两层背景。版本/tag `a96c60a`，分支 `codex/room-background`，工作树 `client/artifacts/member-login`。四平台、Mac签名公证及TestFlight发布CI `35692621925` 全通过；管理端120/Player25、iOS模拟器59项，12个公开附件和0.11.0更新器真实下载校验通过。iOS `0.11.1 (22.1)` 已 VALID / IN_BETA_TESTING。未操作服务端或对局，实体设备未验收。详见 [交付记录](docs/room-background-delivery-2026-09-22.md)。

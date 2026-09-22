@@ -12,4 +12,10 @@
 
 独立版本说明 `docs/release-0.11.8.md` 在标签之后补齐。自动发布步骤若因标签内缺此文件失败，将在所有平台和TestFlight上传通过后，使用本轮原始签名附件与校验和完成发布，不重建安装包或移动标签。
 
-最终发布状态待补充。
+最终四平台及TestFlight上传均通过，Apple Silicon单任务重跑后，管理端126项、Player25项通过；两种Mac架构的ZIP/DMG签名、公证票据、Gatekeeper全部accepted。签名使用维护者Xuefeng Ding的既有Apple身份。iOS模拟器68项和原生检查通过；Apple只读核验0.11.8（30.1）为VALID / IN_BETA_TESTING，build id `94005a4e-cc9d-498d-92a0-376f52e01b6a`。未声称外部测试审核或真机验收完成。
+
+原流水线最后发布步骤因标签内缺版本说明失败。补发流水线 [35710279720](https://github.com/neutralino-ai/coop-bench/actions/runs/35710279720) 验证原标签SHA和五项平台/TestFlight成功结果后，在GitHub内部下载并上传同批签名包；最后查询草稿的tag端点返回404，因此在本机通过稳定release id逐项核对12个远端附件size/state/SHA-256后公开。后续补发脚本已改用稳定id。没有重建安装包或移动版本标签，不把这两个发布步骤失败写成整条CI全绿。
+
+[公开Release](https://github.com/neutralino-ai/coop-bench/releases/tag/v0.11.8) 于2026-09-22 09:29:18 UTC发布，12附件包含同版Xcode工程。远端12项SHA-256均与原始验收文件一致。原证据、首次失败与重跑证据分别保留在忽略目录 `artifacts/v0118-*`。
+
+最终[公开下载验收35711315409](https://github.com/neutralino-ai/coop-bench/actions/runs/35711315409)成功：不携带认证信息，从公开Release验证12附件与11条安装包/工程校验和，旧0.10.1版本选择逻辑识别新版，实际下载111543589字节Windows安装包并校验SHA-256，181515字节同版iOS工程也下载校验成功。使用的更新器模块与此前旧客户端模块SHA-256一致。报告已保存至 `artifacts/v0118-release-ci-verification/verification.json`。本地GitHub链路中断，最后下载验收改在CI完成；临时本机SSH/CONNECT辅助通道在交付结束时关闭，没有修改服务端监听或部署配置。
