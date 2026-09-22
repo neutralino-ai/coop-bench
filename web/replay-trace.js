@@ -90,12 +90,18 @@ globalThis.CoopTrace=(()=>{
   const candidates=blocks.filter(b=>b.type==='call'&&b.action&&(live
    ?observation?.control?.required===true&&((b.windowId&&b.windowId===observation.control.windowId)||(b.observationId&&b.observationId===observation.observationId))
    :frame?.observed?.observationId&&b.observationId===frame.observed.observationId&&canonical(b.action)===canonical(frame.action)));
-  return (candidates.filter(b=>b.submitted).sort((a,b)=>b.sequence-a.sequence)[0]??candidates.sort((a,b)=>b.sequence-a.sequence)[0])?.id;
+  const submitted=candidates.filter(b=>b.submitted);
+  if(!live){
+   if(frame?.requestId&&submitted.length)return submitted.find(b=>b.requestId===frame.requestId)?.id;
+   const known=submitted.length?submitted:candidates;
+   return known.length===1?known[0].id:undefined;
+  }
+  return (submitted.sort((a,b)=>b.sequence-a.sequence)[0]??candidates.sort((a,b)=>b.sequence-a.sequence)[0])?.id;
  }
  function withFrames(recorded,frames){
   const result=recorded.map(b=>({...b}));
   for(const f of frames){
-   const receipt=!f.error&&f.observed?.observationId&&result.find(b=>b.type==='result'&&b.requestId&&b.observationId===f.observed.observationId&&(b.value?.accepted===true||b.value?.observation)&&recorded.some(c=>c.type==='call'&&c.submitted&&c.requestId===b.requestId&&c.observationId===b.observationId&&canonical(c.action)===canonical(f.action)));
+   const receipt=!f.error&&f.observed?.observationId&&result.find(b=>b.type==='result'&&b.requestId&&(!f.requestId||b.requestId===f.requestId)&&b.observationId===f.observed.observationId&&(b.value?.accepted===true||b.value?.observation)&&recorded.some(c=>c.type==='call'&&c.submitted&&c.requestId===b.requestId&&c.observationId===b.observationId&&canonical(c.action)===canonical(f.action)));
    if(receipt)receipt.confirmation={seq:f.seq,action:f.action,decisionSummary:f.decisionSummary};
    else result.push({id:'frame-'+f.seq,sequence:Infinity,at:f.at,type:'result',title:`服务器${f.error?'拒绝':'已确认'} · 第 ${f.seq} 步`,value:{action:f.action,accepted:!f.error,...(f.error?{error:f.error}:{}),...(f.automatic?{automatic:f.automatic}:{})},action:f.action,reason:f.decisionSummary??(f.automatic?'服务器超时默认动作':null)});
   }

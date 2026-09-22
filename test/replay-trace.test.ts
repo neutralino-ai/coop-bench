@@ -33,6 +33,9 @@ test('current tool use is linked by observation or live window, never by action 
  {id:'submitted',sequence:2,type:'call',action,submitted:true,observationId:'selected',windowId:'window'}];
  assert.equal(T.currentCallId(blocks,{frame:{observed:{observationId:'selected'},action}}),'submitted');
  assert.equal(T.currentCallId(blocks,{frame:{observed:{observationId:'unknown'},action}}),undefined);
+ const retries=[{...blocks[2],requestId:'first'},{...blocks[2],id:'retry',sequence:3,requestId:'second'}];
+ assert.equal(T.currentCallId(retries,{frame:{requestId:'first',observed:{observationId:'selected'},action}}),'submitted');
+ assert.equal(T.currentCallId(retries,{frame:{observed:{observationId:'selected'},action}}),undefined);
  assert.equal(T.currentCallId(blocks,{live:true,observation:{observationId:'new-projection',control:{required:true,windowId:'window'}}}),'submitted');
  assert.equal(T.currentCallId(blocks,{live:true,observation:{control:{required:false,windowId:'window'}}}),undefined);
  assert.equal(T.currentCallId(blocks,{live:true,observation:{control:{required:true,windowId:'next-window'}}}),undefined);
