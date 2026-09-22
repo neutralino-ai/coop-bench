@@ -154,6 +154,7 @@ class Element{
  id='';value='';textContent='';hidden=false;disabled=false;checked=false;readOnly=false;required=false;open=false;className='';children:any[]=[];dataset:any={};lastChild:any={textContent:''};listeners:any={};isConnected=true;
  parentNode:Element|null=null;
  append(...items:any[]){for(const item of items){item.remove?.();this.children.push(item);if(item instanceof Element)item.parentNode=this;}}
+ prepend(...items:any[]){for(const item of [...items].reverse()){item.remove?.();this.children.unshift(item);if(item instanceof Element)item.parentNode=this;}}
  replaceChildren(...items:any[]){for(const child of [...this.children])child.remove?.();this.children=[];this.append(...items);this.textContent='';}
  before(...items:any[]){const parent=this.parentNode;if(!parent)return;for(const item of items){if(item===this)continue;item.remove?.();parent.children.splice(parent.children.indexOf(this),0,item);if(item instanceof Element)item.parentNode=parent;}}
  addEventListener(name:string,handler:any){this.listeners[name]=handler;}
@@ -166,8 +167,22 @@ function uiContext(requestImpl:any,settings:any={}){
  get('create-form').append(get('create-episode'));get('create-name').value='Test game';get('create-timeout').value='600';
  const intervals:any[]=[];const transport={desktop:true,defaultApi:connection.apiUrl,getConnection:()=>new Promise(()=>{}),request:requestImpl,disconnect:async()=>{},copyText:async()=>{},...settings.transport};
  const context=vm.createContext({window:{coopTransport:transport,addEventListener(){}},document:{getElementById:get,createElement:()=>new Element(),querySelector:()=>get('pill'),hidden:false,body:new Element()},location:{origin:'coop://app',protocol:'coop:',hash:''},history:{replaceState(){}},URL,URLSearchParams,AbortController,AbortSignal,Response,DOMException,TextEncoder,crypto:webcrypto,Uint8Array,Blob,setTimeout,clearTimeout,setInterval:(handler:any,ms:number)=>{intervals.push({handler,ms});return intervals.length;},clearInterval(){},console});
- vm.runInContext(appSource,context);vm.runInContext("loadGames=async()=>{};loadList=async()=>{};selectEpisode=async()=>{};",context);if(settings.initialAuth!==false)vm.runInContext("setConnectionStatus('idle');state.token='connected';state.identity={id:'fixture',role:'operator'};state.sessionReady=true;",context);get('create-game').value='hanabi';get('create-scenario').value='base';get('create-players').value='3';return {context,get,intervals,transport};
+ vm.runInContext(appSource,context);vm.runInContext((settings.realGames?'':"loadGames=async()=>{};")+"loadList=async()=>{};selectEpisode=async()=>{};",context);if(settings.initialAuth!==false)vm.runInContext("setConnectionStatus('idle');state.token='connected';state.identity={id:'fixture',role:'operator'};state.sessionReady=true;",context);get('create-game').value='hanabi';get('create-scenario').value='base';get('create-players').value='3';return {context,get,intervals,transport};
 }
+
+test('room creation waits for the shared catalogue and reports retryable catalogue failures',async()=>{
+ const pending=deferred();let calls=0;
+ const {context,get}=uiContext(async()=>{calls++;return pending.promise;},{realGames:true});
+ const create=get('create-form').children.find(e=>e.id==='create-room');
+ const first=vm.runInContext('loadGames()',context),second=vm.runInContext('loadGames()',context);
+ assert.equal(calls,1);assert.equal(create.disabled,true);
+ pending.resolve(Response.json({games:[{id:'hanabi',name:'Fixture',players:[2,3],scenarios:[{id:'base',name:'Base'}]}]}));
+ await Promise.all([first,second]);assert.equal(create.disabled,false);
+ const failed=uiContext(async()=>Response.json({error:{message:'catalog unavailable'}},{status:503}),{realGames:true});
+ await assert.rejects(vm.runInContext('loadGames()',failed.context),/catalog unavailable/);
+ assert.equal(failed.get('create-form').children.find(e=>e.id==='create-room').disabled,true);
+ assert.match(failed.get('create-form').children.find(e=>e.id==='create-catalog-status').textContent,/读取失败/);
+});
 
 test('audit UI prevents duplicate create, limits credentials to each seat, clears them on logout',async()=>{
  const pending=deferred();let count=0;const {context,get}=uiContext(async(path:string,options:any)=>{count++;assert.equal(path,'/api/v1/episodes');assert.equal(options.body.playerCount,3);return pending.promise;});
