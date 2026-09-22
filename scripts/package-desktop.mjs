@@ -27,7 +27,7 @@ try {
     env.CSC_LINK = env.MAC_DEVELOPER_ID_P12;
     env.CSC_KEY_PASSWORD = env.MAC_DEVELOPER_ID_PASSWORD;
     env.CSC_IDENTITY_AUTO_DISCOVERY = 'true';
-    args.push('--config.forceCodeSigning=true', '--config.mac.notarize=true');
+    args.push('--config.forceCodeSigning=true', '--config.mac.notarize=true', '--config.dmg.sign=true');
   } else {
     env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
   }
