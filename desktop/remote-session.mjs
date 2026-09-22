@@ -85,7 +85,7 @@ export function validateRequest(input) {
   requireThat(url.origin === 'https://local.invalid' && url.pathname === path, 'API 路径无效。');
   const id = '[A-Za-z0-9_-]+';
   const get = new RegExp(`^/api/v1/(operator/users|health|identity|lobby(?:/mine)?|games(?:/${id})?|rooms(?:/${id}/admin)?|rollouts(?:/${id}(?:/(?:observations|messages|artifacts(?:/${id}/content)?))?)?|episodes/${id}/(?:replay|training|audit))$`);
-  const post = new RegExp(`^/api/v1/(lobby/${id}/(?:join|leave)|rooms|rooms/${id}/admin-(?:start|kick|invite|seat-tokens|end)|episodes|episodes/${id}/truncate|rollouts/${id}/annotations)$`);
+  const post = new RegExp(`^/api/v1/(lobby/${id}/(?:join|leave)|rooms|rooms/${id}/admin-(?:start|kick|invite|seat-tokens|end)|episodes/${id}/truncate|rollouts/${id}/annotations)$`);
   requireThat((input.method === 'GET' ? get : post).test(path), '此接口不属于人类客户端；Agent 请使用独立座位 API。');
   requireThat(input.method !== 'GET' || input.body === undefined, 'GET 不能携带请求体。');
   requireThat(input.method !== 'POST' || (input.body && typeof input.body === 'object' && !Array.isArray(input.body)), 'POST 需要 JSON 对象。');

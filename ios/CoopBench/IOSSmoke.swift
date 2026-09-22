@@ -58,6 +58,7 @@ import WebKit
             _=try await js("document.querySelector('#open-library').click();return true",app.host)
             _=try await js("document.querySelector('#open-create').click();return true",app.host)
             try await wait("room-catalog-ready",{try await js("return !document.querySelector('#create-room').disabled && document.querySelector('#create-game').value && document.querySelector('#create-scenario').value ? true:false",app.host) as? Bool == true})
+            try check(try await js("return !document.querySelector('#create-participation') && !document.querySelector('#create-episode') && !document.querySelector('#seat-configs')",app.host) as? Bool == true,"room-only-creation-no-direct-deal")
             _=try await js("document.querySelector('#create-players').value='2';document.querySelector('#create-name').value='iPhone 验收房间';return true",app.host)
             try await snapshot("create-room",app.host)
             try check(try await js("return document.querySelector('#create-form').checkValidity() && !document.querySelector('#create-room').disabled && !!state.token && ['operator','member'].includes(state.identity?.role)",app.host) as? Bool == true,"room-create-ready")

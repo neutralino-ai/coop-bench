@@ -50,7 +50,7 @@ enum Endpoint {
         if owner {
             let id="[A-Za-z0-9_-]+"
             let get="^/api/v1/(operator/users|health|identity|lobby(?:/mine)?|games(?:/\(id))?|rooms(?:/\(id)/admin)?|rollouts(?:/\(id)(?:/(?:observations|messages|artifacts(?:/\(id)/content)?))?)?|episodes/\(id)/(?:replay|training|audit))$"
-            let post="^/api/v1/(lobby/\(id)/(?:join|leave)|rooms|rooms/\(id)/admin-(?:start|kick|invite|seat-tokens|end)|episodes|episodes/\(id)/truncate|rollouts/\(id)/annotations)$"
+            let post="^/api/v1/(lobby/\(id)/(?:join|leave)|rooms|rooms/\(id)/admin-(?:start|kick|invite|seat-tokens|end)|episodes/\(id)/truncate|rollouts/\(id)/annotations)$"
             try require(matches(path,method == "GET" ? get : post),"此接口不属于大厅权限。")
         } else { try require(path.hasPrefix("/api/v1/"),"只能请求游戏 API。") }
         return value

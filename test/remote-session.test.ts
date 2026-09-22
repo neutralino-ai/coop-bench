@@ -51,7 +51,8 @@ test('remote API URLs require HTTPS except loopback and human IPC routes stay re
   assert.throws(()=>validateRequest({...request('r'),method:'DELETE'}));
   assert.throws(()=>validateRequest({...request('r'),body:{}}));
   assert.throws(()=>validateRequest({id:'r',path:'/api/v1/episodes/e/actions',method:'POST',body:{}}));
-  assert.throws(()=>validateRequest({id:'r',path:'/api/v1/episodes',method:'POST',body:{text:'a'.repeat(65536)}}));
+  assert.throws(()=>validateRequest({id:'r',path:'/api/v1/episodes',method:'POST',body:{}}));
+  assert.throws(()=>validateRequest({id:'r',path:'/api/v1/rooms',method:'POST',body:{text:'a'.repeat(65536)}}));
 });
 
 test('real HTTP transport authenticates private routes, omits tokens for public reads, and exposes no credential in connection metadata',async t=>{

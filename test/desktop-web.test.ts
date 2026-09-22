@@ -160,13 +160,14 @@ class Element{
  addEventListener(name:string,handler:any){this.listeners[name]=handler;}
  setAttribute(){} focus(){} remove(){if(this.parentNode){const siblings=this.parentNode.children;const index=siblings.indexOf(this);if(index>=0)siblings.splice(index,1);this.parentNode=null;}} click(){}
  showModal(){this.open=true;}close(){this.open=false;this.listeners.close?.();}
+ reportValidity(){return true;}
  querySelector(){return new Element();}
 }
 function uiContext(requestImpl:any,settings:any={}){
  const elements=new Map<string,Element>();const get=(id:string)=>{if(!elements.has(id)){const node=new Element();node.id=id;elements.set(id,node);}return elements.get(id)!;};
- get('create-form').append(get('create-episode'));get('create-name').value='Test game';get('create-timeout').value='600';
+ get('create-form').append(get('create-room'));get('create-name').value='Test game';get('create-timeout').value='600';
  const intervals:any[]=[];const transport={desktop:true,defaultApi:connection.apiUrl,getConnection:()=>new Promise(()=>{}),request:requestImpl,disconnect:async()=>{},copyText:async()=>{},...settings.transport};
- const context=vm.createContext({window:{coopTransport:transport,addEventListener(){}},document:{getElementById:get,createElement:()=>new Element(),querySelector:()=>get('pill'),hidden:false,body:new Element()},location:{origin:'coop://app',protocol:'coop:',hash:''},history:{replaceState(){}},URL,URLSearchParams,AbortController,AbortSignal,Response,DOMException,TextEncoder,crypto:webcrypto,Uint8Array,Blob,setTimeout,clearTimeout,setInterval:(handler:any,ms:number)=>{intervals.push({handler,ms});return intervals.length;},clearInterval(){},console});
+ const context=vm.createContext({window:{coopTransport:transport,CoopRoomSeats:{render(){}},addEventListener(){}},document:{getElementById:get,createElement:()=>new Element(),querySelector:()=>get('pill'),hidden:false,body:new Element()},location:{origin:'coop://app',protocol:'coop:',hash:''},history:{replaceState(){}},URL,URLSearchParams,AbortController,AbortSignal,Response,DOMException,TextEncoder,crypto:webcrypto,Uint8Array,Blob,setTimeout,clearTimeout,setInterval:(handler:any,ms:number)=>{intervals.push({handler,ms});return intervals.length;},clearInterval(){},console});
  vm.runInContext(appSource,context);vm.runInContext((settings.realGames?'':"loadGames=async()=>{};")+"loadList=async()=>{};selectEpisode=async()=>{};",context);if(settings.initialAuth!==false)vm.runInContext("setConnectionStatus('idle');state.token='connected';state.identity={id:'fixture',role:'operator'};state.sessionReady=true;",context);get('create-game').value='hanabi';get('create-scenario').value='base';get('create-players').value='3';return {context,get,intervals,transport};
 }
 
@@ -184,18 +185,23 @@ test('room creation waits for the shared catalogue and reports retryable catalog
  assert.match(failed.get('create-form').children.find(e=>e.id==='create-catalog-status').textContent,/读取失败/);
 });
 
-test('audit UI prevents duplicate create, limits credentials to each seat, clears them on logout',async()=>{
- const pending=deferred();let count=0;const {context,get}=uiContext(async(path:string,options:any)=>{count++;assert.equal(path,'/api/v1/episodes');assert.equal(options.body.playerCount,3);return pending.promise;});
- const first=vm.runInContext('createEpisode({preventDefault(){}})',context);await vm.runInContext('createEpisode({preventDefault(){}})',context);assert.equal(count,1);assert.equal(get('create-episode').disabled,true);
- pending.resolve(Response.json({episodeId:'fixture',gameId:'hanabi',scenarioId:'base',seats:[{playerId:'p1',token:'one'},{playerId:'p2',token:'two'}]}));await first;assert.equal(get('seat-list').children.length,2);assert.equal(get('seat-configs').hidden,false);
- const config=JSON.parse(get('seat-list').children[0].children[1].children[1].textContent);assert.deepEqual(config,{baseUrl:connection.apiUrl,episodeId:'fixture',seatToken:'one',gameId:'hanabi',scenarioId:'base',playerId:'p1'});
- await vm.runInContext('disconnect()',context);assert.equal(get('seat-list').children.length,0);assert.equal(get('seat-configs').hidden,true);
+test('room creation prevents duplicate submission and clears its panel on logout',async()=>{
+ const pending=deferred();let count=0;const {context,get}=uiContext(async(path:string,options:any)=>{count++;assert.equal(path,'/api/v1/rooms');assert.equal(options.body.playerCount,3);assert.equal(options.body.allowHumans,true);return pending.promise;});
+ vm.runInContext('state.games=[{id:"hanabi"}];window.CoopRooms.catalogChanged()',context);
+ const submit=()=>get('create-form').listeners.submit({preventDefault(){}});
+ const first=submit();await submit();assert.equal(count,1);assert.equal(get('create-room').disabled,true);
+ pending.resolve(Response.json({roomId:'fixture',gameId:'hanabi',status:'waiting',members:[],playerCount:3,allowHumans:true}));await first;
+ const panel=get('create-panel').children.find(e=>e.id==='room-panel');assert.equal(panel.hidden,false);assert.ok(panel.children.length>0);
+ await vm.runInContext('disconnect()',context);assert.equal(panel.children.length,0);assert.equal(panel.hidden,true);
 });
 
-test('audit UI rejects auditor creation and ignores a create response after session change',async()=>{
+test('room creation rejects auditors and ignores a response after session change',async()=>{
  const pending=deferred();let count=0;const {context,get}=uiContext(async()=>{count++;return pending.promise;});
- vm.runInContext("state.identity.role='auditor'",context);await vm.runInContext('createEpisode({preventDefault(){}})',context);assert.equal(count,0);
- vm.runInContext("state.identity.role='operator'",context);const creation=vm.runInContext('createEpisode({preventDefault(){}})',context);await vm.runInContext('disconnect()',context);pending.resolve(Response.json({episodeId:'fixture',seats:[{playerId:'p1',token:'stale-secret'}]}));await creation;assert.equal(get('seat-list').children.length,0);assert.equal(get('create-panel').hidden,true);
+ vm.runInContext('state.games=[{id:"hanabi"}];window.CoopRooms.catalogChanged()',context);
+ const submit=()=>get('create-form').listeners.submit({preventDefault(){}});
+ vm.runInContext("state.identity.role='auditor'",context);await submit();assert.equal(count,0);
+ vm.runInContext("state.identity.role='operator'",context);const creation=submit();await vm.runInContext('disconnect()',context);pending.resolve(Response.json({roomId:'stale',status:'waiting',members:[]}));await creation;
+ assert.equal(get('create-panel').children.find(e=>e.id==='room-panel').children.length,0);assert.equal(get('create-panel').hidden,true);
 });
 
 function enableReplaySelection(context:any){
@@ -249,7 +255,7 @@ test('only identity makes green; failures turn red and the independent heartbeat
 test('business 400/403/409 do not invalidate a connection; real 401 clears credentials and cached data',async()=>{
  let status=200,disconnects=0;const {context,get}=uiContext(async()=>Response.json(status===200?identity:{error:{code:'SYNTHETIC',message:'合成测试请求被拒绝'}},{status}),{transport:{disconnect:async()=>{disconnects++;}}});
  await vm.runInContext("checkConnection()",context);for(const value of [400,403,409]){status=value;await assert.rejects(vm.runInContext("request('/episodes',{})",context));assert.equal(get('connection-status').dataset.state,'connected');}
- get('seat-list').append(new Element());status=401;await assert.rejects(vm.runInContext("request('/rollouts')",context));assert.equal(get('connection-status').dataset.state,'expired');assert.equal(vm.runInContext('state.token',context),'');assert.equal(get('seat-list').children.length,0);assert.equal(disconnects,1);assert.equal(get('auth-panel').hidden,false);
+ status=401;await assert.rejects(vm.runInContext("request('/rollouts')",context));assert.equal(get('connection-status').dataset.state,'expired');assert.equal(vm.runInContext('state.token',context),'');assert.equal(disconnects,1);assert.equal(get('auth-panel').hidden,false);
 });
 
 test('5xx, non-JSON and proxy Basic 401 are red without falsely blaming a personal credential',async()=>{

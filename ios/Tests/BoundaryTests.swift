@@ -11,7 +11,7 @@ final class BoundaryTests: XCTestCase {
         for url in ["http://example.test", "https://user:password@example.test", "https://example.test/?key=secret", "https://example.test/other"] {
             XCTAssertThrowsError(try Endpoint.base(url))
         }
-        for path in ["/api/v1/auth/password", "/api/v1/episodes/game/actions", "/api/v1/rooms/a/../identity", "//elsewhere/", "/api/v1/rooms/%2e%2e/identity"] {
+        for path in ["/api/v1/auth/password", "/api/v1/episodes", "/api/v1/episodes/game/actions", "/api/v1/rooms/a/../identity", "//elsewhere/", "/api/v1/rooms/%2e%2e/identity"] {
             XCTAssertThrowsError(try Endpoint.path(path,method:"POST",owner:true))
         }
         XCTAssertEqual(try Endpoint.path("/api/v1/rollouts?limit=20",method:"GET",owner:true),"/api/v1/rollouts?limit=20")

@@ -219,7 +219,6 @@ export async function startMockApi({role='operator'}={}) {
         if (['start', 'admin-start'].includes(operation)) { const next = makeEpisode(room.playerCount, new Map(room.members.map(m => [m.token, m.playerId])),room.name); room.episodeId = next.episodeId; room.status = 'active'; }
         return respond(res, roomView(room, credential));
       }
-      if (path === '/episodes' && req.method === 'POST') return isAdmin(credential) ? respond(res, makeEpisode(body.playerCount,new Map(),body.name)) : fail(res, 401, 'UNAUTHORIZED');
       if (path === '/rollouts') {const items=[...episodes.values()].map(e=>e.rollout.summary).filter(e=>!url.searchParams.get('status')||e.status===url.searchParams.get('status')),offset=Number(url.searchParams.get('offset')??0),limit=Number(url.searchParams.get('limit')??50);return isAdmin(credential)?respond(res,{items:items.slice(offset,offset+limit),total:items.length}):fail(res,401,'UNAUTHORIZED');}
       match = path.match(/^\/(rollouts|episodes)\/([^/]+)(?:\/(.*))?$/);
       if (!match) return fail(res, 404, 'MOCK_ROUTE_NOT_FOUND');

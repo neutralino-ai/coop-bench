@@ -243,34 +243,11 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   try { const picture = await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); assert.ok(!picture.isEmpty()); writeFileSync(join(dataDir, 'client-audit.png'), picture.toPNG()); screenshot = { saved: true }; }
   catch (error) { screenshot = { saved: false, error: String(error) }; }
   await capture('client-connection-success.png');
-  await run(() => {
-    document.getElementById('open-create').click();
-    document.getElementById('create-participation').value='agent';document.getElementById('create-participation').dispatchEvent(new Event('change'));
-    const game = document.getElementById('create-game'); game.value = 'hanabi'; game.dispatchEvent(new Event('change'));
-    document.getElementById('create-players').value = '3';
-  });
-  await capture('create-room.png');
-  await run(() => {document.getElementById('create-form').requestSubmit();
-  });
-  await wait(() => run(() => document.getElementById('seat-list').querySelectorAll('button').length === 3), 'Create game/seat configs failed.');
-  check(await run(() => document.getElementById('seat-list').textContent.includes('p1')), 'three private player connection configs rendered');
-  await run(() => document.getElementById('seat-list').querySelector('button').click());
-  await wait(() => Promise.resolve(getCopied()?.includes('seatToken')), 'Copy seat config failed.');
-  const copied = JSON.parse(getCopied()); check(copied.baseUrl === fixture.apiUrl && copied.episodeId !== fixture.id && typeof copied.seatToken === 'string' && copied.gameId==='hanabi' && copied.scenarioId==='base' && copied.playerId==='p1', 'seat config copies current API, episode, game, scenario and own player');
-  await fixture.call(`/episodes/${copied.episodeId}/truncate`, fixture.adminToken, { reason: 'synthetic UI-created episode cleanup' });
-  await run(()=>{document.getElementById('open-create').click();document.getElementById('create-participation').value='invite';document.getElementById('create-participation').dispatchEvent(new Event('change'));document.getElementById('create-room').click();});
-  await wait(()=>run(()=>!document.getElementById('create-room').disabled),'Invitation creation did not finish.');
-  await wait(()=>run(()=>!document.getElementById('room-panel').hidden&&document.getElementById('room-panel').textContent.includes('复制邀请链接')),'Invitation room did not render.');
-  await run(()=>[...document.getElementById('room-panel').querySelectorAll('button')].find(b=>b.textContent.includes('邀请')).click());
-  await wait(()=>Promise.resolve(getCopied()?.startsWith('coopbench://join#')),'Invitation was not copied.');
-  const invitationParams=new URLSearchParams(new URL(getCopied()).hash.slice(1));
-  const createdRoom=await fixture.call(`/rooms/${invitationParams.get('room')}/admin`);
-  check(createdRoom.status==='waiting'&&createdRoom.episodeId===null&&!('seats' in createdRoom),'operator creates a pre-deal room and copies an invitation without player credentials');
+  check(await run(()=>!document.getElementById('create-participation')&&!document.getElementById('create-episode')&&!document.getElementById('seat-configs')), 'creation only offers rooms without legacy direct-deal controls');
   await run(()=>{
     document.getElementById('create-dialog').close();document.getElementById('open-create').click();
     document.getElementById('create-players').value='2';
     document.getElementById('create-name').value='  周日花火练习 <b>一起玩</b>  ';
-    document.getElementById('create-participation').value='human';document.getElementById('create-participation').dispatchEvent(new Event('change'));
     document.getElementById('create-form').requestSubmit();
   });
   await wait(()=>run(()=>!document.getElementById('create-room').disabled),'Human creation did not finish.');
@@ -286,7 +263,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(await run(()=>document.getElementById('start-room').disabled&&getComputedStyle(document.getElementById('start-room')).cursor==='default'),'incomplete room has gray start button and normal cursor');
   await capture('client-room-waiting.png');
   check(humanRoom.name==='周日花火练习 <b>一起玩</b>','room name is trimmed and sent at creation');
-  check(Boolean(humanRoom)&&!(await fixture.call('/lobby')).rooms.some(r=>r.roomId===createdRoom.roomId),'lobby excludes invitation-only rooms');
+  check(humanRoom.allowHumans===true&&humanRoom.status==='waiting'&&!humanRoom.episodeId,'created room is joinable and waits for ready players before dealing');
   await run(()=>{document.getElementById('create-dialog').close();document.getElementById('open-join').click();});
   await wait(()=>run(()=>document.querySelectorAll('#joinable-rooms button[data-room-id]').length>0),'Joinable lobby rooms did not render.');
   await capture('client-lobby.png');
@@ -391,7 +368,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>run(()=>document.getElementById('episode-title').textContent==='周日花火练习 <b>一起玩</b>'),'Replay title lost the room name.');
   checks.push('named rooms remain named in the lobby, player, saved records and replay');
   checks.push('packaged lobby creates, discovers, joins, leaves, readies, starts and accepts a human action');
-  await run(()=>{document.getElementById('open-create').click();document.getElementById('create-participation').value='human';document.getElementById('create-participation').dispatchEvent(new Event('change'));document.getElementById('create-name').value='内置 Agent 混合入席';document.getElementById('create-players').value='2';document.getElementById('create-room').click();});
+  await run(()=>{document.getElementById('open-create').click();document.getElementById('create-name').value='内置 Agent 混合入席';document.getElementById('create-players').value='2';document.getElementById('create-room').click();});
   await wait(()=>run(()=>document.querySelectorAll('.host-seat.vacant').length===2),'Vacant host seats missing.');
   check(await run(()=>[...document.querySelectorAll('.host-seat')].every(c=>[...c.querySelectorAll('button')].map(b=>b.dataset.action).join(',')==='coding-agent,agent,token')),'empty seats expose exactly prompt, built-in agent and token buttons');
   await run(()=>document.querySelector('[data-seat="p1"][data-action="coding-agent"]').click());
@@ -520,7 +497,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(red(disconnected) && disconnected.label === '连接已断开' && !disconnected.reason.includes('凭证无效'), 'manual check after server shutdown replaces green with red and does not blame the credential');
   await capture('client-connection-server-offline.png');
   await run(() => document.getElementById('disconnect').click());
-  await wait(() => run(() => document.getElementById('disconnect').hidden && !document.getElementById('seat-list').textContent && !document.getElementById('model-messages').textContent), 'Logout did not clear captured data.');
+  await wait(() => run(() => document.getElementById('disconnect').hidden && !document.getElementById('room-panel').textContent && !document.getElementById('model-messages').textContent), 'Logout did not clear captured data.');
   check(!remote.descriptor().connected && !readFileSync(join(dataDir, 'remote-connection.json'), 'utf8').includes('encrypted'), 'logout clears credential and saved secret');
   return { ok: true, at: new Date().toISOString(), backend:'mock', fixture:'scripted synthetic loopback HTTP API; no game engine, database, production data or model calls', games:1, checks, screenshot, screenshots };
 }
