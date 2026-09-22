@@ -284,9 +284,8 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await fixture.call(`/rooms/${humanRoom.roomId}/ready`,otherToken,{ready:true,rosterVersion:other.rosterVersion});
   check(await seatJs("document.querySelector('#ready').hidden"),'human seat confirms readiness automatically when the roster fills');
   check(await seatJs("document.querySelector('#start').hidden"),'human seat has no host start control');
-  await run(id=>{document.getElementById('manage-rooms').click();},humanRoom.roomId);
-  await wait(()=>run(()=>[...document.querySelectorAll('#room-panel button')].some(b=>b.textContent.includes('周日花火练习'))),'Manage rooms did not list the created room.');
-  await run(()=>[...document.querySelectorAll('#room-panel button')].find(b=>b.textContent.includes('周日花火练习')).click());
+  await wait(()=>run(id=>Boolean(document.querySelector(`#my-created-rooms [data-room-id="${id}"] button`)),humanRoom.roomId),'Created rooms did not list the created room.');
+  await run(id=>document.querySelector(`#my-created-rooms [data-room-id="${id}"] button`).click(),humanRoom.roomId);
   await wait(()=>run(()=>document.getElementById('start-room')&&!document.getElementById('start-room').disabled),'Full ready roster did not enable creator start.');
   check(await run(()=>document.getElementById('room-panel').textContent.includes('Synthetic teammate') && getComputedStyle(document.getElementById('start-room')).cursor!=='wait'), 'creator sees joined members and start button uses a normal cursor');
   await capture('client-room-ready.png');
