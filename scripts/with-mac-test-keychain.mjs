@@ -14,7 +14,7 @@ const originalList=[...security(['list-keychains','-d','user']).matchAll(/"([^"]
 const originalDefault=security(['default-keychain','-d','user']).trim().replace(/^"|"$/g,'');
 const temp=mkdtempSync(join(process.env.RUNNER_TEMP,'coop-acceptance-'));
 const keychain=join(temp,'acceptance.keychain-db'),password=randomBytes(32).toString('hex');
-let code=1;
+let code;
 try{
  security(['create-keychain','-p',password,keychain]);
  security(['set-keychain-settings','-lut','600',keychain]);

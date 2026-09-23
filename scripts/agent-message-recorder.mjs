@@ -130,7 +130,7 @@ export class AgentMessageRecorder {
   }
   async #open(options, dependencies) {
     const base = baseUrl(options.baseUrl);
-    check(text(options.episodeId) && text(options.seatToken, 256) && /^[A-Za-z0-9._~+\/-]+=*$/.test(options.seatToken), 'A valid episodeId and seatToken are required.');
+    check(text(options.episodeId) && text(options.seatToken, 256) && /^[A-Za-z0-9._~+/-]+=*$/.test(options.seatToken), 'A valid episodeId and seatToken are required.');
     check(typeof options.outboxFile === 'string' && options.outboxFile.length > 0, 'An outboxFile is required.');
     const scope = options.scope ?? 'JSON model requests/responses and tool events explicitly supplied to this recorder; excludes uncaptured provider internals.';
     check(text(scope, 2000), 'Describe the actual capture scope in at most 2000 characters.');
@@ -165,7 +165,7 @@ export class AgentMessageRecorder {
       if (this.#fd !== undefined) closeSync(this.#fd);
       this.#fd = undefined;
       if (this.#lock) { this.#lock.close(); this.#lock = null; }
-      if (String(error.message).includes('database is locked')) throw Error('Another recorder owns this outbox; use one writer per seat stream.');
+      if (String(error.message).includes('database is locked')) throw Error('Another recorder owns this outbox; use one writer per seat stream.', { cause: error });
       throw error;
     }
   }

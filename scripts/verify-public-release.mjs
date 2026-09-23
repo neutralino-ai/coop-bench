@@ -20,7 +20,7 @@ const checksumResponse=await fetcher(checksum.browser_download_url);
 if(!checksumResponse.ok)throw Error('Checksum file unavailable');
 const text=await checksumResponse.text();
 const lines=text.trim().split('\n');if(lines.length!==11)throw Error('Unexpected checksum inventory');
-for(const line of lines){const match=/^([a-f0-9]{64})  (.+)$/.exec(line);if(!match)throw Error('Malformed checksum');const asset=release.assets.find(a=>a.name===match[2]);if(!asset||asset.digest!=='sha256:'+match[1])throw Error('Published asset digest mismatch');}
+for(const line of lines){const match=/^([a-f0-9]{64}) {2}(.+)$/.exec(line);if(!match)throw Error('Malformed checksum');const asset=release.assets.find(a=>a.name===match[2]);if(!asset||asset.digest!=='sha256:'+match[1])throw Error('Published asset digest mismatch');}
 const client=new UpdateClient({currentVersion:'0.10.1',platform:'win32',arch:'x64',directory:path.join(directory,'download'),fetcher,opener:()=>{throw Error('Verification does not launch installers');}});
 await client.check();const downloaded=await client.download();if(downloaded.state!=='ready')throw Error('Download verification failed');
 const source=release.assets.find(a=>a.name===`Coop-Bench-${expected}-iOS-Xcode.zip`);

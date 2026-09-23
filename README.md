@@ -29,8 +29,7 @@ Windows / macOS / iOS 的合作桌游研究客户端：人类创建房间、审�
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm test
-pnpm build
+pnpm check
 pnpm desktop
 pnpm desktop:player
 ```

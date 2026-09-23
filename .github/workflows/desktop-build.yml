@@ -19,7 +19,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
   desktop:
+    needs: quality
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -170,6 +173,7 @@ jobs:
             artifacts/ci-player-smoke/*.png
 
   ios:
+    needs: quality
     name: iOS native and simulator acceptance
     uses: ./.github/workflows/ios-build.yml
     with:
