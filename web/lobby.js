@@ -19,7 +19,7 @@
  let serial=0,loading=false,joining=false,selectedRoom=null;
  const issue=error=>error.status===404?'当前服务器尚未提供大厅功能，请更新服务端后重试。':error.message;
  function reset(){serial++;loading=false;joining=false;selectedRoom=null;list.replaceChildren();status.textContent='';token.value='';box.close();document.body.dataset.view='login';}
- function showHome(){if(!state.token)return;stopPlayback();detailController?.abort();clearInterval(detailTimer);state.detailRequest++;document.body.dataset.audit='false';document.body.dataset.view='home';$('detail').hidden=true;$('replay-loading').hidden=true;history.replaceState(null,'',location.pathname);manage.hidden=state.identity?.role==='auditor';void load();if(incoming&&incoming.apiUrl===apiUrl){choose(incoming);incoming=null;}}
+ function showHome(){if(!state.token)return;message('');stopPlayback();detailController?.abort();clearInterval(detailTimer);state.detailRequest++;document.body.dataset.audit='false';document.body.dataset.view='home';$('detail').hidden=true;$('replay-loading').hidden=true;history.replaceState(null,'',location.pathname);manage.hidden=state.identity?.role==='auditor';void load();if(incoming&&incoming.apiUrl===apiUrl){choose(incoming);incoming=null;}}
  function choose(room){selectedRoom=room;title.textContent=room.name||'加入房间';roomInput.value=room.roomId??'';token.value='';token.type='password';joinStatus.textContent='';if(!box.open)box.showModal();name.focus();}
  async function openPlayer(input){
   if(joining)return;if(!transport.openPlayer){joinStatus.textContent='请使用更新后的桌面客户端加入房间。';return;}

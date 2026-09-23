@@ -24,6 +24,71 @@
   const openEvidence=()=>{evidence.box.showModal();if(!state.artifacts.length&&!state.artifactLoading)void loadArtifacts();if(!state.modelMessages.length&&!state.modelMessageLoading)void loadModelMessages();};
   addButton('open-evidence','完整记录',openEvidence);
   addButton('open-rules','游戏规则',showRules);
+  const issuedDialog=dialog('issued-observations-dialog','输入审计 · 服务器原始观测');
+  let issuedEpoch=0,issuedController,issuedEpisode='',issuedPlayer='',issuedNext;
+  const issuedControls=node('div','issued-controls'),issuedSelect=node('select'),issuedRefresh=node('button','button subtle','刷新最新'),issuedOlder=node('button','button subtle','更早记录'),issuedLive=node('input');
+  issuedRefresh.onclick=()=>void loadIssued();issuedOlder.onclick=()=>{issuedLive.checked=false;void loadIssued(issuedNext);};issuedSelect.id='issued-player';issuedSelect.setAttribute('aria-label','选择观测席位');issuedSelect.onchange=()=>{issuedPlayer=issuedSelect.value;issuedList.replaceChildren();void loadIssued();};issuedLive.type='checkbox';issuedLive.id='issued-live';
+  const liveLabel=node('label','','每 5 秒刷新最新');liveLabel.prepend(issuedLive);issuedControls.append(issuedSelect,issuedRefresh,issuedOlder,liveLabel);
+  const issuedStatus=node('p','muted'),issuedList=node('div','issued-list');issuedStatus.id='issued-status';issuedList.id='issued-list';
+  issuedDialog.content.append(node('p','','来自服务器保存的原始 observation，包含 view、updates、legalActions 和 control；不是由 state 重建，也不是 Agent 上传的 message。只隐藏行动凭证 decisionToken，JSON 排版已格式化。'),node('p','muted','签发记录不等于客户端已收到或模型已读到；相同响应命中缓存时复用记录，不统计每次网络发送。'),issuedControls,issuedStatus,issuedList);
+  addButton('open-observations','输入审计',()=>showIssued());
+  function showIssued(player){
+    if(!state.rollout)return;issuedEpisode=state.rollout.summary.episodeId;issuedPlayer=player??state.rollout.players[0];issuedLive.checked=false;
+    issuedSelect.replaceChildren(...state.rollout.players.map(p=>{const option=node('option','',p);option.value=p;return option;}));issuedSelect.value=issuedPlayer;
+    issuedDialog.box.showModal();void loadIssued();
+  }
+  async function loadIssued(before){
+    if(!issuedDialog.box.open||!state.token||issuedEpisode!==state.rollout?.summary.episodeId)return;
+    issuedController?.abort();const requestEpoch=++issuedEpoch,session=state.session;issuedController=new AbortController();issuedNext=undefined;issuedOlder.disabled=true;issuedRefresh.disabled=true;issuedStatus.textContent='正在读取服务器签发记录…';
+    if(!issuedLive.checked)issuedList.replaceChildren();
+    try{
+      const query=new URLSearchParams({playerId:issuedPlayer,limit:'10',...(before?{before}:{})});
+      const data=await request(`/rollouts/${encodeURIComponent(issuedEpisode)}/observations?${query}`,undefined,{signal:issuedController.signal});
+      if(requestEpoch!==issuedEpoch||session!==state.session||!issuedDialog.box.open)return;
+      if(data.source!=='server-issued-observation'||!Array.isArray(data.observations))throw Error('原始观测格式不正确。');
+      issuedNext=data.hasMore?data.nextBefore:undefined;issuedList.replaceChildren();issuedStatus.textContent=data.observations.length?`${issuedPlayer} · 本页 ${data.observations.length} 条 · 最新签发在前`:'本席尚无服务器签发记录。';
+      for(const [i,record] of data.observations.entries()){const item=node('details','issued-record');item.open=i===0;const obs=record.observation;
+        item.append(node('summary','',`${date(record.issuedAt,true)} · ${obs.status} · 历史游标 ${obs.updateCursor??'—'}`),node('p','muted',`observationId: ${record.observationId}`),node('pre','readable-original',JSON.stringify(obs,null,2)));issuedList.append(item);}
+    }catch(error){if(requestEpoch===issuedEpoch&&session===state.session&&error.name!=='AbortError'){issuedList.replaceChildren();issuedStatus.textContent=error.status===404?'当前服务器尚未提供原始观测接口，需要更新后端。':`读取失败：${error.message}`;}}
+    finally{if(requestEpoch===issuedEpoch){issuedRefresh.disabled=false;issuedOlder.disabled=!issuedNext;}}
+  }
+  issuedDialog.box.addEventListener('close',()=>{issuedController?.abort();issuedEpoch++;issuedLive.checked=false;issuedList.replaceChildren();});
+  issuedLive.onchange=()=>{if(issuedLive.checked)void loadIssued();};
+  setInterval(()=>{if(issuedLive.checked&&issuedDialog.box.open&&!issuedRefresh.disabled&&!document.hidden)void loadIssued();},5000);
+  const streamDialog=dialog('agent-messages-dialog','输入审计 · 实际模型请求');
+  let streamEpoch=0,streamController,streamEpisode='',streamPlayer='',streamAfter=-1,streamSeen=new Set(),streamBytes=0;
+  const streamControls=node('div','issued-controls'),streamSelect=node('select'),streamRefresh=node('button','button subtle','读取后续输入'),streamLatest=node('button','button subtle','跳到最新'),streamArchive=node('button','button subtle','从头读取输入'),streamLive=node('input'),streamStatus=node('p','muted'),streamList=node('div','issued-list');
+  streamSelect.id='monitor-player';streamSelect.setAttribute('aria-label','选择 Agent 席位');streamLive.type='checkbox';streamLive.id='monitor-live';streamStatus.id='monitor-status';streamList.id='monitor-messages';streamRefresh.id='monitor-refresh';streamLatest.id='monitor-latest';
+  const streamLabel=node('label','','每 5 秒读取新消息');streamLabel.prepend(streamLive);streamControls.append(streamSelect,streamRefresh,streamLatest,streamArchive,streamLabel);
+  streamDialog.content.append(node('p','','检查模型实际被提供了哪些信息：显示运行器上传的 model-input 原文，保留请求中的系统提示、消息历史、工具和观测等实际字段。与“服务器原始观测”对照，可定位漏发或转交时丢失的信息。'),node('p','muted','来源是运行器记录的请求，未上传时无法证明模型收到了什么。模型返回的 reasoning 和动作在决策回放中查看。分片保留原貌；窗口最多保留 100 条 / 2 MiB，服务器完整历史永久保存。'),streamControls,streamStatus,streamList);
+  function clearStream(){streamController?.abort();streamEpoch++;streamSeen=new Set();streamBytes=0;streamAfter=-1;streamList.replaceChildren();streamStatus.textContent='';streamLive.checked=false;}
+  function openStream(player){if(!state.rollout)return;clearStream();streamEpisode=state.rollout.summary.episodeId;streamPlayer=player??state.rollout.players[0];streamSelect.replaceChildren(...state.rollout.players.map(p=>{const option=node('option','',p);option.value=p;return option;}));streamSelect.value=streamPlayer;streamDialog.box.showModal();streamLive.checked=true;void readStream(true);}
+  async function readStream(latest=false){
+    if(!streamDialog.box.open||!state.token||streamEpisode!==state.rollout?.summary.episodeId)return;
+    streamController?.abort();const serial=++streamEpoch,session=state.session,signal=(streamController=new AbortController()).signal;
+    const valid=()=>serial===streamEpoch&&session===state.session&&streamDialog.box.open&&streamEpisode===state.rollout?.summary.episodeId;
+    streamRefresh.disabled=true;streamLatest.disabled=true;streamStatus.textContent='正在读取原始消息…';
+    try{
+      if(latest){const summary=await request(`/rollouts/${encodeURIComponent(streamEpisode)}/messages`,undefined,{signal});if(!valid())return;const seat=summary.seats?.find(p=>p.playerId===streamPlayer);if(!Number.isSafeInteger(seat?.lastInputSequence))throw Error('当前后端尚未支持输入审计，请更新服务');streamAfter=Math.max(-1,seat.lastInputSequence-1);streamSeen=new Set();streamBytes=0;streamList.replaceChildren();}
+      const query=new URLSearchParams({playerId:streamPlayer,after:String(streamAfter),limit:'25',kind:'model-input'});
+      let data=await request(`/rollouts/${encodeURIComponent(streamEpisode)}/messages?${query}`,undefined,{signal});if(!valid())return;
+      const first=data.messages?.[0],capture=first?.message?.capture;
+      if(latest&&capture?.fragment===true&&Number.isSafeInteger(capture.index)&&capture.index>0&&capture.index<=first.sequence){streamAfter=first.sequence-capture.index-1;query.set('after',String(streamAfter));data=await request(`/rollouts/${encodeURIComponent(streamEpisode)}/messages?${query}`,undefined,{signal});if(!valid())return;}
+      if(!Array.isArray(data.messages)||data.messages.some(record=>record.kind!=='model-input')||!Number.isSafeInteger(data.nextAfter)||data.nextAfter<streamAfter||data.hasMore&&data.nextAfter<=streamAfter)throw Error('模型输入分页格式无效。');
+      for(const record of data.messages){if(streamSeen.has(record.sequence))continue;streamSeen.add(record.sequence);const item=lazyMessageDetails(`#${record.sequence} · ${record.kind??'message'} · ${date(record.serverReceivedAt??record.createdAt,true)}`,record);item.classList.add('issued-record');item.dataset.sequence=record.sequence;item.dataset.bytes=new TextEncoder().encode(JSON.stringify(record)).byteLength;streamBytes+=Number(item.dataset.bytes);streamList.prepend(item);}
+      if(latest&&streamList.firstElementChild)streamList.firstElementChild.open=true;streamAfter=data.nextAfter;
+      while(streamList.children.length>100||streamBytes>2*1024*1024&&streamList.children.length>1){const old=streamList.lastElementChild;streamBytes-=Number(old.dataset.bytes);streamSeen.delete(Number(old.dataset.sequence));old.remove();}
+      streamStatus.textContent=`${streamPlayer} · ${streamList.children.length} 条已载入 · ${data.hasMore?'还有消息待读取，点击或等待下一次刷新':data.messages.length?'已读到当前最新上传记录':'暂无新消息'}${data.completion?' · 运行器已声明封存':''}`;
+    }catch(error){if(valid()&&error.name!=='AbortError')streamStatus.textContent=`读取失败：${error.message}；已载入的原文仍保留。`;}
+    finally{if(valid()){streamRefresh.disabled=false;streamLatest.disabled=false;}}
+  }
+  streamSelect.onchange=()=>{const live=streamLive.checked;clearStream();streamLive.checked=live;streamPlayer=streamSelect.value;void readStream(true);};streamRefresh.onclick=()=>void readStream();streamLatest.onclick=()=>void readStream(true);streamLive.onchange=()=>{if(streamLive.checked)void readStream();};
+  streamArchive.onclick=()=>{clearStream();void readStream();};
+  streamDialog.box.addEventListener('close',clearStream);
+  setInterval(()=>{if(streamLive.checked&&streamDialog.box.open&&!streamRefresh.disabled&&!document.hidden)void readStream();},5000);
+  const inputSources=(active,otherLabel,id,onClick)=>{const nav=node('nav','issued-controls');nav.setAttribute('aria-label','输入审计来源');const current=node('strong','',active),other=node('button','button subtle',otherLabel);other.id=id;other.onclick=onClick;nav.append(current,other);return nav;};
+  issuedDialog.content.prepend(inputSources('服务器原始观测','实际模型请求 →','open-agent-messages',()=>{const player=issuedPlayer;issuedDialog.box.close();openStream(player);}));
+  streamDialog.content.prepend(inputSources('实际模型请求','← 服务器原始观测','monitor-server-input',()=>{const player=streamPlayer;streamDialog.box.close();showIssued(player);}));
   document.querySelector('.top-actions').prepend(toolbar);
   const focus=node('section','focus-replay');focus.id='focus-replay';
   const shared=node('div','shared-board');shared.id='shared-board';
@@ -36,6 +101,8 @@
   const more=node('button','button subtle','读取更多消息');more.id='focus-load-more';more.hidden=true;more.onclick=()=>load(true);evidence.content.prepend(more);
 
   function clear() {
+    clearStream();if(streamDialog.box.open)streamDialog.box.close();streamEpisode='';
+    issuedController?.abort();issuedEpoch++;if(issuedDialog.box.open)issuedDialog.box.close();issuedList.replaceChildren();issuedEpisode='';
     window.CoopLobby?.clear();
     controller?.abort();epoch++;episode='';seats={};busy=false;document.body.dataset.audit='false';
     recording=null;recordingError='';recordingBusy=false;recordingAt=0;recordingEpisode='';
@@ -230,7 +297,7 @@
       const text=state.rollout.summary.gameId==='take-time'?v.hand===null?'太阳 / 月亮牌背及公开放牌位置；尚未看自己的点数。':'自己的手牌、公开牌背与放牌位置；队友暗牌点数未知。':`记录的合法视角 · 可选动作：${(p.observation.legalActions??[]).map(a=>a.type).join('、')||'无'}`;
       visibility.append(node('p','',text));
     }else visibility.append(node('p','muted','未保存这个时点的合法视角。'));
-    visibility.append(button(p.exact?'动作绑定的真实输入 ↗':'查看已录制的可见状态 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}));panel.append(visibility);
+    visibility.append(button(p.exact?'动作绑定的真实输入 ↗':'查看已录制的可见状态 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}),button('服务器签发原文 ↗',()=>showIssued(p.player)));panel.append(visibility);
     const decision=node('section','player-decision');
     const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',p.decisionIndex===state.index?'这一步怎么想':'最近一次决策'),node('span','decision-step',p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
     const matched=R.linkedMessages(seats[p.player]?.messages??[],p.decision,p.player),thoughts=R.reasoning(matched);
@@ -239,7 +306,7 @@
     const status=seats[p.player];
     decision.append(node('p','thinking-excerpt',reasoning??(p.decision?status?.more!==false?'正在查找该步的模型记录…':'该步没有可读的思考记录。':'还没有轮到它行动。')));
     if(p.decision&&(status?.error||status?.loading||status?.more||status?.capped))decision.append(node('span','trace-status',status.error|| (status.capped?'大轨迹 · 在完整记录中分页查看':status.loading?'正在读取对应消息…':'已载入部分消息 · 完整记录中可继续读取')));
-    decision.append(button('完整输入 / 思考 / 消息 ↗',()=>showOriginal(p)));panel.append(decision);
+    decision.append(button('决策原文 / reasoning ↗',()=>showOriginal(p)));panel.append(decision);
     const action=node('section',`player-action${p.decision?.error?' rejected-action':''}`);action.append(node('span','action-label',p.decisionIndex===state.index?'做了什么':'上次做了什么'),node('strong','action-description',p.decision?R.actionText(p.decision):'等待行动'));
     if(p.decision?.error)action.append(node('span','','服务器拒绝，未生效'));
     if(p.decision&&p.decisionIndex!==state.index)action.append(button('跳到这一步',()=>{stopPlayback();selectFrame(p.decisionIndex);}));panel.append(action);return panel;
@@ -255,7 +322,7 @@
     const last=communications.at(-1);chat.replaceChildren(node('strong','','公开交流'),node('span','chat-preview',last?`${last.frame.playerId} · ${last.text}`:'截至这一步还没有公开交流。'));
     chat.append(button(`全部 ${communications.length} 条 ↗`,()=>{openEvidence();$('communication-panel').scrollIntoView({block:'start'});}));
   }
-  window.CoopFocus={clear,load,render,selected(){controller?.abort();epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();if(evidence.box.open)evidence.box.close();full.content.replaceChildren();}};
+  window.CoopFocus={clear,load,render,openMessages:openStream,selected(){clearStream();if(streamDialog.box.open)streamDialog.box.close();issuedController?.abort();issuedEpoch++;if(issuedDialog.box.open)issuedDialog.box.close();controller?.abort();epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();if(evidence.box.open)evidence.box.close();full.content.replaceChildren();}};
   window.addEventListener('keydown',event=>{
     if(!state.rollout||document.querySelector('dialog[open]')||['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName))return;
     if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();stopPlayback();selectFrame(state.index+(event.key==='ArrowRight'?1:-1));}
