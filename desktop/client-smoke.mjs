@@ -86,7 +86,9 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>run(()=>document.body.dataset.view==='home' && document.querySelectorAll('#episode-list button').length>0),'Login did not land on the lobby.');
   check(await run(()=>document.querySelector('#home-replays .library') && getComputedStyle(document.getElementById('lobby-home')).display!=='none' && document.getElementById('detail').hidden), 'login displays permanent rooms and replay blocks without auto-opening a game');
   await capture('client-home.png');
-  const iosCss=readFileSync(new URL('../ios/ios.css',import.meta.url),'utf8');
+  // Packaged desktop smoke runs beside the source checkout; iOS source is intentionally absent from app.asar.
+  const iosCssUrl=new URL('../ios/ios.css',import.meta.url);
+  const iosCss=readFileSync(existsSync(iosCssUrl)?iosCssUrl:join(process.cwd(),'ios','ios.css'),'utf8');
   window.webContents.enableDeviceEmulation({screenPosition:'mobile',screenSize:{width:390,height:700},viewSize:{width:390,height:700},deviceScaleFactor:1,scale:1});
   const iosHomeStyle=await window.webContents.insertCSS(iosCss);
   await run(()=>document.body.classList.add('ios-client'));
