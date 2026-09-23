@@ -154,6 +154,10 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(true,'live monitor reads messages uploaded after an empty tail without requiring a new game action');
   check(await run(()=>!window.__thinkingXss&&!document.querySelector('#monitor-messages img')), 'raw model inputs preserve system and user messages as safe text');
   await capture('client-agent-messages.png');
+  // A live refresh disables the Latest button; wait for it to finish so the
+  // synthetic click exercises the latest-fragment request instead of being ignored.
+  await run(()=>{document.getElementById('monitor-live').checked=false;});
+  await wait(()=>run(()=>!document.getElementById('monitor-latest').disabled),'Input monitor refresh did not finish');
   const undoFragment0=fixture.appendMonitorMessage('p1',{role:'model-request',capture:{logicalId:'synthetic-fragment',fragment:true,index:0,count:2},dataBase64:'e30='});
   const undoFragment1=fixture.appendMonitorMessage('p1',{role:'model-request',capture:{logicalId:'synthetic-fragment',fragment:true,index:1,count:2},dataBase64:'e30='});
   await run(()=>document.getElementById('monitor-latest').click());

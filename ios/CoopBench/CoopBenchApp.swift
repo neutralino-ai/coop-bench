@@ -12,7 +12,7 @@ import WebKit
             }
             .onOpenURL { model.invitation($0) }
             .onChange(of:phase) { _,value in
-                // Permission / dictation alerts are inactive, not backgrounded.
+                // System dialogs can make the app inactive without backgrounding it.
                 if value == .background { model.session.foreground(false) }
                 else if value == .active { model.session.foreground(true) }
             }
