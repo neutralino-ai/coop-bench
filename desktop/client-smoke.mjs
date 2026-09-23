@@ -103,6 +103,14 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   await wait(()=>run(()=>document.querySelectorAll('#operator-games-body tr').length>0),'Operator game summaries did not load.');
   check(await run(()=>{const row=document.querySelector('#operator-games-body tr');return row.cells.length===9&&row.cells[3].textContent.length>0&&row.cells[4].textContent.length>0&&row.cells[5].textContent.includes('p1')&&row.cells[6].textContent.length>0;}),'operator list identifies score, count, members and ending');
   await capture('operator-games.png');
+  window.webContents.enableDeviceEmulation({screenPosition:'mobile',screenSize:{width:390,height:700},viewSize:{width:390,height:700},deviceScaleFactor:1,scale:1});
+  const iosOperatorStyle=await window.webContents.insertCSS(iosCss);
+  await run(()=>document.body.classList.add('ios-client'));
+  check(await run(()=>{const table=document.querySelector('#operator-games .operator-table');const row=document.querySelector('#operator-games-body tr');const bounds=table.getBoundingClientRect();return table.scrollWidth<=table.clientWidth+2&&[3,4,5,6].every(i=>{const cell=row.cells[i].getBoundingClientRect();return cell.left>=bounds.left-2&&cell.right<=bounds.right+2&&cell.width>0;});}),'iOS operator card shows score, count, members and ending without horizontal scrolling');
+  await capture('ios-operator-games-density.png');
+  await run(()=>document.body.classList.remove('ios-client'));
+  await window.webContents.removeInsertedCSS(iosOperatorStyle);
+  window.webContents.disableDeviceEmulation();
   await run(()=>document.querySelector('[data-tab="users"]').click());
   await wait(()=>run(()=>document.querySelectorAll('#operator-users-body tr').length===3),'Operator user list did not reload.');
   await run(()=>{const rows=document.querySelectorAll('#operator-users-body tr');for(const row of [...rows].slice(1)){const input=row.querySelector('input');input.checked=true;input.dispatchEvent(new Event('change'));}});

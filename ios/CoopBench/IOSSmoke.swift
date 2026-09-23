@@ -162,6 +162,7 @@ import WebKit
             _=try await js("document.querySelector('[data-tab=games]').click();return true",app.host)
             try await wait("operator-game-list",{try await js("return document.querySelectorAll('#operator-games-body tr').length>0",app.host) as? Bool == true})
             try check(try await js("const row=document.querySelector('#operator-games-body tr');return row.cells.length===9 && row.cells[5].textContent.includes('p1') && row.cells[6].textContent.length>0",app.host) as? Bool == true,"operator-game-list-shows-people-and-ending")
+            try check(try await js("const table=document.querySelector('#operator-games .operator-table');const row=document.querySelector('#operator-games-body tr');const bounds=table.getBoundingClientRect();return table.scrollWidth<=table.clientWidth+2 && [3,4,5,6].every(i=>{const cell=row.cells[i].getBoundingClientRect();return cell.left>=bounds.left-2 && cell.right<=bounds.right+2 && cell.width>0})",app.host) as? Bool == true,"operator-game-details-fit-phone")
             try await snapshot("operator-games",app.host)
             _=try await js("document.querySelector('[data-tab=invitations]').click();return true",app.host)
             try await wait("operator-invite-tab",{try await js("return !document.querySelector('#operator-invitations').hidden",app.host) as? Bool == true})
