@@ -352,7 +352,8 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   player.window.webContents.enableDeviceEmulation({screenPosition:'mobile',screenSize:{width:390,height:700},viewSize:{width:390,height:700},deviceScaleFactor:1,scale:1});
   const iosPlayerStyle=await player.window.webContents.insertCSS(iosCss);
   await seatJs("document.body.classList.add('ios-client')");
-  await seatJs("document.querySelector('#history-panel').open=false;new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+  await seatJs("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+  check(await seatJs("document.querySelector('#history-panel').open&&!document.querySelector('#reason-panel,#decision-reason,#dictate-reason')"),'mobile history is expanded by default and secondary reason inputs are removed');
   check(await seatJs("document.body.classList.contains('own-turn')&&getComputedStyle(document.querySelector('#turn-panel')).backgroundColor==='rgb(23, 100, 192)'&&document.documentElement.scrollWidth<=innerWidth+2"),'mobile own turn uses prominent blue banner without horizontal overflow');
   check(await seatJs("document.querySelector('#turn-panel').getBoundingClientRect().height<=52&&[...document.querySelectorAll('.player-hand')].every(hand=>hand.getBoundingClientRect().height<=105)"),'iOS player keeps the turn and each hand compact');
   const mobilePicture=await player.window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});writeFileSync(join(dataDir,'player-mobile-own-turn.png'),mobilePicture.toPNG());

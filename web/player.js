@@ -1,11 +1,11 @@
-const $=id=>document.getElementById(id),api=window.coopPlayer;let state={},actionSchema,latestMode='human',busy=false,shownObservationId=null,cardSelection=null,cardAction=null,dictationBusy=false;
+const $=id=>document.getElementById(id),api=window.coopPlayer;let state={},actionSchema,latestMode='human',busy=false,shownObservationId=null,cardSelection=null,cardAction=null;
 const names={'disconnected':'尚未连接','connecting':'连接中…','waiting':'已连接 · 等待','your-turn':'已连接 · 轮到你','thinking':'Agent 正在思考','submitting':'正在提交','reconnecting':'连接中断 · 正在重连','ended':'游戏结束','access-denied':'席位凭证被拒绝','room-closed':'房间已关闭'};
 const node=(tag,text='',className='')=>{const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el;};
 const colorName={white:'白',red:'红',blue:'蓝',yellow:'黄',green:'绿'};
 const actionNames={hint:'提示队友',play:'出牌',discard:'弃牌',speak:'公开讨论',look_hand:'查看自己的牌',place:'放置',ready:'准备',end_turn:'结束回合',claim:'领取筹码',select_task:'领取任务',distress_vote:'救援投票',distress_pass:'传递手牌',reroll_selection:'完成重掷选择',place_info:'放置信息标记',finish_cut:'完成剪线',detector_response:'回答探测',choose_start:'选择起点',solo_cut:'单人剪线',dual_cut:'合作剪线',communicate:'规则允许的沟通'};
 const fieldNames={index:'第几张牌',target:'目标玩家',kind:'提示类型',value:'数字 / 颜色',text:'发言内容',position:'位置',cardId:'手牌编号',faceUp:'明置牌面'};
 async function command(name,input){try{$('notice').textContent='';return await api.command(name,input);}catch(error){$('notice').textContent=error.message;throw error;}}
-function render(next){if(state.room?.roomId!==next.room?.roomId||state.observation?.observationId!==next.observation?.observationId)$('decision-reason').value='';state=next;if(next.mode)latestMode=next.mode;$('status').textContent=names[next.status]??next.status;$('light').className=['access-denied','room-closed'].includes(next.status)?'red':['connecting','reconnecting','submitting'].includes(next.status)?'yellow':next.room?'green':'';
+function render(next){state=next;if(next.mode)latestMode=next.mode;$('status').textContent=names[next.status]??next.status;$('light').className=['access-denied','room-closed'].includes(next.status)?'red':['connecting','reconnecting','submitting'].includes(next.status)?'yellow':next.room?'green':'';
  if(next.lobbyManaged){$('join-form').hidden=true;$('join').querySelector('p').textContent='请回到主窗口的“加入对局”，选择新房间或“返回我的对局”。';}
  $('join').hidden=Boolean(next.room);$('disconnect').hidden=!next.room;$('disconnect').textContent=next.lobbyManaged?'返回大厅':'暂时离开';$('lobby').hidden=!next.room||Boolean(next.room.episodeId);$('game').hidden=!next.observation;
  $('resume').disabled=busy||!next.canResume&&!next.room;$('session-mode').textContent=next.room?(latestMode==='model'?'模型 API 自动参赛':'人类玩家'):'邀请制 · 每个客户端只持有自己的席位';
@@ -19,7 +19,7 @@ function render(next){if(state.room?.roomId!==next.room?.roomId||state.observati
  }
  renderHistory(next);
  if(!next.observation){shownObservationId=null;clearCardSelection();}
- if(next.observation&&next.observation.observationId!==shownObservationId){const o=next.observation;shownObservationId=o.observationId;$('phase').textContent=o.status==='active'?`${next.room?.name||next.rules?.name||'游戏'} · 我是 ${o.playerId}`:o.status==='truncated'?'对局已中断':o.outcome?`结束 · ${o.outcome.score}${o.outcome.maxScore?'/'+o.outcome.maxScore:''} 分`:'游戏结束';
+ if(next.observation&&next.observation.observationId!==shownObservationId){const o=next.observation;shownObservationId=o.observationId;$('phase').textContent=o.status==='active'?`${next.room?.name||next.rules?.name||'游戏'} · 我是 ${seatName(o.playerId)}`:o.status==='truncated'?'对局已中断':o.outcome?`结束 · ${o.outcome.score}${o.outcome.maxScore?'/'+o.outcome.maxScore:''} 分`:'游戏结束';
   $('outcome').hidden=o.status==='active';$('outcome').textContent=o.status==='truncated'?`原因：${o.control?.endReason??'服务器中断本局'}。这是中断记录，不等同于按游戏规则失败。`:`${o.outcome?.success===true?'团队成功。':o.outcome?.success===false?'团队未达成目标。':''}${o.outcome?.reason??''}`;
   cardSelection=null;cardAction=null;renderBoard(o);
   const old=$('action-type').value;$('action-type').replaceChildren();for(const a of o.legalActions){const option=node('option',actionNames[a.type]??a.type);option.value=a.type;$('action-type').append(option);}if(o.legalActions.some(a=>a.type===old))$('action-type').value=old;
@@ -34,7 +34,7 @@ function renderBoard(o){const board=$('board');board.replaceChildren();const v=o
  if(v.fireworks&&v.hands){const metrics=node('div','','metrics');metrics.append(tokenCounter('剩余提示',v.hints,8,'hint-counter'),tokenCounter('失误',v.errors,3,'error-counter'));const deck=node('div','','deck-counter');deck.append(node('span','牌库','metric-label'),node('strong',String(v.deckCount)));metrics.append(deck);board.append(metrics);
   const piles=node('div','','firework-piles');for(const [color,value]of Object.entries(v.fireworks)){const pile=node('div','','firework-pile '+color);pile.append(node('span',colorName[color]??color),node('strong',String(value)));piles.append(pile);}board.append(piles);
   board.append(node('p','牌面与提示知识分开展示 · 将鼠标停在提示上可查看完整范围','knowledge-note'));
-  for(const [p,hand]of Object.entries(v.hands)){const section=node('section','','player-hand'+(p===v.current?' active-hand':'')+(p===o.playerId?' own-hand':''));const heading=node('div','','hand-heading');heading.append(node('strong',p===o.playerId?'我的手牌':`${playerName(p)} 的手牌`),node('span',p===v.current?'正在行动':p===o.playerId?'牌面仅队友可见':'提示知识公开','hand-status'));section.append(heading);const cards=node('div','','cards');for(const [i,c]of hand.entries()){
+  for(const [p,hand]of Object.entries(v.hands).sort(([a],[b])=>a.localeCompare(b,undefined,{numeric:true}))){const section=node('section','','player-hand'+(p===v.current?' active-hand':'')+(p===o.playerId?' own-hand':''));section.dataset.player=p;const heading=node('div','','hand-heading');heading.append(node('strong',`${seatName(p)} · ${state.room?.members?.find(member=>member.playerId===p)?.name??p}${p===o.playerId?'（我）':''}`),node('span',p===v.current?'正在行动':p===o.playerId?'牌面仅队友可见':'提示知识公开','hand-status'));section.append(heading);const cards=node('div','','cards');for(const [i,c]of hand.entries()){
     const color=Object.hasOwn(colorName,c.color)?c.color:'';const card=node('button','','card '+color);card.type='button';card.dataset.player=p;card.dataset.index=String(i);card.setAttribute('aria-pressed','false');card.setAttribute('aria-label',`${p===o.playerId?'我的':playerName(p)+'的'}第 ${i+1} 张牌${p===o.playerId?'，未知牌面':`，${colorName[c.color]??c.color} ${c.value}`}。提示知识：${knowledgeText(c).join('，')}`);card.onclick=()=>selectCard(p,i);card.disabled=!canSubmitAction()||!cardChoices(p,i).length;const face=node('span','','card-face');const position=node('small',`第 ${i+1} 张`);position.dataset.position=String(i+1);face.append(position,node('strong',c.color?String(c.value??c.rank??'?'):'?'),node('span',c.color?(colorName[c.color]??c.color)+'色':'未知牌面'));card.append(face);
     const knowledge=node('span','','card-knowledge');knowledge.title=`可能颜色：${c.possibleColors?.map(color=>colorName[color]??color).join('、')??'未提供'}；可能数字：${c.possibleValues?.join('、')??'未提供'}`;knowledge.append(node('span',p===o.playerId?'我知道':'牌主知道','knowledge-label'),...knowledgeText(c).map(text=>node('span',text,'knowledge-value')));card.append(knowledge);cards.append(card);
   }section.append(cards);board.append(section);}return;
@@ -68,15 +68,32 @@ function renderCardSelection(){
  const preview=node('p',!cardAction?'选择上面的动作，查看高亮后再确认。':cardAction.type==='hint'?`向 ${playerName(player)} 提示${cardAction.kind==='color'?'颜色 '+(colorName[cardAction.value]??cardAction.value):'数字 '+cardAction.value}，命中第 ${affected.join('、')} 张牌。消耗 1 枚提示。`:`${cardAction.type==='play'?'打出':'弃掉'}自己的第 ${index+1} 张牌。`,'card-action-preview');preview.id='card-action-preview';preview.setAttribute('role','status');panel.append(preview);
  const buttons=node('div','','card-action-buttons'),cancel=node('button','取消'),confirm=node('button',cardAction?.type==='hint'?'确认提示':cardAction?.type==='play'?'确认出牌':cardAction?.type==='discard'?'确认弃牌':'先选择动作');cancel.type=confirm.type='button';cancel.id='cancel-card-action';confirm.id='confirm-card-action';confirm.className='confirm-card-action';confirm.disabled=!cardAction||!canSubmitAction();cancel.onclick=()=>{clearCardSelection();if(!selected.disabled)selected.focus();};confirm.onclick=()=>{if(!cardAction||!canSubmitAction()||cardSelection?.observationId!==state.observation?.observationId||!allowsCardAction(cardAction))return;void submitAction({...cardAction},cardSelection.observationId);};buttons.append(cancel,confirm);panel.append(buttons);selected.closest('.player-hand').append(panel);
 }
-async function submitAction(action,observationId){if(!canSubmitAction()||observationId!==state.observation?.observationId)return;busy=true;countdown();try{const decisionSummary=$('decision-reason').value.trim();const next=await command('act',{action,observationId,...(decisionSummary?{decisionSummary}:{})});$('decision-reason').value='';clearCardSelection();render(next);}catch(error){$('notice').textContent=error.message;}finally{busy=false;countdown();}}
+async function submitAction(action,observationId){if(!canSubmitAction()||observationId!==state.observation?.observationId)return;busy=true;countdown();try{const next=await command('act',{action,observationId});clearCardSelection();render(next);}catch(error){$('notice').textContent=error.message;}finally{busy=false;countdown();}}
 function updateCardAvailability(){for(const card of $('board').querySelectorAll('button.card'))card.disabled=!canSubmitAction()||!cardChoices(card.dataset.player,Number(card.dataset.index)).length;for(const button of $('card-action-choices')?.querySelectorAll('button')??[])button.disabled=!canSubmitAction();const confirm=$('confirm-card-action');if(confirm)confirm.disabled=!canSubmitAction()||!cardAction;}
 $('board').addEventListener('keydown',event=>{if(event.key==='Escape'&&cardSelection){event.preventDefault();$('cancel-card-action')?.click();}});
 function playerName(id){const member=state.room?.members?.find(p=>p.playerId===id);return member?`${member.name}（${id}）`:id??'玩家';}
+function seatName(id){return /^p\d+$/.test(id)?`${Number(id.slice(1))}号`:id??'玩家';}
 function eventText(event){
  const who=playerName(event.player),value=event.kind==='color'?(colorName[event.value]??event.value):event.value;
  if(event.type==='hint')return `${who} → ${playerName(event.target)}：提示${event.kind==='color'?'颜色':'数字'} ${value}；${event.touched?.length?'命中第 '+event.touched.map(i=>i+1).join('、')+' 张牌':Array.isArray(event.touched)?'没有匹配的牌':'命中位置未提供'}。`;
  if(event.type==='play'||event.type==='discard'){const card=event.card,face=card?`${colorName[card.color]??card.color} ${card.value}`:'牌面未提供';return `${who} ${event.type==='play'?'打出':'弃掉'}第 ${Number(event.index)+1} 张牌（${face}）${event.type==='play'?(event.played?'，成功':'，失败'):''}。`;}
  return `${who} · ${actionNames[event.type]??event.type}：${JSON.stringify(event)}`;
+}
+function historyRow(entry){
+ const event=entry.event,item=node('li'),button=node('button','','history-row');button.type='button';
+ button.title=eventText(event);button.setAttribute('aria-label',eventText(event)+' 点击查看详情');
+ const seat=id=>{const label=node('span',seatName(id),'history-seat'+(id===state.observation?.playerId?' history-self':''));label.title=playerName(id);return label;};
+ button.append(seat(event.player));
+ if(event.type==='hint'){
+  button.append(node('span','提示','history-verb'),seat(event.target),node('span',event.kind==='color'?'颜色':'数字','history-kind'),node('strong',String(event.kind==='color'?(colorName[event.value]??event.value):event.value),'history-value '+(event.kind==='color'&&Object.hasOwn(colorName,event.value)?event.value:'')));
+  if(Array.isArray(event.touched))button.append(node('span',event.touched.length?`第 ${event.touched.map(i=>i+1).join('·')} 张`:'未命中','history-result'));
+ }else if(event.type==='play'||event.type==='discard'){
+  const card=event.card,color=Object.hasOwn(colorName,card?.color)?card.color:'';
+  button.append(node('span',event.type==='play'?'出':'弃','history-verb'),node('strong',card?`${colorName[card.color]??card.color} ${card.value}`:'未知牌','history-value '+color),node('span',`第 ${Number(event.index)+1} 张`,'history-kind'));
+  if(event.type==='play')button.append(node('span',event.played?'成功':'失败','history-result'+(event.played?'':' history-failed')));
+ }else button.append(node('span',actionNames[event.type]??event.type,'history-generic'));
+ button.onclick=()=>{$('history-event-text').textContent=eventText(event);const time=new Date(entry.preparedAt);$('history-event-time').textContent=entry.preparedAt&&!Number.isNaN(time.getTime())?time.toLocaleString():'';$('history-event-dialog').showModal();};
+ item.append(button);return item;
 }
 function renderHistory(next){
  const list=$('action-history');if(!list)return;
@@ -84,9 +101,16 @@ function renderHistory(next){
  const events=[];let previous=null;
  for(const entry of entries){const event=entry.event;if(!event)continue;const key=JSON.stringify(event);if(key!==previous)events.push(entry);previous=key;}
  // A page can arrive without changing observationId; update history independently.
- const signature=JSON.stringify([next.room?.roomId,events]);if(list.dataset.signature===signature)return;list.dataset.signature=signature;list.replaceChildren();
- $('history-status').textContent=next.observation?.hasMore?'正在读取更早的可见记录…':events.length?`已收到 ${events.length} 条动作 · 最新在前`:'尚未收到动作记录。';
- for(const entry of events.reverse()){const item=node('li',eventText(entry.event));if(entry.preparedAt){const time=new Date(entry.preparedAt);if(!Number.isNaN(time.getTime()))item.append(node('small',time.toLocaleTimeString(),'history-time'));}list.append(item);}
+ const self=next.observation?.playerId??next.room?.playerId,loading=Boolean(next.observation?.hasMore);
+ const signature=JSON.stringify([next.room?.roomId,self,loading,events]);if(list.dataset.signature===signature)return;list.dataset.signature=signature;list.replaceChildren();
+ const lastOwn=events.findLastIndex(entry=>entry.event.player===self),recent=events.slice(lastOwn+1),recentList=$('recent-action-history');recentList.replaceChildren();
+ $('recent-history-scope').textContent=lastOwn<0?'自开局以来':'自你上次行动后';
+ $('recent-history-status').textContent=loading?'正在同步动作…':recent.length?'':lastOwn<0?'等待第一个动作':'还没有新的队友动作';
+ $('recent-history-status').hidden=!$('recent-history-status').textContent;
+ for(const entry of recent)recentList.append(historyRow(entry));
+ $('history-count').textContent=String(events.length);
+ $('history-status').textContent=loading?'正在同步动作…':events.length?'最新在前 · 点动作查看详情':'尚未收到动作记录';
+ for(const entry of [...events].reverse())list.append(historyRow(entry));
 }
 function schemaValues(s){return s?.enum??(s&&Object.hasOwn(s,'const')?[s.const]:s?.anyOf?.every(v=>Array.isArray(v.enum))?s.anyOf.flatMap(v=>v.enum):null);}
 function selectOptions(input,name,values){const old=input.value;input.replaceChildren();for(const value of values){const text=name==='target'?playerName(value):name==='kind'?({color:'颜色',value:'数字'}[value]??value):name==='index'&&Number.isInteger(value)?`第 ${value+1} 张牌`:colorName[value]??String(value);const option=node('option',text);option.value=JSON.stringify(value);input.append(option);}if([...input.options].some(o=>o.value===old))input.value=old;input.dataset.json='true';}
@@ -102,7 +126,6 @@ function renderAction(){const a=state.observation?.legalActions.find(a=>a.type==
   };kind.onchange=refresh;refresh();}
 }
 function countdown(){
- $('reason-panel').hidden=latestMode!=='human'||state.observation?.status!=='active';$('decision-reason').disabled=!canSubmitAction();$('dictate-reason').disabled=dictationBusy||!canSubmitAction();
  const o=state.observation,active=o?.status==='active',d=o?.control?.deadlineAt,remaining=Number.isFinite(d)?Math.max(0,Math.ceil((d-Date.now()-(state.clockOffsetMs??0))/1000)):null;
  const current=o?.view?.current,own=Boolean(active&&(o.control?.required||current===o.playerId)),actor=state.room?.members?.find(p=>p.playerId===current)?.name??current;
  const label=!active?o?.status==='truncated'?'对局已中断':o?'对局已结束':'等待对局开始':own?latestMode==='model'?'Agent 行动中':'轮到你了':actor?`${actor} 行动中`:'等待队友行动';
@@ -122,6 +145,5 @@ const leave=node('button','释放席位');leave.id='leave-room';leave.type='butt
 $('action-form').onsubmit=async event=>{event.preventDefault();if($('action-form').hidden||!canSubmitAction())return;try{const action={type:$('action-type').value};for(const input of $('action-fields').querySelectorAll('input,select,textarea')){if(!input.value&&!input.required)continue;action[input.name]=input.dataset.json?JSON.parse(input.value):input.dataset.number?Number(input.value)-Number(input.dataset.offset??0):input.value;}await submitAction(action,state.observation.observationId);}catch(error){$('notice').textContent=error.message;}};
 $('rules-button').onclick=()=>{const el=$('rules-content');el.replaceChildren();const rules=state.rules;if(!rules)el.append(node('p','加入房间后自动拉取本游戏规则。'));else{for(const rule of rules.rulesSummary)el.append(node('p',rule));el.append(node('h3','已实现 / 尚未实现'),node('pre',JSON.stringify(rules.implementation,null,2)));for(const source of rules.sources)el.append(node('p',`${source.title}\n${source.url}`));}$('rules-dialog').showModal();};$('close-rules').onclick=()=>$('rules-dialog').close();
 function acceptInvitation(value){if(typeof value!=='string'||!value)return;$('invitation').value=value;$('notice').textContent=state.room?'收到新邀请。断开当前席位后，可确认并加入新房间。':'邀请已填入。选择人类或模型模式，确认后加入房间。';if(!state.room)$('name').focus();}
-if(api.dictate){$('dictate-reason').hidden=false;$('dictate-reason').onclick=async()=>{if(dictationBusy||!canSubmitAction())return;dictationBusy=true;countdown();const id=state.observation?.observationId,room=state.room?.roomId;try{const text=await api.dictate();if(text&&id===state.observation?.observationId&&room===state.room?.roomId){$('decision-reason').value=[$('decision-reason').value.trim(),text].filter(Boolean).join(' ').slice(0,1200);$('decision-reason').focus();}}catch(error){$('notice').textContent=error.message;}finally{dictationBusy=false;countdown();}};}
-$('history-panel').open=!window.matchMedia('(max-width:600px)').matches;
+$('close-history-event').onclick=()=>$('history-event-dialog').close();
 api.onState(render);api.onInvitation(acceptInvitation);api.command('incoming-invitation').then(acceptInvitation).catch(()=>{});api.command('status').then(render).catch(()=>{$('status').textContent='启动失败';$('light').className='red';});setInterval(countdown,1000);

@@ -10,13 +10,17 @@
     <strong id="deadline" role="timer" aria-live="off"></strong>
     <p id="timeout-policy" class="timeout-policy"></p>
    </section>
+ <section id="recent-history-panel" class="recent-history-panel" aria-labelledby="recent-history-title">
+  <div class="history-heading"><h2 id="recent-history-title">本轮动作</h2><span id="recent-history-scope">自你上次行动后</span></div>
+  <p id="recent-history-status"></p><ol id="recent-action-history" class="action-history" aria-label="自我上次行动后的动作"></ol>
+ </section>
  <div class="play-grid">
   <section class="board-panel"><h2>本席可见局面</h2><div id="board"></div></section>
   <section>
-   <details class="history-panel" id="history-panel"><summary>动作历史</summary><p id="history-status"></p><ol id="action-history" aria-label="本席收到的动作历史"></ol></details>
-   <section id="reason-panel" class="reason-panel"><div class="reason-heading"><label for="decision-reason">行动理由 <span>选填</span></label><button id="dictate-reason" type="button" hidden>语音填写</button></div><textarea id="decision-reason" rows="2" maxlength="1200" placeholder="为什么这样出牌、弃牌或提示？" aria-describedby="reason-help"></textarea><small id="reason-help">仅供回放审阅，不发给队友。确认动作时一起提交。</small></section>
+   <details class="history-panel" id="history-panel" open><summary>动作历史 <span id="history-count"></span></summary><p id="history-status"></p><ol id="action-history" class="action-history" aria-label="本席收到的全部动作历史"></ol></details>
    <form id="action-form" hidden><label>动作<select id="action-type"></select></label><p id="action-description"></p><div id="action-fields"></div><button id="act" type="submit">提交动作</button></form>
   </section>
  </div>
 </section><p id="notice" role="status"></p></main>
+<dialog id="history-event-dialog" aria-labelledby="history-event-title"><button id="close-history-event">关闭</button><h2 id="history-event-title">动作详情</h2><p id="history-event-text"></p><small id="history-event-time"></small></dialog>
 <dialog id="rules-dialog"><button id="close-rules">关闭</button><h2>规则与实现范围</h2><div id="rules-content"></div></dialog><script src="player.js"></script></body></html>

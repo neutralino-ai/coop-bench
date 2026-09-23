@@ -45,7 +45,6 @@ struct WebSurface: UIViewRepresentable {
     }
 }
 @MainActor final class WebBridge: NSObject,WKScriptMessageHandler,WKNavigationDelegate,WKDownloadDelegate {
-    private let dictation=ReasonDictation()
     let role: String,session: HostSession,root: URL,page: URL
     var view: WKWebView!
     private var tasks:[String:Task<Void,Never>]=[:],requests:[String:String]=[:],downloads:[ObjectIdentifier:URL]=[:]
@@ -116,7 +115,6 @@ struct WebSurface: UIViewRepresentable {
         if name == "disconnect" { await session.returnToLobby();return ["status":"disconnected","lobbyManaged":true,"mode":"human"] }
         guard let runtime=session.player else { throw ClientFailure("NO_SEAT","请返回大厅加入房间。") }
         switch name {
-        case "dictateReason":return try await dictation.start(from:view)
         case "act":_ = try await runtime.act(input["action"] as? JSON ?? [:],observationID:input["observationId"] as? String ?? "",decisionSummary:input["decisionSummary"] as? String)
         case "ready":try await runtime.ready()
         case "start","kick":_ = try await runtime.roomCommand(name,input)

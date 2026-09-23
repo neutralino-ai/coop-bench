@@ -93,11 +93,6 @@ html,body{min-width:0!important;-webkit-text-size-adjust:100%}body{padding-botto
  .ios-client .card-face>span{font-size:9px}
  .ios-client .card-knowledge{padding:1px 2px;gap:0;min-height:22px}
  .ios-client .knowledge-value{font-size:10px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
- .ios-client .history-panel:not([open]) summary{min-height:20px;font-size:12px}
- .ios-client .reason-panel{margin:4px 0 0;padding:5px}
- .ios-client .reason-heading{margin-bottom:2px}
- .ios-client .reason-heading label{font-size:12px}
- .ios-client .reason-heading button{min-height:28px;padding:2px 6px;font-size:11px}
- .ios-client .reason-panel textarea{min-height:40px;padding:3px 5px;font-size:16px!important;line-height:1.2}
- .ios-client .reason-panel small{display:none}
+ .ios-client .recent-history-panel{margin-bottom:5px;padding:7px 8px;border-radius:8px}
+ .ios-client .history-panel summary{min-height:30px;font-size:14px}
 }

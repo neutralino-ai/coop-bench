@@ -29,7 +29,17 @@ button.card.hint-excluded{opacity:.55}
 @media(max-width:480px){.card-action-panel{padding:12px}.card-action-heading{align-items:flex-start}.card-action-step{max-width:90px;text-align:right}.card-action-buttons button{flex:1}.card-mark{right:3px;top:5px;padding:4px;font-size:10px}}
 @media(prefers-reduced-motion:reduce){button.card{transition:none}}
 
-.reason-panel{margin:16px 0;padding:18px;background:#fff;border:1px solid #dbe5df;border-radius:14px}.reason-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.reason-heading label{font-weight:650;margin:0}.reason-heading label span{font-weight:400;color:#8b9992;font-size:12px;margin-left:6px}.reason-panel textarea{width:100%;box-sizing:border-box;min-height:94px;resize:vertical;border:1px solid #dbe5df;border-radius:9px;padding:12px;font:16px/1.6 system-ui;background:#f9fbfa}.reason-panel small{display:block;margin-top:8px;color:#73857b;font-size:12px;line-height:1.5}.reason-heading button{font-size:13px;padding:6px 10px}
+.recent-history-panel{margin:0 0 12px;padding:12px 16px;background:#fff;border:1px solid #c6d9ee;border-radius:12px}
+.history-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:4px}.history-heading h2{margin:0;font-size:16px;color:#24496d}.history-heading>span{font-size:12px;color:#6a7f94}
+#recent-history-status{font-size:13px;margin:6px 0;color:#718278}
+.action-history{list-style:none;padding:0;margin:0}.action-history li{padding:0;border:0}
+#action-history{max-height:270px}#action-history li,#action-history li:first-child{padding:0;border:0;border-radius:0;background:none}
+.history-row{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:6px 2px;border:0;border-bottom:1px solid #edf1f5;border-radius:0;background:transparent;text-align:left;white-space:nowrap;font-size:15px;line-height:1.4;color:#294638}
+.history-row:hover{background:#f3f7fb}.action-history li:last-child .history-row{border-bottom:0}
+.history-seat{font-weight:650;flex-shrink:0}.history-self{color:#1764c0}.history-verb{font-weight:550}.history-kind{color:#748478;font-size:12px}
+.history-value{display:inline-block;flex-shrink:0;padding:1px 7px;border-radius:5px;color:var(--card-color,#294d70);background:var(--card-tint,#eef3f8);font-size:15px}
+.history-result{margin-left:auto;font-size:12px;color:#6c8074}.history-failed{color:#b44731;font-weight:650}.history-generic{overflow:hidden;text-overflow:ellipsis}
+#history-count{font-size:12px;font-weight:400;color:#718278;margin-left:4px}#history-event-text{color:#294638;line-height:1.7}#close-history-event{float:right}#history-event-time{color:#718278}
 
 /* Keep the turn visible and cards readable on a phone. */
 #game>.turn-panel{margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;text-align:left}
@@ -50,9 +60,10 @@ body.own-turn{background:#e5f0ff}
  #game>.turn-panel #turn-label{font-size:18px}#game>.turn-panel #deadline{font-size:30px;letter-spacing:0}#game>.turn-panel .timeout-policy{display:none}
  .play-grid{gap:8px}.play-grid>section{padding:10px;border-radius:10px}.board-panel>h2{display:none}#board{display:flex;flex-direction:column}.metrics{margin-bottom:8px;gap:14px}.metric-label{font-size:12px;margin-bottom:3px}.deck-counter strong{font-size:20px}.token-dot{width:11px;height:11px}.token-dots{gap:3px;height:14px}
  .firework-piles{order:1;gap:5px}.firework-pile{padding:2px 7px;font-size:12px}.firework-pile strong{font-size:19px}.knowledge-note{display:none}
- .player-hand{order:3;padding:7px 0}.player-hand.own-hand{order:2}.hand-heading{margin-bottom:4px}.hand-heading strong{font-size:14px}.hand-status{display:block;font-size:11px}.active-hand .hand-status{padding:0 6px}.cards{gap:4px}
+ .player-hand{order:2;padding:7px 0}.hand-heading{margin-bottom:4px}.hand-heading strong{font-size:14px}.hand-status{display:block;font-size:11px}.active-hand .hand-status{padding:0 6px}.cards{gap:4px}
  .card-face{position:relative;padding:2px 4px;flex-direction:row;justify-content:center;gap:3px}.card-face small{position:absolute;left:3px;top:2px;font-size:0}.card-face small::after{content:attr(data-position);font-size:9px}.card-face strong{font-size:25px;margin:0}.card-face>span{font-size:11px}.own-hand .card-face>span{display:none}.card-knowledge{padding:3px;gap:0}.knowledge-label{display:none}.knowledge-value{font-size:12px;line-height:1.3}
- .history-panel{margin:0;padding:0;border:0}.history-panel:not([open]) summary{min-height:24px}#action-history{max-height:120px}#action-history li{padding:5px 8px;font-size:13px}.history-time{display:inline;margin-left:6px}
- .reason-panel{margin:8px 0 0;padding:8px;border-radius:9px}.reason-heading{margin-bottom:4px}.reason-panel textarea{min-height:58px;padding:6px 8px;line-height:1.35;margin-top:0}.reason-panel small{font-size:11px;margin-top:3px}.reason-heading button{min-height:36px}
+ .recent-history-panel{padding:8px 10px;margin-bottom:8px;border-radius:10px}.history-heading h2{font-size:15px}.history-heading>span{font-size:11px}
+ .history-row{gap:6px;min-height:36px;font-size:14px}.history-value{font-size:14px;padding:1px 5px}.history-result,.history-kind{font-size:11px}
+ .history-panel{margin:0;padding:0;border:0}.history-panel summary{min-height:30px}#action-history{max-height:216px}
  .card-action-panel{padding:8px;margin-top:7px}.card-action-choices{margin-top:7px}.card-action-preview{margin:6px 0;font-size:13px}.card-action-buttons button{min-height:42px}#progress{padding:6px 12px;font-size:12px}
 }

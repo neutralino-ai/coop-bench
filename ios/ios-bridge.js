@@ -6,7 +6,7 @@
  window.__coopReply=(id,value,error)=>{const p=pending.get(id);if(!p)return;pending.delete(id);if(error)p.reject(Object.assign(Error(error.message),{code:error.code,status:error.status}));else{if(typeof value?.bodyBase64==='string'){const text=atob(value.bodyBase64),bytes=new Uint8Array(text.length);for(let i=0;i<text.length;i++)bytes[i]=text.charCodeAt(i);value={...value,bytes};delete value.bodyBase64;}p.resolve(value);}};
  window.__coopEvent=(name,value)=>{for(const fn of listeners[name]??[])fn(value);};
  const listen=name=>fn=>{listeners[name].push(fn);return ()=>{listeners[name]=listeners[name].filter(x=>x!==fn);};};
- if(window.__coopRole==='player')window.coopPlayer=Object.freeze({command:invoke,dictate:()=>invoke('dictateReason'),onState:listen('state'),onInvitation:listen('invitation')});
+ if(window.__coopRole==='player')window.coopPlayer=Object.freeze({command:invoke,onState:listen('state'),onInvitation:listen('invitation')});
  else window.coopDesktop=Object.freeze(Object.assign(Object.fromEntries(['getConnection','connect','login','register','operatorCommand','getAccount','setPassword','disconnect','request','cancelRequest','copyText','openPlayer','incomingInvitation'].map(name=>[name,input=>invoke(name,input)])),{hostSeat:(name,input)=>invoke('hostSeat',{name,input}),onInvitation:listen('invitation')}));
  window.addEventListener('DOMContentLoaded',()=>{
   document.body.classList.add('ios-client');

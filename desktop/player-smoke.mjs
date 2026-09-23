@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
-import {writeFileSync,readFileSync} from 'node:fs';
+import {writeFileSync,readFileSync,existsSync} from 'node:fs';
 import {app,safeStorage} from 'electron';
 import {join} from 'node:path';
 import {setTimeout as wait} from 'node:timers/promises';
@@ -93,9 +93,9 @@ export async function runPlayerSmoke({window,directory}) {
     assert.equal(await js("document.querySelectorAll('.player-hand')[1].querySelector('.card-knowledge').textContent"),'牌主知道红1–5');
     assert.match(await js("document.querySelectorAll('.player-hand')[1].querySelectorAll('.card-knowledge')[1].textContent"),/非红/);
     checks.push('teammate positive and negative hint knowledge appears separately from visible card faces');
-    await until("document.querySelector('#action-history').textContent.includes('命中第 1、3 张牌')");
+    await until("document.querySelector('#action-history button')?.title.includes('命中第 1、3 张牌')");
     const beforeReload=await js("document.querySelector('#action-history').textContent");
-    await new Promise(resolve=>{window.webContents.once('did-finish-load',resolve);window.webContents.reload();});await until("document.querySelector('#action-history').textContent.includes('命中第 1、3 张牌')");
+    await new Promise(resolve=>{window.webContents.once('did-finish-load',resolve);window.webContents.reload();});await until("document.querySelector('#action-history button')?.title.includes('命中第 1、3 张牌')");
     assert.equal(await js("document.querySelector('#action-history').textContent"),beforeReload);
     assert.equal(await js("document.querySelectorAll('#action-history li').length"),1);
     checks.push('readable history survives renderer reload without duplicate actions');
@@ -106,8 +106,8 @@ export async function runPlayerSmoke({window,directory}) {
     assert.deepEqual(await js("[...document.querySelectorAll('.player-hand:first-of-type .card-face small')].map(o=>o.textContent)"),[1,2,3,4,5].map(i=>`第 ${i} 张`));
     await js("document.querySelector('.card[data-player=p1][data-index=\"4\"]').click();document.querySelector('[data-choice=play]').click();document.querySelector('#confirm-card-action').click()");await until("!document.querySelector('#act').disabled");
     assert.deepEqual(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.action,{type:'play',index:4});
-    await js("document.querySelector('.card[data-player=p1][data-index=\"4\"]').click();document.querySelector('[data-choice=discard]').click();document.querySelector('#decision-reason').value='合成理由：弃掉第五张牌。';document.querySelector('#confirm-card-action').click()");await until("!document.querySelector('#act').disabled");
-    assert.deepEqual(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.action,{type:'discard',index:4});assert.equal(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.decisionSummary,'合成理由：弃掉第五张牌。');assert.equal(await js("document.querySelector('#decision-reason').value"),'');checks.push('direct card positions display 1–5 and play or discard the fifth card with protocol index 4');
+    await js("document.querySelector('.card[data-player=p1][data-index=\"4\"]').click();document.querySelector('[data-choice=discard]').click();document.querySelector('#confirm-card-action').click()");await until("!document.querySelector('#act').disabled");
+    assert.deepEqual(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.action,{type:'discard',index:4});assert.equal(local.requests.filter(r=>r.path.endsWith('/actions')).at(-1).body.decisionSummary,undefined);assert.equal(await js("document.querySelector('#reason-panel,#decision-reason,#dictate-reason')"),null);checks.push('direct card actions submit without a reason field and use the correct zero-based index');
     await js("document.querySelector('.card[data-player=p1][data-index=\"0\"]').click();document.querySelector('[data-choice=play]').click()");
     // Read the synthetic clock render in the same renderer task. An ordinary
     // runtime push between separate IPC reads can restore the real deadline.
@@ -127,6 +127,53 @@ export async function runPlayerSmoke({window,directory}) {
     assert.equal(await js("document.querySelector('#card-action-panel')"),null);assert.ok(await js("[...document.querySelectorAll('.card')].every(c=>c.disabled)"));checks.push('expired deadline disables confirmation and a changed observation clears stale card selection');
     const messages=await call(`/rollouts/${snapshot.room.episodeId}/messages?playerId=p1`);assert.ok(messages.messages.some(m=>m.kind==='tool-call'));checks.push('human runtime tool trajectory stored');
     const prohibited=await js("window.coopPlayer.command('audit').then(()=>false,()=>true)");assert.equal(prohibited,true);checks.push('player IPC cannot invoke audit');
-    await js("window.coopPlayer.command('disconnect')");return {ok:true,backend:'mock',fixture:'Scripted HTTP responses exercise client behavior only; no game engine or scoring validation.',checks};
+    await js("window.coopPlayer.command('disconnect')");
+    await checkHistoryLayout({window,directory,js,snapshot,checks});
+    return {ok:true,backend:'mock',fixture:'Scripted HTTP responses exercise client behavior only; no game engine or scoring validation.',checks};
   }finally{await local.close();}
+}
+
+async function checkHistoryLayout({window,directory,js,snapshot,checks}){
+ const visible=Array.from({length:5},(_,i)=>({color:['red','blue','green','yellow','white'][i],value:i+1,possibleColors:['red','blue','green','yellow','white'],possibleValues:[1,2,3,4,5]}));
+ const hidden=visible.map(({possibleColors,possibleValues},i)=>({possibleColors,possibleValues:i%2===0?[2]:possibleValues}));
+ const entries=[
+  {seq:1,event:{type:'hint',player:'p1',target:'p3',kind:'color',value:'blue',touched:[0,2]}},
+  {seq:2,event:{type:'play',player:'p2',index:2,card:{color:'blue',value:1},played:true}},
+  {seq:3,event:{type:'discard',player:'p3',index:3,card:{color:'white',value:4}}},
+  {seq:4,event:{type:'hint',player:'p1',target:'p3',kind:'value',value:2,touched:[0,2,4]}},
+  {seq:5,event:{type:'play',player:'p2',index:1,card:{color:'red',value:3},played:false}},
+ ];
+ const fixture={...snapshot,status:'your-turn',mode:'human',visibleHistory:entries,room:{...snapshot.room,playerCount:3,playerId:'p3',members:['p1','p2','p3'].map((playerId,i)=>({playerId,name:['林林','阿辰','小薛'][i]}))},observation:{...snapshot.observation,playerId:'p3',observationId:'history-layout',hasMore:false,view:{...snapshot.observation.view,current:'p3',hands:{p3:hidden,p2:visible,p1:visible}},control:{required:true,deadlineAt:Date.now()+180000}}};
+ await js(`render(${JSON.stringify(fixture)})`);
+ assert.deepEqual(await js("[...document.querySelectorAll('.player-hand')].map(e=>e.dataset.player)"),['p1','p2','p3']);
+ assert.equal(await js("document.querySelector('#history-panel').open"),true);
+ assert.deepEqual(await js("[...document.querySelectorAll('#recent-action-history .history-row')].map(e=>e.textContent)"),['1号提示3号数字2第 1·3·5 张','2号出红 3第 2 张失败']);
+ assert.equal(await js("document.querySelectorAll('#action-history li').length"),5);
+ assert.ok(await js("[...document.querySelectorAll('.own-hand .card-face strong')].every(e=>e.textContent==='?')"));
+ await js("document.querySelector('#recent-action-history button').click()");
+ assert.ok(await js("document.querySelector('#history-event-dialog').open&&document.querySelector('#history-event-text').textContent.includes('命中第 1、3、5 张牌')"));
+ await js("document.querySelector('#close-history-event').click()");
+ checks.push('third seat stays in row three with hidden cards; recent history starts after the last own action and tap preserves exact hint positions');
+ const cssPath=new URL('../ios/ios.css',import.meta.url);
+ // Packaged smoke receives the same source CSS through its working directory.
+ const iosCss=readFileSync(existsSync(cssPath)?cssPath:join(process.cwd(),'ios','ios.css'),'utf8');
+ const style=await window.webContents.insertCSS(iosCss);await js("document.body.classList.add('ios-client')");
+ for(const width of [320,390,430]){
+  window.webContents.enableDeviceEmulation({screenPosition:'mobile',screenSize:{width,height:844},viewSize:{width,height:844},deviceScaleFactor:1,scale:1});
+  await js("scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+  assert.ok(await js("document.documentElement.scrollWidth<=innerWidth+2&&document.querySelector('#recent-history-panel').getBoundingClientRect().bottom<=document.querySelector('.board-panel').getBoundingClientRect().top"));
+  assert.deepEqual(await js("[...document.querySelectorAll('.player-hand')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(e=>e.dataset.player)"),['p1','p2','p3']);
+  assert.ok(await js("[...document.querySelectorAll('.history-row')].every(e=>e.scrollWidth<=e.clientWidth+1&&e.getBoundingClientRect().height<=44)"));
+  writeFileSync(join(directory,`player-history-p3-${width}.png`),(await window.webContents.capturePage({x:0,y:0,width,height:844})).toPNG());
+ }
+ checks.push('320/390/430px iOS styles keep seat order, expanded history above the board, and all action rows on one line');
+ await window.webContents.removeInsertedCSS(style);window.webContents.disableDeviceEmulation();await js("document.body.classList.remove('ios-client')");
+ const renderHistory=async visibleHistory=>js(`render(${JSON.stringify({...fixture,visibleHistory})})`);
+ await renderHistory(entries.slice(0,2));assert.equal(await js("document.querySelectorAll('#recent-action-history li').length"),2);assert.equal(await js("document.querySelector('#recent-history-scope').textContent"),'自开局以来');
+ await renderHistory(entries.slice(0,3));assert.equal(await js("document.querySelectorAll('#recent-action-history li').length"),0);
+ await renderHistory(entries);await renderHistory([...entries,{seq:6,event:entries.at(-1).event}]);assert.equal(await js("document.querySelectorAll('#recent-action-history li').length"),2);
+ await js(`render(${JSON.stringify({...fixture,observation:{...fixture.observation,hasMore:true}})})`);assert.equal(await js("document.querySelector('#recent-history-status').textContent"),'正在同步动作…');
+ await renderHistory(entries);assert.equal(await js("document.querySelector('#recent-history-status').hidden"),true);
+ await renderHistory([]);assert.equal(await js("document.querySelectorAll('#recent-action-history li').length"),0);assert.equal(await js("document.querySelector('#recent-history-status').textContent"),'等待第一个动作');
+ checks.push('history handles first turn, own-action boundary, duplicate snapshots, page completion and empty room without stale rows');
 }

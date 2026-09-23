@@ -106,11 +106,27 @@ import WebKit
             try await snapshot("player-mobile",app.player)
             try await wait("agent-submits-action",{app.session.agents.values.first?.data["lastActionResult"] != nil})
             try await wait("model-failure-is-visible",{app.session.agents.values.first?.warning?.contains("停止") == true})
+            try check(try await js("return document.querySelector('#history-panel').open && !document.querySelector('#reason-panel,#decision-reason,#dictate-reason') && !window.coopPlayer.dictate",app.player) as? Bool == true,"history-open-without-reason-or-dictation")
+            _=try await js("""
+                window.historySmokeOriginal=await window.coopPlayer.command('status');
+                const s=structuredClone(window.historySmokeOriginal),o=s.observation;
+                o.observationId='synthetic-third-seat';o.playerId='p3';o.view.current='p3';
+                o.view.hands={p3:o.view.hands.p1,p2:o.view.hands.p2,p1:o.view.hands.p2};
+                s.room.members=[{playerId:'p1',name:'林林'},{playerId:'p2',name:'阿辰'},{playerId:'p3',name:'小薛'}];
+                s.visibleHistory=[
+                  {seq:1,event:{type:'discard',player:'p3',index:0,card:{color:'white',value:4}}},
+                  {seq:2,event:{type:'hint',player:'p1',target:'p3',kind:'value',value:2,touched:[0,2,4]}},
+                  {seq:3,event:{type:'play',player:'p2',index:1,card:{color:'red',value:3},played:false}}
+                ];render(s);return true;
+                """,app.player)
+            try check(try await js("return [...document.querySelectorAll('.player-hand')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(e=>e.dataset.player).join(',')==='p1,p2,p3' && [...document.querySelectorAll('.own-hand .card-face strong')].every(e=>e.textContent==='?')",app.player) as? Bool == true,"third-seat-in-third-row-with-hidden-cards")
+            try check(try await js("return document.querySelectorAll('#recent-action-history li').length===2 && document.querySelector('#recent-history-scope').textContent==='自你上次行动后' && document.querySelector('#recent-history-panel').getBoundingClientRect().bottom<=document.querySelector('.board-panel').getBoundingClientRect().top && [...document.querySelectorAll('.history-row')].every(e=>e.scrollWidth<=e.clientWidth+1&&e.getBoundingClientRect().height<=44)",app.player) as? Bool == true,"recent-teammate-actions-prominent-and-single-line")
+            try await snapshot("player-third-seat-history",app.player)
+            _=try await js("render(window.historySmokeOriginal);delete window.historySmokeOriginal;return true",app.player)
             let runtime=app.session.player!
             try check(runtime.snapshot()["decisionToken"] == nil && (runtime.snapshot()["observation"] as? JSON)?["decisionToken"] == nil,"snapshot-hides-decision-capability")
             _=try await runtime.act(["type":"hint","target":"p2","kind":"color","value":"red"],observationID:runtime.observation!["observationId"] as! String,decisionSummary:"合成 iOS 理由：提示红色。")
             try check(runtime.data["pendingAction"] == nil,"human-action-acknowledged")
-            try check(try await js("return !document.querySelector('#dictate-reason').hidden && !!document.querySelector('#decision-reason')",app.player) as? Bool == true,"human-reason-and-native-dictation-visible")
             try check((runtime.data["messages"] as? [JSON] ?? []).contains { (($0["message"] as? JSON)?["raw"] as? JSON)?["decisionSummary"] as? String == "合成 iOS 理由：提示红色。" },"human-reason-preserved-in-action-trace")
             app.playerShown=false
             _=try await js("await selectEpisode(\(jsonString(runtime.episode!)));return true",app.host)

@@ -16,6 +16,4 @@
 <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>org.coopbench.invitation</string><key>CFBundleURLSchemes</key><array><string>coopbench</string></array></dict></array>
 <key>NSLocalNetworkUsageDescription</key><string>连接你自行配置的本地 Coop Bench 测试服务。</string>
-<key>NSMicrophoneUsageDescription</key><string>仅在你点击语音填写理由时使用麦克风，不保存录音。</string>
-<key>NSSpeechRecognitionUsageDescription</key><string>把你说的行动理由转成可编辑的文字；设备支持时在本机识别，否则由 Apple 语音服务识别。采用文字并确认动作后才提交理由。</string>
 </dict></plist>
