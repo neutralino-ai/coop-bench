@@ -1,0 +1,10 @@
+{
+  "publicClient": true,
+  "typedEntrypoints": [
+    "client/protocol.mjs",
+    "scripts/release-source.mjs"
+  ],
+  "legacyAny": {
+    "client/mcp-play.ts": 2
+  }
+}

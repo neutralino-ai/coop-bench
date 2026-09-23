@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { webFiles } from './client-files.mjs';
+import { sourceIdentity } from './release-source.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const output=resolve(root,'runtime','coop-bench');
@@ -23,7 +24,7 @@ for(const name of [...inputs,...webFiles.map(name=>'web/'+name)].sort()){
 }
 for(const name of webFiles)await copyFile(resolve(root,'web',name),resolve(output,'web',name));
 const version=JSON.parse(await readFile(resolve(root,'package.json'),'utf8')).version;
-const manifest={schema:'coop-bench-client-build/v1',version,clientBuild:digest.digest('hex'),
+const manifest={schema:'coop-bench-client-build/v1',version,clientBuild:digest.digest('hex'),sourceRevision:sourceIdentity(root),
   remoteOnly:true,containsGameEngine:false,entry:'client/player.mjs',inputs};
 await writeFile(resolve(output,'build-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
 console.log(`Remote client runtime ${version}: ${manifest.clientBuild.slice(0,12)} (no game engine)`);
