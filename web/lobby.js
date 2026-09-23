@@ -37,7 +37,7 @@
   try{
    const [result,mine]=await Promise.all([request('/lobby'),request('/lobby/mine')]);if(version!==serial||session!==state.session)return;
    for(const [target,values,owned] of [[createdList,mine.created,true],[participatingList,mine.participating,false]]){
-    const visible=(values??[]).filter(room=>!owned||['waiting','active'].includes(room.status));target.replaceChildren();if(!visible.length)target.append(node('p','muted',owned?'创建房间后，在这里管理。':'加入房间后，在这里继续。'));
+    const visible=(values??[]).filter(room=>!owned||['waiting','active'].includes(room.status));target.replaceChildren();if(!visible.length)target.append(node('p','muted','暂无房间'));
     for(const room of visible){const card=node('article','lobby-room personal-room');card.dataset.roomId=room.roomId;const row=node('div','section-heading');row.append(node('h3','',room.name),node('span','badge neutral',({waiting:'等待开始',active:'进行中',completed:'已结束',truncated:'已中止',cancelled:'已取消',expired:'已过期'})[room.status]??room.status));card.append(row);
      const open=node('button','button subtle',owned?'管理房间':['waiting','active'].includes(room.status)?'继续对局':'查看回放');open.type='button';open.onclick=()=>{if(owned)void window.CoopRooms?.open(room.roomId);else if(['waiting','active'].includes(room.status))void openPlayer({roomId:room.roomId});else if(room.episodeId)void selectEpisode(room.episodeId);};if(owned){card.classList.add('owned-room');card.append(open);}else card.append(open);
      if(!owned&&room.status==='waiting'){const release=node('button','button ghost','释放席位');release.type='button';release.onclick=async()=>{release.disabled=true;try{await request(`/lobby/${room.roomId}/leave`,{});await load();}catch(error){status.textContent=issue(error);}finally{release.disabled=false;}};card.append(release);}
@@ -45,13 +45,15 @@
     }
    }
    if(!Array.isArray(result.rooms))throw Error('大厅响应无效，请更新服务端后重试。');
-   list.replaceChildren();status.textContent=`${result.rooms.length} 个可加入房间 · 自动刷新`;
-   if(!result.rooms.length){const empty=node('div','home-empty');empty.append(node('strong','','还没有等待加入的房间'),node('p','','点击顶部「创建新房间」，邀请大家一起玩。'));list.append(empty);}
+   list.replaceChildren();status.textContent=`${result.rooms.length} 间 · 自动刷新`;
+   if(!result.rooms.length){const empty=node('div','home-empty');empty.append(node('strong','','暂无可加入的房间'));list.append(empty);}
    for(const room of result.rooms){
     const game=state.games.find(g=>g.id===room.gameId),scenario=game?.scenarios.find(s=>s.id===room.scenarioId);
     const card=node('button','lobby-room');card.type='button';card.dataset.roomId=room.roomId;card.onclick=()=>choose(room);
     const row=node('div','section-heading');row.append(node('h3','',room.name||game?.name||room.gameId),node('span','badge active',`${room.members.length} / ${room.playerCount} 人`));
-    card.append(row,node('p','small muted',`${game?.name??room.gameId} · ${scenario?.name??room.scenarioId}`),node('p','room-members',room.members.map(p=>p.name).join('、')||'等待第一位玩家'),node('span','room-join-label','加入房间 →'));list.append(card);
+    const details=`${game?.name??room.gameId} · ${scenario?.name??room.scenarioId} · ${room.members.map(p=>p.name).join('、')||'等待玩家'}`;
+    const detail=node('p','small muted room-summary',details);detail.title=details;
+    card.append(row,detail,node('span','room-join-label','加入 →'));list.append(card);
    }
   }catch(error){if(version===serial&&session===state.session){list.replaceChildren();status.textContent=issue(error);if(error.status===404&&apiUrl==='https://coop.neutrinophysics.cn:34935/api/v1'){const switchServer=node('button','button primary','登录新版大厅');switchServer.type='button';switchServer.onclick=async()=>{await disconnect();$('api-address').value='https://coop.neutrinophysics.cn:34936/api/v1';$('login-password').focus();};list.append(node('p','muted','当前连接旧版服务。新版大厅使用 34936 端口，旧对局仍保留在原服务。'),switchServer);}}}
   finally{if(version===serial){loading=false;renderBusy();}}
