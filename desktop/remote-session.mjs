@@ -33,7 +33,7 @@ function requireLoginStatus(status, health = false) {
   if (status >= 500 || status === 429) throw new ClientConnectionError('API_UNAVAILABLE', `服务器暂不可用（HTTP ${status}），请稍后检查。`, status);
   throw new ClientConnectionError('INCOMPATIBLE_API', `此地址未提供预期 API（HTTP ${status}），请检查地址和端口。`, status);
 }
-const validToken = token => typeof token === 'string' && token.length >= 24 && token.length <= 256 && /^[A-Za-z0-9._~+\/-]+=*$/.test(token);
+const validToken = token => typeof token === 'string' && token.length >= 24 && token.length <= 256 && /^[A-Za-z0-9._~+/-]+=*$/.test(token);
 const validUser = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(value);
 const validPassword = (value, newPassword = false) => typeof value === 'string' && value.isWellFormed() &&
   Array.from(value).length >= (newPassword ? 12 : 1) && Array.from(value).length <= 128 &&

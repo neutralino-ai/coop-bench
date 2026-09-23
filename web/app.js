@@ -47,7 +47,7 @@ async function request(path,body,options={}){
  const requestStartedAt=Date.now();
  const session=state.session,timeout=AbortSignal.timeout(20000),signal=options.signal?AbortSignal.any([timeout,options.signal]):timeout;let response,data;
  try{response=await transport.request('/api/v1'+path,{signal,method:body?'POST':'GET',...(body?{body}:{})});}
- catch(error){if(options.signal?.aborted)throw new DOMException('已取消旧请求。','AbortError');if(timeout.aborted&&session===state.session)error=Object.assign(Error('连接超时，尚未确认服务器响应；请检查 API 地址与网络。'),{connectionTimeout:true});await markConnectionFailure(error,{session,status:Number(error?.status??0),identityCheck:path==='/identity'});throw error;}
+ catch(error){if(options.signal?.aborted)throw new DOMException('已取消旧请求。','AbortError');const failure=timeout.aborted&&session===state.session?Object.assign(Error('连接超时，尚未确认服务器响应；请检查 API 地址与网络。'),{connectionTimeout:true}):error;await markConnectionFailure(failure,{session,status:Number(failure?.status??0),identityCheck:path==='/identity'});throw failure;}
  if(session!==state.session)throw new DOMException('连接已更换，旧请求已丢弃。','AbortError');
  if(response.status===401){const proxy=/\bBasic\b|\bDigest\b/i.test(response.headers.get('www-authenticate')??'');const error=Object.assign(Error(proxy?'API 前方的代理要求额外认证，尚未验证个人凭证。请联系组织者检查代理配置。':'凭证已失效或不正确，请重新连接。'),{status:401,code:proxy?'PROXY_AUTH_REQUIRED':'AUTH_REJECTED'});await markConnectionFailure(error,{status:401,session});throw error;}
  try{data=await response.json();}catch{const error=Error(`服务返回 HTTP ${response.status}，但不是有效 JSON API 响应；请核对 API 地址。`);await markConnectionFailure(error,{session});throw error;}

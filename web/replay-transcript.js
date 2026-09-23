@@ -38,8 +38,8 @@ globalThis.CoopTranscript=(()=>{
   return result;
  }
  async function blocks(source,artifact){
-  const rows=records(source),decoded=await CoopTrace.decode(rows.map(r=>r.raw===undefined?r:{...r,message:{raw:r.raw}}));
-  return CoopTrace.blocks(decoded).map(b=>({...b,id:`artifact-${artifact.id}-${b.id}`,at:b.at??artifact.completedAt??artifact.createdAt,sourceName:artifact.name}));
+  const rows=records(source),decoded=await globalThis.CoopTrace.decode(rows.map(r=>r.raw===undefined?r:{...r,message:{raw:r.raw}}));
+  return globalThis.CoopTrace.blocks(decoded).map(b=>({...b,id:`artifact-${artifact.id}-${b.id}`,at:b.at??artifact.completedAt??artifact.createdAt,sourceName:artifact.name}));
  }
  return Object.freeze({records,blocks});
 })();

@@ -18,7 +18,7 @@ const allowedMetadata = new Set(['model', 'provider', 'reasoningAvailability', '
 export async function uploadAgentArtifact(options, dependencies = {}) {
   const fetchImpl = dependencies.fetchImpl ?? fetch, sleep = dependencies.sleep ?? wait;
   const base = safeBase(options.baseUrl);
-  if (typeof options.episodeId !== 'string' || !options.episodeId || typeof options.seatToken !== 'string' || !/^[A-Za-z0-9._~+\/-]+=*$/.test(options.seatToken)) throw Error('A valid episodeId and seatToken are required.');
+  if (typeof options.episodeId !== 'string' || !options.episodeId || typeof options.seatToken !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/.test(options.seatToken)) throw Error('A valid episodeId and seatToken are required.');
   const file = resolve(options.file), handle = await open(file, 'r');
   let snapshot;
   try {

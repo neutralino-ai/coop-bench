@@ -115,7 +115,7 @@
           const bytes=JSON.stringify(data.messages).length;
 
           seat.messages.push(...data.messages);seat.bytes+=bytes;seat.after=Number.isInteger(next)?next:seat.after;seat.more=!!data.hasMore;
-          seat.completion=data.completion;seat.decoded=await CoopTrace.decode(seat.messages);if(!valid())return;seat.blocks=CoopTrace.blocks(seat.decoded);render();if(!seat.more||!all&&available())break;
+          seat.completion=data.completion;seat.decoded=await globalThis.CoopTrace.decode(seat.messages);if(!valid())return;seat.blocks=globalThis.CoopTrace.blocks(seat.decoded);render();if(!seat.more||!all&&available())break;
         }
       }catch(error){if(valid())seat.error=error.status===429?'读取频率已达上限；稍后重试。':`轨迹读取失败：${error.message}`;}
       finally{if(valid()){seat.loading=false;render();}}
@@ -144,8 +144,8 @@
           try{
             const bytes=await readArtifactBytes(artifact,id);if(!valid())return;
             if(!bytes)throw Error('附件读取已取消');
-            const blocks=await CoopTranscript.blocks(new TextDecoder('utf-8',{fatal:true}).decode(bytes),artifact);if(!valid())return;
-            if(!CoopTrace.hasTrace(blocks))throw Error('未识别到可展示的消息；可在完整记录中下载原文件');
+            const blocks=await globalThis.CoopTranscript.blocks(new TextDecoder('utf-8',{fatal:true}).decode(bytes),artifact);if(!valid())return;
+            if(!globalThis.CoopTrace.hasTrace(blocks))throw Error('未识别到可展示的消息；可在完整记录中下载原文件');
             seat.artifactId=artifact.id;seat.artifactName=artifact.name;seat.artifactBlocks=blocks;seat.artifactFailures.delete(artifact.id);break;
           }catch(error){if(valid())seat.artifactFailures.set(artifact.id,`${artifact.name}：${error.message}`);}
           finally{if(valid()){seat.artifactLoading=false;render();}}
@@ -286,7 +286,7 @@
   }
   const traceLabels={observation:'本席观察',view:'可见局面',updates:'可见历史',legalActions:'合法动作',control:'时限与控制',rules:'游戏规则',action:'动作',decisionSummary:'提交理由',accepted:'是否接受',error:'错误',model:'模型',tools:'可用工具',parameters:'参数',required:'必填字段',properties:'字段',description:'说明',type:'类型',name:'名称',lastActionResult:'上次动作结果'};
   function traceValue(value){
-    value=CoopTrace.parsed(value);
+    value=globalThis.CoopTrace.parsed(value);
     if(value===null||typeof value!=='object')return node('p','trace-text',value===null?'空':String(value));
     const list=node('div','trace-fields'),entries=Object.entries(value);let offset=0;
     const more=node('button','text-button','显示更多字段');more.type='button';
@@ -298,13 +298,13 @@
     more.onclick=append;append();return list;
   }
   function traceBlock(block,current=false){
-    const category=CoopTrace.category(block),item=node('article',`trace-block trace-${block.type}${current?' trace-current':''}`);item.dataset.traceId=block.id;item.dataset.category=category;
+    const category=globalThis.CoopTrace.category(block),item=node('article',`trace-block trace-${block.type}${current?' trace-current':''}`);item.dataset.traceId=block.id;item.dataset.category=category;
     const detail=node('details','trace-detail'),head=node('summary','trace-block-head'),label=({system:'System',input:'User',output:'Assistant',reasoning:'Thinking',call:'Tool use',result:'Tool result',notice:'记录'})[category];
     head.append(node('strong','trace-kind',label));
     if(current)head.append(node('span','trace-current-label','本轮动作'));
     const at=node('time','',date(block.at,true).split(' ').at(-1));at.title=date(block.at,true);head.append(at,node('span','trace-disclosure','详情'));head.title=block.title;detail.append(head);
     detail.addEventListener('toggle',()=>{if(detail.open&&!detail.dataset.loaded){detail.dataset.loaded='true';const body=node('div','trace-expanded');body.append(node('p','trace-source',block.title));if(block.reason)body.append(node('p','trace-reason-full',block.reason));body.append(traceValue(block.value));if(block.confirmation){const f=block.confirmation;body.append(node('p','trace-source',`服务器确认 · 第 ${f.seq} 步`),traceValue({action:f.action,decisionSummary:f.decisionSummary??null}));}if(block.settings){const settings=node('details','trace-content');settings.append(node('summary','','模型设置与工具'),traceValue(block.settings));body.append(settings);}detail.append(body);}});
-    const preview=node('p',`trace-preview thinking-excerpt${block.reason?' trace-reason':''}`,CoopTrace.preview(block));item.append(detail,preview);
+    const preview=node('p',`trace-preview thinking-excerpt${block.reason?' trace-reason':''}`,globalThis.CoopTrace.preview(block));item.append(detail,preview);
     return item;
   }
   function renderPlayer(p,snap) {
@@ -334,15 +334,15 @@
     visibilityHead.append(button('视角 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}),button('签发原文 ↗',()=>showIssued(p.player)));panel.append(visibility);
     if(game==='hanabi'){handHead.append(...visibilityHead.querySelectorAll('button'));visibilityHead.remove();visibility.setAttribute('aria-label','本人已知提示');}
     const decision=node('section','player-decision'),status=seats[p.player];
-    const recorded=status?.artifactBlocks??status?.blocks??[],agent=CoopTrace.hasTrace(recorded);
+    const recorded=status?.artifactBlocks??status?.blocks??[],agent=globalThis.CoopTrace.hasTrace(recorded);
     if(agent)panel.classList.add('agent-panel');
     const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',agent?'Agent 轨迹':'行动理由'),node('span','decision-step',agent?'本轮优先 · 最新在上':p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
     if(agent){
       decisionHead.title='本席全局记录，包含行动理由与动作，独立于局面时间线';
       const list=node('div','trace-blocks');list.setAttribute('aria-label',`${p.player} 完整轨迹`);list.dataset.player=p.player;
-      const blocks=CoopTrace.withFrames(recorded,state.rollout.frames.filter(f=>f.playerId===p.player&&f.action)).sort((a,b)=>(typeof b.at==='number'?b.at:Date.parse(b.at)||0)-(typeof a.at==='number'?a.at:Date.parse(a.at)||0)||b.sequence-a.sequence);
+      const blocks=globalThis.CoopTrace.withFrames(recorded,state.rollout.frames.filter(f=>f.playerId===p.player&&f.action)).sort((a,b)=>(typeof b.at==='number'?b.at:Date.parse(b.at)||0)-(typeof a.at==='number'?a.at:Date.parse(a.at)||0)||b.sequence-a.sequence);
       const limit=status.displayLimit??80;
-      const current=CoopTrace.currentCallId(recorded,{frame:snap.frame?.playerId===p.player?snap.frame:null,live:snap.live,observation:p.observation});
+      const current=globalThis.CoopTrace.currentCallId(recorded,{frame:snap.frame?.playerId===p.player?snap.frame:null,live:snap.live,observation:p.observation});
       const selectedBlock=blocks.find(b=>b.id===current),displayed=selectedBlock?[selectedBlock,...blocks.filter(b=>b!==selectedBlock).slice(0,limit-1)]:blocks.slice(0,limit);
       if(current&&status.highlightedId!==current)list.dataset.revealCurrent='true';status.highlightedId=current;
       status.nodes??=new Map();
