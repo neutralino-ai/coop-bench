@@ -326,7 +326,7 @@ function renderArtifacts(){
   card.append(download);list.append(card);
  }
 }
-async function downloadArtifact(artifact,episodeId){
+async function readArtifactBytes(artifact,episodeId){
  if(!episodeId||artifact.status!=='complete')return;
  if(!Number.isSafeInteger(artifact.byteLength)||artifact.byteLength<0||artifact.byteLength>64*1024*1024)throw Error('附件大小超出浏览器下载支持范围（64 MiB）。');
  const session=state.session,controller=new AbortController();state.downloadControllers.add(controller);const timeout=setTimeout(()=>controller.abort(),120000);
@@ -341,11 +341,17 @@ async function downloadArtifact(artifact,episodeId){
   const bytes=new Uint8Array(size);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.byteLength;}
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));const hash=Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('');
   if(!valid())return;if(hash!==artifact.sha256)throw Error('SHA-256 校验不匹配，文件未导出。');
+  return bytes;
+ }catch(error){if(valid())await markConnectionFailure(error,{session,status:Number(error?.status??0)});throw error;}finally{clearTimeout(timeout);state.downloadControllers.delete(controller);}
+}
+async function downloadArtifact(artifact,episodeId){
+ const session=state.session,bytes=await readArtifactBytes(artifact,episodeId);
+ if(!bytes||session!==state.session||episodeId!==state.rollout?.summary.episodeId)return;
   const url=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'}));state.downloadUrls.add(url);
   const link=node('a');link.href=url;link.download=String(artifact.name??`artifact-${artifact.id}`).replace(/[\\/\x00-\x1f\x7f]/g,'_');document.body.append(link);link.click();link.remove();
   setTimeout(()=>{URL.revokeObjectURL(url);state.downloadUrls.delete(url);},1000);message('已下载原始附件，字节数和 SHA-256 校验通过。');
- }catch(error){if(valid())await markConnectionFailure(error,{session,status:Number(error?.status??0)});throw error;}finally{clearTimeout(timeout);state.downloadControllers.delete(controller);}
 }
+
 function structure(value,depth=0){if(value===null||typeof value!=='object')return node('span','field-value',primitive(value));if(Array.isArray(value)){const container=node('div',value.every(v=>v===null||typeof v!=='object')?'field-array':'field-nested');if(!value.length)return node('span','muted small','空');for(const item of value.slice(0,36)){if(item===null||typeof item!=='object')container.append(node('span','data-chip',primitive(item)));else{const child=node('div','field-object');child.append(structure(item,depth+1));container.append(child);}}if(value.length>36)container.append(node('span','field-overflow',`另有 ${value.length-36} 项，见原始观察`));return container;}const container=node('div','field-nested');const entries=Object.entries(value);if(!entries.length)return node('span','muted small','空');for(const [key,item]of entries.slice(0,30)){const row=node('div','field-entry');row.append(node('span','field-label',labels[key]??key));if(depth>=3&&item!==null&&typeof item==='object')row.append(node('span','field-value',Array.isArray(item)?`${item.length} 项（展开原始观察查看）`:'嵌套对象（展开原始观察查看）'));else row.append(structure(item,depth+1));container.append(row);}return container;}
 function renderGeneric(view){const grid=node('div','field-grid');for(const [key,value]of Object.entries(view)){if(['rules','legalActions','discussion'].includes(key))continue;const card=node('section','field-card');card.append(node('div','field-label',labels[key]??key),structure(value));grid.append(card);}$('board').append(grid);}
 function renderEvidence(){const frame=currentFrame();setText('event-title',frame?`${frame.playerId??'系统'} · ${actionName(frame)}`:'没有事件');setText('event-kind',isRejected(frame)?'被拒绝':frame?.automatic?'超时默认动作':frame?.kind??'—');$('event-kind').className=`badge ${isRejected(frame)?'danger':'neutral'}`;setText('event-meta',frame?`事件 #${frame.seq} · ${date(frame.at,true)}`:'');const content=$('event-content');content.replaceChildren();if(!frame)return;function block(label,text,className=''){const box=node('div','evidence-block');box.append(node('div','evidence-label',label),node('p',`evidence-text ${className}`,text));content.append(box);}if(frame.action?.text)block('公开消息原文',frame.action.text);if(frame.error){const error=frame.error;content.append(node('div','error-box',`${error.code??'操作失败'}：${error.message??JSON.stringify(error)}`));}block('行动时的决策简述',frame.automatic?'服务器按超时策略自动执行；不是玩家或模型决策。':frame.decisionSummary||'没有记录决策简述。',frame.decisionSummary?'decision-box':'');if(frame.action?.position!==undefined)block('行动结果',`${frame.playerId} 请求放到第 ${frame.action.position} 格 · ${frame.action.faceUp?'明置':'暗置'}${isRejected(frame)?'（未执行）':''}`);if(frame.observed?.observationId)block('动作绑定观察',frame.observed.observationId);setText('event-json',JSON.stringify({seq:frame.seq,kind:frame.kind,playerId:frame.playerId,action:frame.action,automatic:frame.automatic,error:frame.error,stateHash:frame.stateHash,coverage:frame.coverage,viewProvenance:frame.viewProvenance},null,2));}

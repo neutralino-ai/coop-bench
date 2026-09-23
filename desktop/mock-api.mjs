@@ -58,13 +58,20 @@ function auditRollout(id, players) {
 export async function startMockApi({role='operator'}={}) {
   const adminToken = 'synthetic-owner-' + randomUUID(), id = randomUUID(), rooms = new Map(), episodes = new Map(), requests = [];
   const players = ['p1', 'p2', 'p3'];
-  const bytes = Buffer.from('合成桌面附件\n{"fixture":true,"modelInvoked":false}\n');
+  const bytes = Buffer.from([
+    {type:'response_item',payload:{role:'system',content:'合成 Coding Agent 系统指令'}},
+    {type:'response_item',payload:{role:'user',content:[{type:'input_text',text:'合成外部日志用户消息'}]}},
+    {type:'response_item',payload:{role:'assistant',channel:'analysis',content:[{type:'text',text:'合成外部日志推理，没有调用模型'}]}},
+    {type:'response_item',payload:{role:'assistant',content:[{type:'output_text',text:'合成外部日志回复 <img src=x onerror="window.__thinkingXss=1">'}]}},
+    {type:'response_item',payload:{type:'function_call',name:'wait',arguments:'{"after":0}'}},
+    {type:'response_item',payload:{type:'function_call_output',output:'合成工具回执'}}
+  ].map(row=>JSON.stringify(row)).join('\n')+'\n');
   const artifact = { id: randomUUID(), name: 'synthetic-client-artifact.jsonl', mediaType: 'application/x-ndjson', kind: 'agent-trace', status: 'complete',
-    playerId: 'p1', createdAt: stamp, completedAt: stamp, byteLength: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), reasoningAvailability: 'not-provided' };
+    playerId: 'p2', createdAt: stamp, completedAt: stamp, byteLength: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), reasoningAvailability: 'provided' };
   const completion = { completeness: 'partial', reasoningAvailability: 'not-provided', scope: 'Synthetic UI fixture only', unavailable: ['No real model was invoked.'], lastSequence: 3 };
   const initial = { rollout: auditRollout(id, players), players, step: 0, ended: true, messages: new Map(), completions: new Map([['p1', completion]]), credentials: new Map() };
   initial.messages.set('p1', [
-    { sequence: 0, messageId: 'synthetic-ui-message', playerId: 'p1', kind: 'model-input', createdAt: stamp, message: { role: 'user', content: '合成验收消息：仅用于测试客户端，不是模型实局轨迹。' } },
+    { sequence: 0, messageId: 'synthetic-ui-message', playerId: 'p1', kind: 'model-input', createdAt: stamp, message: { instructions:'合成系统指令',role: 'user', content: '合成验收消息：仅用于测试客户端，不是模型实局轨迹。' } },
     { sequence: 1, messageId: 'synthetic-linked-reasoning', playerId: 'p1', kind: 'model-output', createdAt: stamp,
       observationId: initial.rollout.frames[1].observed.observationId, reasoningAvailability: 'provided', message: { role: 'assistant',
         reasoning_content: '合成布局测试：这是用于检验长文本展示的虚构内容，没有调用真实模型。'.repeat(25) + '原文结束标记', content: '<img src=x onerror="window.__thinkingXss=1">' } },

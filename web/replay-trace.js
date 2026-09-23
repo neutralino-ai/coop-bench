@@ -60,18 +60,20 @@ globalThis.CoopTrace=(()=>{
     for(const t of thoughts)add(r,'reasoning',t.label,t.text);
     const messages=[raw,...(raw.choices??[]).map(c=>c.message),...(raw.output??[])];let shown=thoughts.length>0;
     for(const m of messages){if(!m)continue;
-     if(m.type==='function_call'){call(r,m.name,m.arguments);shown=true;}
+     if(m.type==='function_call'||m.type==='tool_use'){call(r,m.name,m.arguments??m.input);shown=true;}
      for(const c of m.tool_calls??[]){call(r,c.function?.name,c.function?.arguments);shown=true;}
+     for(const c of Array.isArray(m.content)?m.content:[])if(c.type==='tool_use'){call(r,c.name,c.input);shown=true;}
      if(m.type!=='reasoning'){const content=typeof m.content==='string'?m.content:text((m.content??[]).filter?.(b=>['text','output_text'].includes(b.type))??[]);if(content){add(r,'output','模型回复',content);shown=true;}}
     }
     if(!shown)add(r,'output','模型返回',raw.error??raw.status??'没有返回可读文字或工具调用。');
-   }else if(r.kind==='tool-call')call(r,raw.tool??raw.name,raw,raw.tool==='act');
+   }else if(r.kind==='tool-call')call(r,raw.tool??raw.name,raw.arguments??raw.input??raw,raw.tool==='act');
    else if(r.kind==='tool-result')add(r,'result',`工具结果${raw.tool?' · '+raw.tool:''}`,raw);
    else add(r,'notice',r.kind??'记录',raw);
   }
   return out.reverse();
  }
- function category(block){return ({prompt:'input',input:'input',request:'input',output:'output',reasoning:'reasoning',call:'call',result:'result',action:'result'})[block.type]??'notice';}
+ function category(block){return ({prompt:'system',input:'input',request:'system',output:'output',reasoning:'reasoning',call:'call',result:'result',action:'result'})[block.type]??'notice';}
+ const hasTrace=blocks=>blocks.some(b=>['prompt','input','output','reasoning','call','result'].includes(b.type));
  function preview(block){
   if(block.confirmation)return `已确认 · 第 ${block.confirmation.seq} 步 · `+globalThis.CoopReplay.actionText(block.confirmation);
   if(block.action)return (category(block)==='result'?(block.value?.accepted===false?'拒绝 · ':'已确认 · '):'')+globalThis.CoopReplay.actionText({action:block.action})+(block.reason?' · '+block.reason:'');
@@ -107,5 +109,5 @@ globalThis.CoopTrace=(()=>{
   }
   return result;
  }
- return Object.freeze({decode,blocks,parsed,category,preview,currentCallId,withFrames});
+ return Object.freeze({decode,blocks,parsed,category,preview,currentCallId,withFrames,hasTrace});
 })();

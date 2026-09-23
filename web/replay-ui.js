@@ -3,6 +3,7 @@
   const R = globalThis.CoopReplay;
   let epoch = 0, episode = '', seats = {}, busy = false, controller;
   let recording=null,recordingError='',recordingBusy=false,recordingAt=0,recordingEpisode='';
+  let artifactEpoch=0,artifactBusy=false,artifactAt=0,artifactError='',traceArtifacts=[];
   const dialog = (id, title) => {
     const box = node('dialog', 'audit-dialog'); box.id = id;
     const heading = node('header','drawer-heading'); heading.append(node('h2','',title));
@@ -54,40 +55,6 @@
   issuedDialog.box.addEventListener('close',()=>{issuedController?.abort();issuedEpoch++;issuedLive.checked=false;issuedList.replaceChildren();});
   issuedLive.onchange=()=>{if(issuedLive.checked)void loadIssued();};
   setInterval(()=>{if(issuedLive.checked&&issuedDialog.box.open&&!issuedRefresh.disabled&&!document.hidden)void loadIssued();},5000);
-  const streamDialog=dialog('agent-messages-dialog','输入审计 · 实际模型请求');
-  let streamEpoch=0,streamController,streamEpisode='',streamPlayer='',streamAfter=-1,streamSeen=new Set(),streamBytes=0;
-  const streamControls=node('div','issued-controls'),streamSelect=node('select'),streamRefresh=node('button','button subtle','读取后续输入'),streamLatest=node('button','button subtle','跳到最新'),streamArchive=node('button','button subtle','从头读取输入'),streamLive=node('input'),streamStatus=node('p','muted'),streamList=node('div','issued-list');
-  streamSelect.id='monitor-player';streamSelect.setAttribute('aria-label','选择 Agent 席位');streamLive.type='checkbox';streamLive.id='monitor-live';streamStatus.id='monitor-status';streamList.id='monitor-messages';streamRefresh.id='monitor-refresh';streamLatest.id='monitor-latest';
-  const streamLabel=node('label','','每 5 秒读取新消息');streamLabel.prepend(streamLive);streamControls.append(streamSelect,streamRefresh,streamLatest,streamArchive,streamLabel);
-  streamDialog.content.append(node('p','','检查模型实际被提供了哪些信息：显示运行器上传的 model-input 原文，保留请求中的系统提示、消息历史、工具和观测等实际字段。与“服务器原始观测”对照，可定位漏发或转交时丢失的信息。'),node('p','muted','来源是运行器记录的请求，未上传时无法证明模型收到了什么。模型返回的 reasoning 和动作在决策回放中查看。分片保留原貌；窗口最多保留 100 条 / 2 MiB，服务器完整历史永久保存。'),streamControls,streamStatus,streamList);
-  function clearStream(){streamController?.abort();streamEpoch++;streamSeen=new Set();streamBytes=0;streamAfter=-1;streamList.replaceChildren();streamStatus.textContent='';streamLive.checked=false;}
-  function openStream(player){if(!state.rollout)return;clearStream();streamEpisode=state.rollout.summary.episodeId;streamPlayer=player??state.rollout.players[0];streamSelect.replaceChildren(...state.rollout.players.map(p=>{const option=node('option','',p);option.value=p;return option;}));streamSelect.value=streamPlayer;streamDialog.box.showModal();streamLive.checked=true;void readStream(true);}
-  async function readStream(latest=false){
-    if(!streamDialog.box.open||!state.token||streamEpisode!==state.rollout?.summary.episodeId)return;
-    streamController?.abort();const serial=++streamEpoch,session=state.session,signal=(streamController=new AbortController()).signal;
-    const valid=()=>serial===streamEpoch&&session===state.session&&streamDialog.box.open&&streamEpisode===state.rollout?.summary.episodeId;
-    streamRefresh.disabled=true;streamLatest.disabled=true;streamStatus.textContent='正在读取原始消息…';
-    try{
-      if(latest){const summary=await request(`/rollouts/${encodeURIComponent(streamEpisode)}/messages`,undefined,{signal});if(!valid())return;const seat=summary.seats?.find(p=>p.playerId===streamPlayer);if(!Number.isSafeInteger(seat?.lastInputSequence))throw Error('当前后端尚未支持输入审计，请更新服务');streamAfter=Math.max(-1,seat.lastInputSequence-1);streamSeen=new Set();streamBytes=0;streamList.replaceChildren();}
-      const query=new URLSearchParams({playerId:streamPlayer,after:String(streamAfter),limit:'25',kind:'model-input'});
-      let data=await request(`/rollouts/${encodeURIComponent(streamEpisode)}/messages?${query}`,undefined,{signal});if(!valid())return;
-      const first=data.messages?.[0],capture=first?.message?.capture;
-      if(latest&&capture?.fragment===true&&Number.isSafeInteger(capture.index)&&capture.index>0&&capture.index<=first.sequence){streamAfter=first.sequence-capture.index-1;query.set('after',String(streamAfter));data=await request(`/rollouts/${encodeURIComponent(streamEpisode)}/messages?${query}`,undefined,{signal});if(!valid())return;}
-      if(!Array.isArray(data.messages)||data.messages.some(record=>record.kind!=='model-input')||!Number.isSafeInteger(data.nextAfter)||data.nextAfter<streamAfter||data.hasMore&&data.nextAfter<=streamAfter)throw Error('模型输入分页格式无效。');
-      for(const record of data.messages){if(streamSeen.has(record.sequence))continue;streamSeen.add(record.sequence);const item=lazyMessageDetails(`#${record.sequence} · ${record.kind??'message'} · ${date(record.serverReceivedAt??record.createdAt,true)}`,record);item.classList.add('issued-record');item.dataset.sequence=record.sequence;item.dataset.bytes=new TextEncoder().encode(JSON.stringify(record)).byteLength;streamBytes+=Number(item.dataset.bytes);streamList.prepend(item);}
-      if(latest&&streamList.firstElementChild)streamList.firstElementChild.open=true;streamAfter=data.nextAfter;
-      while(streamList.children.length>100||streamBytes>2*1024*1024&&streamList.children.length>1){const old=streamList.lastElementChild;streamBytes-=Number(old.dataset.bytes);streamSeen.delete(Number(old.dataset.sequence));old.remove();}
-      streamStatus.textContent=`${streamPlayer} · ${streamList.children.length} 条已载入 · ${data.hasMore?'还有消息待读取，点击或等待下一次刷新':data.messages.length?'已读到当前最新上传记录':'暂无新消息'}${data.completion?' · 运行器已声明封存':''}`;
-    }catch(error){if(valid()&&error.name!=='AbortError')streamStatus.textContent=`读取失败：${error.message}；已载入的原文仍保留。`;}
-    finally{if(valid()){streamRefresh.disabled=false;streamLatest.disabled=false;}}
-  }
-  streamSelect.onchange=()=>{const live=streamLive.checked;clearStream();streamLive.checked=live;streamPlayer=streamSelect.value;void readStream(true);};streamRefresh.onclick=()=>void readStream();streamLatest.onclick=()=>void readStream(true);streamLive.onchange=()=>{if(streamLive.checked)void readStream();};
-  streamArchive.onclick=()=>{clearStream();void readStream();};
-  streamDialog.box.addEventListener('close',clearStream);
-  setInterval(()=>{if(streamLive.checked&&streamDialog.box.open&&!streamRefresh.disabled&&!document.hidden)void readStream();},5000);
-  const inputSources=(active,otherLabel,id,onClick)=>{const nav=node('nav','issued-controls');nav.setAttribute('aria-label','输入审计来源');const current=node('strong','',active),other=node('button','button subtle',otherLabel);other.id=id;other.onclick=onClick;nav.append(current,other);return nav;};
-  issuedDialog.content.prepend(inputSources('服务器原始观测','实际模型请求 →','open-agent-messages',()=>{const player=issuedPlayer;issuedDialog.box.close();openStream(player);}));
-  streamDialog.content.prepend(inputSources('实际模型请求','← 服务器原始观测','monitor-server-input',()=>{const player=streamPlayer;streamDialog.box.close();showIssued(player);}));
   document.querySelector('.top-actions').prepend(toolbar);
   const quickConnection=node('button','connection-quick');quickConnection.id='connection-quick-check';quickConnection.type='button';quickConnection.append(node('span','connection-light'));quickConnection.onclick=()=>void checkConnection(true);toolbar.prepend(quickConnection);
   const syncConnection=()=>{const phase=$('connection-status').dataset.state??'idle';quickConnection.className=`connection-quick ${phase}`;quickConnection.dataset.state=phase;quickConnection.disabled=$('check-connection').disabled;quickConnection.title=`${$('connection-status-label').textContent} · ${$('connection-reason').textContent} 点击检查连接`;
@@ -111,7 +78,7 @@
   const more=node('button','button subtle','读取更多消息');more.id='focus-load-more';more.hidden=true;more.onclick=()=>load(true);evidence.content.prepend(more);
 
   function clear() {
-    clearStream();if(streamDialog.box.open)streamDialog.box.close();streamEpisode='';
+    artifactEpoch++;artifactBusy=false;artifactAt=0;artifactError='';traceArtifacts=[];
     issuedController?.abort();issuedEpoch++;if(issuedDialog.box.open)issuedDialog.box.close();issuedList.replaceChildren();issuedEpisode='';
     window.CoopLobby?.clear();
     controller?.abort();epoch++;episode='';seats={};busy=false;document.body.dataset.audit='false';
@@ -153,8 +120,42 @@
       }catch(error){if(valid())seat.error=error.status===429?'读取频率已达上限；稍后重试。':`轨迹读取失败：${error.message}`;}
       finally{if(valid()){seat.loading=false;render();}}
     }
-    if(valid()){busy=false;grid.dataset.messages='ready';more.hidden=!Object.values(seats).some(s=>s.more||s.error);more.textContent=Object.values(seats).some(s=>s.error)?'重试读取消息':'读取更多消息';render();if(state.index!==selectedIndex)void load();}
+    if(valid()){busy=false;grid.dataset.messages='ready';more.hidden=!Object.values(seats).some(s=>s.more||s.error);more.textContent=Object.values(seats).some(s=>s.error)?'重试读取消息':'读取更多消息';render();void loadTraceArtifacts(all);if(state.index!==selectedIndex)void load();}
   }
+  async function loadTraceArtifacts(force=false){
+    if(!state.rollout||state.rollout.summary.status==='active'||artifactBusy||!force&&Date.now()-artifactAt<30000)return;
+    const id=state.rollout.summary.episodeId,serial=++artifactEpoch,session=state.session;
+    const valid=()=>serial===artifactEpoch&&session===state.session&&id===state.rollout?.summary.episodeId;
+    artifactBusy=true;artifactError='';
+    try{
+      const data=await request(`/rollouts/${encodeURIComponent(id)}/artifacts`);
+      if(!valid())return;
+      const artifacts=(data.artifacts??[]).filter(a=>a.kind==='agent-trace'&&a.status==='complete').sort((a,b)=>Date.parse(b.completedAt??b.createdAt)-Date.parse(a.completedAt??a.createdAt));
+      traceArtifacts=artifacts;renderRecording();
+      for(const player of state.rollout.players){
+        const seat=seats[player];if(!seat)continue;
+        const candidates=artifacts.filter(a=>a.playerId===player);
+        for(const artifact of candidates){
+          if(!valid())return;
+          if(seat.artifactId===artifact.id)break;
+          seat.artifactFailures??=new Map();
+          if(!force&&seat.artifactFailures.has(artifact.id))continue;
+          seat.artifactLoading=true;render();
+          try{
+            const bytes=await readArtifactBytes(artifact,id);if(!valid())return;
+            if(!bytes)throw Error('附件读取已取消');
+            const blocks=await CoopTranscript.blocks(new TextDecoder('utf-8',{fatal:true}).decode(bytes),artifact);if(!valid())return;
+            if(!CoopTrace.hasTrace(blocks))throw Error('未识别到可展示的消息；可在完整记录中下载原文件');
+            seat.artifactId=artifact.id;seat.artifactName=artifact.name;seat.artifactBlocks=blocks;seat.artifactFailures.delete(artifact.id);break;
+          }catch(error){if(valid())seat.artifactFailures.set(artifact.id,`${artifact.name}：${error.message}`);}
+          finally{if(valid()){seat.artifactLoading=false;render();}}
+        }
+      }
+    }catch(error){if(valid())artifactError=`附件轨迹读取失败：${error.message}`;}
+    finally{if(valid()){artifactBusy=false;artifactAt=Date.now();renderRecording();render();}}
+  }
+  // External agents often finish uploading after the server has ended the game.
+  setInterval(()=>{if(document.body.dataset.view==='replay'&&!document.hidden)void loadTraceArtifacts();},30000);
   const button=(label,fn)=>{const b=node('button','text-button',label);b.type='button';b.onclick=()=>{stopPlayback();fn();};return b;};
   function showOriginal(p) {
     const matches=R.linkedMessages(seats[p.player]?.messages??[],p.decision,p.player);
@@ -231,7 +232,8 @@
   }
   function renderRecording() {
     const sealed=recording?.filter(s=>s.completion).length??0,total=state.rollout?.players.length??0;
-    recordingButton.textContent=recordingError?'轨迹状态重试':recording?`轨迹 ${sealed}/${total} 席已封存`:recordingBusy?'核对轨迹…':'轨迹待核对';
+    const attached=new Set(traceArtifacts.map(a=>a.playerId)).size;
+    recordingButton.textContent=recordingError?'轨迹状态重试':recording?`消息 ${sealed}/${total} 已封存${attached?` · 附件 ${attached}/${total}`:''}`:recordingBusy?'核对轨迹…':'轨迹待核对';
     recordingButton.dataset.state=recordingError?'error':recording?.some(s=>!s.messageCount||!s.completion||s.completion.completeness!=='complete')?'partial':recording?'complete':'loading';
     recordingButton.title='封存与完整性由运行器声明，不代表全部内部思考可得。点击查看各席位收集范围。';
     if(recordingDialog.box.open)showRecording();
@@ -242,11 +244,13 @@
     if(!recording)content.append(node('p','muted',recordingBusy?'正在读取各席位收集状态…':'尚未读取轨迹状态。'));
     for(const player of state.rollout?.players??[]){const seat=recording?.find(s=>s.playerId===player),completion=seat?.completion,section=node('section','recording-seat');section.dataset.player=player;
       section.append(node('h3','',`玩家 ${player.replace(/^p/,'')} · ${recordingLabel(seat)}`),node('p','',`服务器已收到 ${seat?.messageCount??0} 条消息`));
+      for(const artifact of traceArtifacts.filter(a=>a.playerId===player))section.append(node('p','',`轨迹附件已上传：${artifact.name}${seats[player]?.artifactId===artifact.id?' · 字节校验通过，已用于回放':''}`));
       if(completion){section.append(node('p','',`采集范围：${completion.scope}`),node('p','',`推理记录：${({'provided':'有返回的原文','summary-only':'仅摘要','not-provided':'未提供','redacted':'已隐藏'})[completion.reasoningAvailability]??'未声明'}`));
         if(completion.unavailable?.length)section.append(node('p','muted',`未采集：${completion.unavailable.join('；')}`));}
       content.append(section);
     }
-    const retry=node('button','button subtle',recordingBusy?'正在刷新…':'刷新收集状态');retry.disabled=recordingBusy;retry.onclick=()=>void loadRecording(true);content.append(retry);
+    if(artifactError)content.append(node('p','notice error',artifactError));
+    const retry=node('button','button subtle',recordingBusy?'正在刷新…':'刷新收集状态');retry.disabled=recordingBusy;retry.onclick=()=>{void loadRecording(true);void loadTraceArtifacts(true);};content.append(retry);
     if(!recordingDialog.box.open)recordingDialog.box.showModal();
   }
   function showRules() {
@@ -295,7 +299,7 @@
   }
   function traceBlock(block,current=false){
     const category=CoopTrace.category(block),item=node('article',`trace-block trace-${block.type}${current?' trace-current':''}`);item.dataset.traceId=block.id;item.dataset.category=category;
-    const detail=node('details','trace-detail'),head=node('summary','trace-block-head'),label=({input:block.type==='prompt'?'System':'User / System',output:'Assistant',reasoning:'Thinking',call:'Tool use',result:'Tool result',notice:'记录'})[category];
+    const detail=node('details','trace-detail'),head=node('summary','trace-block-head'),label=({system:'System',input:'User',output:'Assistant',reasoning:'Thinking',call:'Tool use',result:'Tool result',notice:'记录'})[category];
     head.append(node('strong','trace-kind',label));
     if(current)head.append(node('span','trace-current-label','本轮动作'));
     const at=node('time','',date(block.at,true).split(' ').at(-1));at.title=date(block.at,true);head.append(at,node('span','trace-disclosure','详情'));head.title=block.title;detail.append(head);
@@ -330,9 +334,9 @@
     visibilityHead.append(button('视角 ↗',()=>{full.content.replaceChildren(node('h3','',`${p.player} · ${p.exact?'本动作绑定的输入':'服务器投影；不代表 Agent 已读取'}`),node('pre','readable-original',JSON.stringify(p.observation,null,2)));full.box.showModal();}),button('签发原文 ↗',()=>showIssued(p.player)));panel.append(visibility);
     if(game==='hanabi'){handHead.append(...visibilityHead.querySelectorAll('button'));visibilityHead.remove();visibility.setAttribute('aria-label','本人已知提示');}
     const decision=node('section','player-decision'),status=seats[p.player];
-    const recorded=status?.blocks??[],agent=recorded.some(b=>['prompt','input','output','reasoning','request'].includes(b.type));
+    const recorded=status?.artifactBlocks??status?.blocks??[],agent=CoopTrace.hasTrace(recorded);
     if(agent)panel.classList.add('agent-panel');
-    const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',agent?'Agent 完整轨迹':'行动理由'),node('span','decision-step',agent?'本轮优先 · 最新在上':p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
+    const decisionHead=node('div','decision-heading');decisionHead.append(node('h3','',agent?'Agent 轨迹':'行动理由'),node('span','decision-step',agent?'本轮优先 · 最新在上':p.decision?`第 ${p.decision.seq} 步`:'尚未行动'));decision.append(decisionHead);
     if(agent){
       decisionHead.title='本席全局记录，包含行动理由与动作，独立于局面时间线';
       const list=node('div','trace-blocks');list.setAttribute('aria-label',`${p.player} 完整轨迹`);list.dataset.player=p.player;
@@ -348,7 +352,9 @@
     }else{
       decision.append(node('p','thinking-excerpt',p.decision?.decisionSummary??(p.decision?.automatic?'服务器超时默认动作':p.decision?'本步未填写理由。':'尚未提交动作。')));
     }
-    if(status?.error||status?.loading||agent)decision.append(node('span','trace-status',status.error|| (status.loading?'正在读取轨迹…':`已载入 ${status.messages.length} 条记录${status.more?' · 还有记录待读取':' · 已读到当前末尾'}`)));
+    if(status?.error||status?.loading||agent||status?.artifactLoading)decision.append(node('span','trace-status',status.error|| (status.loading||status.artifactLoading?'正在读取轨迹…':status.artifactId?`已校验附件 · ${status.artifactName}`:`已载入 ${status.messages.length} 条记录${status.more?' · 还有记录待读取':' · 已读到当前末尾'}`)));
+    const artifactWarning=artifactError||[...(status?.artifactFailures?.values()??[])][0];
+    if(artifactWarning){decision.append(node('span','trace-status',artifactWarning),button('重试附件轨迹',()=>void loadTraceArtifacts(true)));}
     if(status?.more||status?.error)decision.append(button(status.error?'重试读取轨迹':'继续读取完整轨迹',()=>void load(true,p.player)));
     panel.append(decision);
     if(agent)return panel;
@@ -400,7 +406,7 @@
   }
   setInterval(()=>void refreshReplay(),5000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshReplay();});
-  window.CoopFocus={clear,load,render,openMessages:openStream,selected(){clearStream();if(streamDialog.box.open)streamDialog.box.close();issuedController?.abort();issuedEpoch++;if(issuedDialog.box.open)issuedDialog.box.close();controller?.abort();epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();if(evidence.box.open)evidence.box.close();full.content.replaceChildren();}};
+  window.CoopFocus={clear,load,render,selected(){artifactEpoch++;artifactBusy=false;artifactAt=0;artifactError='';traceArtifacts=[];issuedController?.abort();issuedEpoch++;if(issuedDialog.box.open)issuedDialog.box.close();controller?.abort();epoch++;episode='';seats={};busy=false;if(library.box.open)library.box.close();if(full.box.open)full.box.close();if(evidence.box.open)evidence.box.close();full.content.replaceChildren();}};
   window.addEventListener('keydown',event=>{
     if(!state.rollout||document.querySelector('dialog[open]')||['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName))return;
     if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();stopPlayback();selectFrame(state.index+(event.key==='ArrowRight'?1:-1));}

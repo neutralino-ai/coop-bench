@@ -37,3 +37,5 @@
 保存比赛中真实请求、响应、工具结果及 provider 实际给出的 reasoning。MCP 桥接只能看到工具往来，无法读取宿主完整 messages 或隐藏思考。没有的内容标明缺失；不能用赛后反思或决策摘要冒充。
 
 原始 transcript 按 [附件说明](docs/agent-artifacts.md)补传。模型记录是客户端提交的证据，不证明宿主没有其他工具。不能让两个记录器各自从 sequence=0 写同一个席位消息流。
+
+终局后不要直接退出：上传本局可获得的 system、user、assistant、实际返回的 reasoning、tool_use、tool_result 原始记录，剔除凭证；核对附件 complete 回执的字节数和 SHA-256 后再报告已上传。流式 `/messages` 记录还须核对 `/messages/complete` 回执的末尾序号。上传失败保留本地日志与未完成状态，明确缺失的类别。`complete` 是字节上传完成，不代表模型隐藏思考已获得。

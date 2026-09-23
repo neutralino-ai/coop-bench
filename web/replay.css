@@ -181,9 +181,10 @@ body[data-view=login] #connection-quick-check{display:none}
 .timeline-track #timeline::-moz-range-track{height:32px;background:transparent}
 .timeline-track #timeline::-moz-range-thumb{width:28px;height:28px;border:2px solid #47745a;border-radius:50%;background:transparent}
 @media(max-width:760px){.episode-header>div:first-child{display:block}.episode-header h1{max-width:85vw}.episode-header #episode-subtitle{font-size:11px;max-width:85vw}.transport .step-label{display:none}.timeline-track{margin:0 8px}.focus-replay{display:flex}.compact-section-heading{flex-wrap:wrap}.compact-section-heading .audit-scope{flex:1}.player-panel.agent-panel{height:680px}}
-/* Compact evidence cards: five semantic colors, full text on demand. */
+/* Compact evidence cards: six semantic colors, full text on demand. */
 .trace-blocks{gap:6px}
 .trace-block{padding:6px 8px;border-radius:6px}
+.trace-block[data-category=system]{--trace:#59636f;--trace-bg:#edf0f4}
 .trace-block[data-category=input]{--trace:#477da8;--trace-bg:#f0f6fc}
 .trace-block[data-category=output]{--trace:#7964ab;--trace-bg:#f6f2fc}
 .trace-block[data-category=reasoning]{--trace:#96731a;--trace-bg:#fff9e8}
@@ -200,7 +201,7 @@ body[data-view=login] #connection-quick-check{display:none}
 .trace-current{outline:2px solid var(--trace);outline-offset:-1px;border-left-width:5px;background:#ffebd7}
 .trace-current-label{font-size:10px;line-height:17px;padding:0 4px;border-radius:3px;background:var(--trace);color:#fff;white-space:nowrap}
 .trace-block-head:focus-visible{outline:2px solid var(--trace);outline-offset:2px;border-radius:2px}
-.trace-block[data-category=input] .trace-preview,.trace-block[data-category=result] .trace-preview{-webkit-line-clamp:1;max-height:22px}
+.trace-block[data-category=system] .trace-preview,.trace-block[data-category=input] .trace-preview,.trace-block[data-category=result] .trace-preview{-webkit-line-clamp:1;max-height:22px}
 .trace-blocks{gap:4px}.trace-block{padding:4px 6px}
 .trace-block .trace-block-head{min-height:20px;line-height:20px}.trace-block-head time{line-height:20px}
 .trace-block .trace-preview,.trace-block .trace-preview.trace-reason{min-height:0;margin-top:1px}

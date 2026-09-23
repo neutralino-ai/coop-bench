@@ -134,7 +134,9 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(loadingUi.startupHidden&&loadingUi.detailHidden&&(loadingUi.animation==='loading-spin'||loadingUi.reduced),`startup finishes and replay loader honors motion preference: ${JSON.stringify(loadingUi)}`);
   await capture('client-replay-loading.png');
   await wait(()=>run(()=>!document.getElementById('detail').hidden&&document.getElementById('player-grid').dataset.messages==='ready'),'Board/current decision failed to render');
-  check(!apiReads.some(path=>/\/artifacts/.test(path)||/\/messages\?.*limit=25/.test(path)),'first board reads each seat trajectory without prefetching attachments or duplicate raw-message pages');
+  check(!apiReads.some(path=>/\/messages\?.*limit=25/.test(path)),'first board avoids duplicate raw-message pages');
+  await wait(()=>run(()=>document.querySelector('.player-panel[data-player=p2] .trace-status')?.textContent.includes('已校验附件')),'External transcript attachment did not render',45000).catch(async error=>{throw Error(error.message+': '+await run(()=>[...document.querySelectorAll('.player-decision')].map(p=>p.textContent).join(' | ')));});
+  check(await run(()=>{const p=document.querySelector('.player-panel[data-player=p2]');return new Set([...p.querySelectorAll('.trace-block')].map(b=>b.dataset.category)).size===6&&!p.querySelector('.player-action')&&p.querySelector('.decision-heading h3').textContent==='Agent 轨迹'&&!p.querySelector('img');}),'external uploaded transcript replaces reason/action panels and uses six safe compact categories');
   await run(()=>document.getElementById('open-observations').click());
   await wait(()=>run(()=>document.querySelector('#issued-list pre')?.textContent.includes('possibleColors')),'Raw issued observation did not load');
   check(await run(()=>{const raw=JSON.parse(document.querySelector('#issued-list pre').textContent);return raw.playerId==='p1'&&!raw.decisionToken&&raw.updates.length>0&&raw.view.hands.p1.every(c=>c.color===undefined);}), 'raw server observations preserve updates and hidden own cards without credentials');
@@ -144,29 +146,8 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
   check(!apiReads.slice(issuedReadStart).some(path=>/\/messages|\/artifacts/.test(path)), 'raw observation monitor fetches server records without model messages or artifacts');
   await capture('client-issued-observations.png');
   await run(()=>{const select=document.getElementById('issued-player');select.value='p1';select.dispatchEvent(new Event('change'));});
-  await run(()=>document.getElementById('open-agent-messages').click());
-  await wait(()=>run(()=>document.querySelector('#monitor-messages pre')?.textContent.includes('model-input')),'Input audit failed to show the original model request');
-  check(await run(()=>document.querySelectorAll('#monitor-messages details').length===1&&!document.getElementById('monitor-messages').textContent.includes('model-output')), 'input audit excludes model outputs and reasoning records');
-  const undoMonitorMessage=fixture.appendMonitorMessage('p1',{messages:[{role:'system',content:'synthetic system prompt'},{role:'user',content:'new message with no game action <img src=x onerror="window.__thinkingXss=1">'}],tools:[]});
-  await wait(()=>run(()=>document.querySelectorAll('#monitor-messages details').length===2),'Live input monitor stopped at the previous end of the stream');
-  await run(()=>document.querySelector('#monitor-messages details').open=true);
-  await wait(()=>run(()=>document.querySelector('#monitor-messages pre').textContent.includes('new message with no game action')),'New raw content did not appear');
-  check(true,'live monitor reads messages uploaded after an empty tail without requiring a new game action');
-  check(await run(()=>!window.__thinkingXss&&!document.querySelector('#monitor-messages img')), 'raw model inputs preserve system and user messages as safe text');
-  await capture('client-agent-messages.png');
-  // A live refresh disables the Latest button; wait for it to finish so the
-  // synthetic click exercises the latest-fragment request instead of being ignored.
-  await run(()=>{document.getElementById('monitor-live').checked=false;});
-  await wait(()=>run(()=>!document.getElementById('monitor-latest').disabled),'Input monitor refresh did not finish');
-  const undoFragment0=fixture.appendMonitorMessage('p1',{role:'model-request',capture:{logicalId:'synthetic-fragment',fragment:true,index:0,count:2},dataBase64:'e30='});
-  const undoFragment1=fixture.appendMonitorMessage('p1',{role:'model-request',capture:{logicalId:'synthetic-fragment',fragment:true,index:1,count:2},dataBase64:'e30='});
-  await run(()=>document.getElementById('monitor-latest').click());
-  await wait(()=>run(()=>document.querySelector('#monitor-messages pre')?.textContent.includes('synthetic-fragment')),'Latest fragmented input did not load');
-  check(await run(()=>document.querySelectorAll('#monitor-messages details').length===2),'latest input starts from its first recorded fragment instead of dropping preceding fragments');
-  await run(()=>{const select=document.getElementById('monitor-player');select.value='p2';select.dispatchEvent(new Event('change'));});
-  await wait(()=>run(()=>document.getElementById('monitor-status').textContent.includes('暂无新消息')),'Empty seat message status did not render');
-  check(await run(()=>document.querySelectorAll('#monitor-messages details').length===0),'switching seats clears previous private message content');
-  await run(()=>document.getElementById('agent-messages-dialog').close());undoFragment1();undoFragment0();undoMonitorMessage();
+  check(await run(()=>!document.getElementById('open-agent-messages')&&!document.getElementById('agent-messages-dialog')),'standalone model-input monitor is removed; server observation audit remains');
+  await run(()=>document.getElementById('issued-observations-dialog').close());
   failDetail=true;await run(id=>{void selectEpisode(id);},fixture.id);
   await wait(()=>run(()=>document.getElementById('replay-loading').dataset.failed==='true'),'Failed replay did not show retry');
   check(await run(()=>!document.getElementById('retry-replay').hidden&&document.getElementById('detail').hidden),'failed replay has explicit error and retry, without stale cards');
@@ -212,7 +193,7 @@ export async function runClientSmoke({ window, fixture, remote, player, hostSeat
     writeFileSync(join(dataDir,'replay-layout.json'),JSON.stringify(layout,null,2));
     check(measured.pageFits&&measured.timelineFits&&measured.panels.every(p=>p.actionFits&&p.handFits&&p.thoughtFont>=15&&p.thoughtHeight>=20),`player hands, reasoning and actions fit ${width}x${height} without page scrolling`);
   }
-  check(await run(()=>{const blocks=[...document.querySelectorAll('.acting .trace-block')];return new Set(blocks.map(b=>b.dataset.category)).size===5&&blocks.every(b=>b.getBoundingClientRect().height<=90)&&!document.querySelector('.trace-detail[open]')&&document.querySelectorAll('.trace-current').length===1&&document.querySelector('.trace-current').dataset.category==='call';}),'five trace categories stay compact and only the selected turn tool use is highlighted');
+  check(await run(()=>{const blocks=[...document.querySelectorAll('.acting .trace-block')];return new Set(blocks.map(b=>b.dataset.category)).size===6&&blocks.every(b=>b.getBoundingClientRect().height<=90)&&!document.querySelector('.trace-detail[open]')&&document.querySelectorAll('.trace-current').length===1&&document.querySelector('.trace-current').dataset.category==='call';}),'six trace categories stay compact and only the selected turn tool use is highlighted');
   await run(()=>document.querySelector('.acting .trace-reasoning .trace-block-head').click());
   await wait(()=>run(()=>document.querySelector('.acting .trace-reasoning .trace-expanded')?.textContent.includes('原文结束标记')),'Expanded thinking must preserve the complete original');
   check(await run(()=>!document.querySelector('.acting .trace-blocks img')&&!window.__thinkingXss&&document.querySelector('.acting .trace-reason').textContent.includes('合成测试动作')),'compact trace details preserve complete recorded reasoning and treat markup as text');

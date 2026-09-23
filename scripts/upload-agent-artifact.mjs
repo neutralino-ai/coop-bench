@@ -39,6 +39,11 @@ export async function uploadAgentArtifact(options, dependencies = {}) {
   const manifest = { name: options.name ?? basename(file), mediaType: options.mediaType ?? mediaType(file),
     kind: options.kind ?? 'agent-trace', byteLength: snapshot.length, sha256, reasoningAvailability: 'not-provided', ...metadata };
   const manifestKey = 'artifact-' + createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+  const verified = artifact => {
+    if (artifact?.status !== 'complete' || artifact.sha256 !== sha256 || artifact.byteLength !== snapshot.length || typeof artifact.id !== 'string' || !artifact.id)
+      throw Error('Artifact completion receipt does not match the uploaded file. Preserve the local file and retry; upload is not confirmed.');
+    return artifact;
+  };
   const endpoint = `${base}/episodes/${encodeURIComponent(options.episodeId)}/artifacts`;
   const request = async (url, body, key) => {
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -63,7 +68,7 @@ export async function uploadAgentArtifact(options, dependencies = {}) {
     }
   };
   let artifact = await request(endpoint, manifest, manifestKey);
-  if (artifact.status === 'complete') return artifact;
+  if (artifact.status === 'complete') return verified(artifact);
   if (artifact.chunkSize !== 32768 || !Array.isArray(artifact.missingChunks) || artifact.missingChunks.some(index => !Number.isInteger(index) || index < 0 || index >= Math.ceil(snapshot.length / artifact.chunkSize))) throw Error('Invalid upload manifest returned by server.');
     for (const index of artifact.missingChunks) {
       const buffer = snapshot.subarray(index * artifact.chunkSize, (index + 1) * artifact.chunkSize);
@@ -72,7 +77,7 @@ export async function uploadAgentArtifact(options, dependencies = {}) {
       await sleep(350);
     }
   artifact = await request(`${endpoint}/${encodeURIComponent(artifact.id)}/complete`, {});
-  return artifact;
+  return verified(artifact);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(resolve(process.argv[1]))).href) {

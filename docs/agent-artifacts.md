@@ -21,3 +21,9 @@ metadata最小示例：
 HTTP路径：POST /episodes/:id/artifacts 建manifest，POST /episodes/:id/artifacts/:artifactId/chunks 传块，POST /episodes/:id/artifacts/:artifactId/complete 封存。每次使用本席Bearer头。其他玩家不能读本人的私有日志。
 
 现有每席/messages是单一序号流，不能两个独立记录器各从sequence=0抢写。宿主完整transcript可作为独立artifact补交，关联实际requestId。
+
+## 回放展示
+
+终局回放自动读取已完成的 `agent-trace` 附件，校验长度和 SHA-256 后显示紧凑的六类色块：System、User、Assistant、Thinking、Tool use、Tool result。支持 JSON 消息数组、JSONL 的显式 role 消息、Codex response_item、Claude message/content blocks，以及本项目 model-input/model-output/tool-call/tool-result 记录。不执行日志中的内容，也不把用户引用的推理或加密字段当作实际思考。
+
+同席有多个附件时优先显示最新的可识别轨迹，原始附件仍可下载。缺少轨迹时保留行动理由；未知格式或校验失败明确提示，不把它显示成完整轨迹。消息流仍用于进行中回放。每类内容是否存在取决于实际采集，上传成功不等于六类全部具备。

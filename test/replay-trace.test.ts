@@ -16,11 +16,11 @@ test('trajectory reconstructs checked fragments, refuses incomplete and corrupte
  const wrong=structuredClone(rows);for(const r of wrong)r.message.capture.sha256='0'.repeat(64);assert.match((await T.decode(wrong))[0].decodeError,/校验/);
 });
 
-test('compact cards classify five evidence types and keep settings out of extra cards',()=>{
+test('compact cards classify six evidence types and keep settings out of extra cards',()=>{
  const blocks=T.blocks([{sequence:0,kind:'model-input',raw:{model:'fixture',tools:[],input:[{role:'system',content:'系统'},{role:'user',content:'用户'}]}},
  {sequence:1,kind:'model-output',raw:{choices:[{message:{content:'回答',reasoning_content:'推理',tool_calls:[{function:{name:'act',arguments:'{"actionJson":"{\\"type\\":\\"play\\",\\"index\\":0}","decisionSummary":"理由"}'}}]}}]}},
  {sequence:2,kind:'tool-result',raw:{accepted:false,error:{code:'INVALID_ACTION',message:'Cannot discard'}}}]);
- assert.deepEqual([...new Set(Array.from(blocks,T.category))].sort(),['call','input','output','reasoning','result']);
+ assert.deepEqual([...new Set(Array.from(blocks,T.category))].sort(),['call','input','output','reasoning','result','system']);
  assert.equal(blocks.filter(b=>b.type==='request').length,0);assert.ok(blocks.find(b=>b.settings)?.settings.tools);
  assert.match(T.preview(blocks.find(b=>b.type==='result')),/Cannot discard/);
  assert.equal(T.preview({type:'input',value:{observation:{status:'active'},rules:{}}}),'本席观察 · 规则 · 可见历史');
