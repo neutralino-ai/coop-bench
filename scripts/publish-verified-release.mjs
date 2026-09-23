@@ -15,7 +15,7 @@ if(ref.type!=='commit'||source.head_sha!==ref.sha||source.workflow_id!==workflow
 const jobs=api(`actions/runs/${run}/jobs?filter=latest&per_page=100`);
 if(jobs.total_count>100)throw Error('Unexpected job pagination');
 const latest=new Map();for(const job of jobs.jobs)if(!latest.has(job.name)||latest.get(job.name).id<job.id)latest.set(job.name,job);
-for(const name of ['Windows x64','macOS Intel','macOS Apple Silicon','iOS native and simulator acceptance / ios','Upload verified iOS build to TestFlight']){
+for(const name of ['quality / Client quality','Windows x64','macOS Intel','macOS Apple Silicon','iOS native and simulator acceptance / ios','Upload verified iOS build to TestFlight']){
  const job=latest.get(name);if(job?.status!=='completed'||job.conclusion!=='success')throw Error(`Required check did not pass: ${name}`);
 }
 console.log(`Verified ${tag} at ${ref.sha}: all native and TestFlight checks passed in run ${run}.`);

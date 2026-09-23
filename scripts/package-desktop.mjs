@@ -1,11 +1,14 @@
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync, writeFileSync, rmSync, readdirSync, mkdirSync} from 'node:fs';
+import {mkdtempSync, writeFileSync, rmSync, readdirSync, mkdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {releaseSource,verifyReleaseSource,verifyBuiltSource} from './release-source.mjs';
 
 const [kind, ...args] = process.argv.slice(2);
 if (!['management', 'player'].includes(kind)) throw Error('Expected management or player');
 if (process.platform !== 'darwin') throw Error('This signing wrapper requires macOS');
+const sourceRevision=releaseSource(process.cwd());
+verifyBuiltSource(JSON.parse(readFileSync('runtime/coop-bench/build-manifest.json','utf8')),sourceRevision);
 const signed = process.platform === 'darwin' && process.env.SIGN_APPLE === 'true';
 const env = {...process.env};
 const config = kind === 'player' ? 'build/player-electron-builder.json' : 'build/electron-builder.json';
@@ -44,6 +47,7 @@ try {
       run('xcrun',['stapler','validate',file]);
     }
   }
+  verifyReleaseSource(process.cwd(),sourceRevision);
 } finally {
   if(temp)rmSync(temp,{recursive:true,force:true});
 }

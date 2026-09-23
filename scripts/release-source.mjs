@@ -37,6 +37,17 @@ export function verifyReleaseSource(root, expected) {
   if (actual.commit !== expected.commit || actual.tree !== expected.tree) throw Error('Release source changed during packaging.');
 }
 
+/** Prevent an old or dirty development runtime from entering a clean release.
+ * @param {{sourceRevision?:{commit?:string,tree?:string,dirty?:boolean}}} manifest
+ * @param {{commit:string,tree:string,dirty:false}} expected
+ */
+export function verifyBuiltSource(manifest, expected) {
+  const actual = manifest.sourceRevision;
+  if (!actual || actual.dirty !== false || actual.commit !== expected.commit || actual.tree !== expected.tree) {
+    throw Error('Built runtime does not match the clean release commit. Rebuild from this commit first.');
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   console.log(JSON.stringify(releaseSource(process.cwd())));
 }
