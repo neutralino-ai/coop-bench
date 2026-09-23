@@ -7,6 +7,14 @@ export const REPOSITORY = 'https://github.com/neutralino-ai/coop-bench';
 const LATEST = 'https://api.github.com/repos/neutralino-ai/coop-bench/releases/latest';
 const LIMIT = 300 * 1024 * 1024;
 const fail = (message, code = 'UPDATE_FAILED') => { throw new ClientConnectionError(code, message); };
+const storageCode = error => error?.code ?? error?.cause?.code;
+const transientDownloadError = error => error?.code === 'UPDATE_TRANSIENT' || error instanceof TypeError;
+const retryDelay = (milliseconds, signal) => new Promise((resolve, reject) => {
+  if (signal.aborted) return reject(signal.reason);
+  const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, milliseconds);
+  const abort = () => { clearTimeout(timer); reject(signal.reason); };
+  signal.addEventListener('abort', abort, { once: true });
+});
 const versionParts = value => typeof value === 'string' && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value) ? value.split('.').map(Number) : null;
 export function isNewer(candidate, current) {
   const a = versionParts(candidate), b = versionParts(current);
@@ -43,7 +51,16 @@ export class UpdateClient {
     this.busy = true; this.state = state; this.controller = new AbortController();
     const timer = setTimeout(() => this.controller?.abort(), timeout);
     try { await work(this.controller.signal); return this.info(); }
-    catch (error) { this.state = 'error'; if (error instanceof ClientConnectionError) throw error; fail('无法完成更新。请检查 GitHub 网络连接和磁盘空间后重试。'); }
+    catch (error) {
+      this.state = 'error';
+      if (error instanceof ClientConnectionError) throw error;
+      if (this.controller.signal.aborted) fail(state === 'downloading' ? '下载超时，已丢弃未完成的安装包。请重试。' : '检查更新超时，请稍后重试。', 'UPDATE_TIMEOUT');
+      const code = storageCode(error);
+      if (['ENOSPC', 'EDQUOT'].includes(code)) fail('更新目录空间不足，无法保存安装包。', 'UPDATE_STORAGE');
+      if (['EACCES', 'EPERM', 'EROFS'].includes(code)) fail('更新目录无法写入，请检查文件夹权限。', 'UPDATE_STORAGE');
+      if (state === 'downloading' && transientDownloadError(error)) fail('GitHub 安装包连接中断，自动重试仍未完成。请稍后重试。', 'UPDATE_NETWORK');
+      fail('无法完成更新。请检查 GitHub 网络连接和磁盘空间后重试。');
+    }
     finally { clearTimeout(timer); this.busy = false; this.controller = null; }
   }
   async check() {
@@ -62,13 +79,15 @@ export class UpdateClient {
   }
   async download() {
     if (!this.asset || !['available', 'error', 'ready'].includes(this.state)) fail('请先检查并选择可用的新版本。');
-    return this.task('downloading', 10 * 60 * 1000, async signal => {
+    return this.task('downloading', 30 * 60 * 1000, async signal => {
       const asset = this.asset; this.file = null; this.downloaded = 0;
       await mkdir(this.directory, { recursive: true, mode: 0o700 });
       const destination = join(this.directory, asset.name), temporary = destination + '.part';
       await rm(temporary, { force: true });
-      let handle;
-      try {
+      const downloadOnce = async () => {
+        this.downloaded = 0;
+        let handle;
+        try {
         let url = asset.url, response;
         for (let redirects = 0; redirects <= 4; redirects++) {
           response = await this.fetcher(url, { method: 'GET', redirect: 'manual', credentials: 'omit', signal });
@@ -80,7 +99,8 @@ export class UpdateClient {
             fail('安装包下载指向非 GitHub 发布地址，已拒绝。');
           url = next.href;
         }
-        if (response.status !== 200) fail('安装包下载失败，请重新检查更新。');
+        if ([429, 500, 502, 503, 504].includes(response.status)) { await response.body?.cancel(); fail('GitHub 安装包服务暂不可用，自动重试仍未完成。', 'UPDATE_TRANSIENT'); }
+        if (response.status !== 200) fail(`安装包下载失败（HTTP ${response.status}），请重新检查更新。`);
         const length = response.headers.get('content-length');
         if (length !== null && Number(length) !== asset.size) { await response.body?.cancel(); fail('安装包大小与发布信息不一致。'); }
         handle = await open(temporary, 'wx', 0o600);
@@ -97,7 +117,15 @@ export class UpdateClient {
         await handle.close(); handle = null;
         await rm(destination, { force: true }); await rename(temporary, destination);
         this.file = destination; this.state = 'ready';
-      } finally { await handle?.close(); await rm(temporary, { force: true }); }
+        } finally { await handle?.close(); await rm(temporary, { force: true }); }
+      };
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { await downloadOnce(); return; }
+        catch (error) {
+          if (attempt === 2 || signal.aborted || !transientDownloadError(error)) throw error;
+          await retryDelay(400 * (attempt + 1), signal);
+        }
+      }
     });
   }
   async install() {

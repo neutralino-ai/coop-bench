@@ -42,6 +42,33 @@ test('download verifies bytes, uses no credentials, follows only GitHub asset ho
     await assert.rejects(updater.install(), /已变化/); assert.equal(opened.length, 1);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('interrupted GitHub asset stream retries from the beginning and verifies the final bytes', async () => {
+  const directory=await mkdtemp(join(tmpdir(),'coop-update-retry-'));let cdnRequests=0;
+  try {
+    const updater=new UpdateClient({currentVersion:'0.7.0',platform:'win32',arch:'x64',directory,
+      fetcher:async(url:string)=>{
+        if(url.startsWith('https://api.github.com/'))return Response.json(release());
+        if(url.startsWith(REPOSITORY))return new Response(null,{status:302,headers:{location:'https://release-assets.githubusercontent.com/synthetic'}});
+        cdnRequests++;
+        if(cdnRequests===1)return new Response(new ReadableStream({start(controller){controller.enqueue(bytes.subarray(0,8));controller.error(new TypeError('synthetic network interruption'));}}),{headers:{'content-length':String(bytes.length)}});
+        return new Response(bytes,{headers:{'content-length':String(bytes.length)}});
+      },opener:async()=>''});
+    await updater.check();assert.equal((await updater.download()).state,'ready');
+    assert.equal(cdnRequests,2);assert.deepEqual(await readFile(updater.file),bytes);
+    assert.deepEqual(await readdir(directory),[release().assets[0].name]);
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('updater explains a write failure without exposing raw error details',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'coop-update-storage-'));
+  try{
+    const updater=new UpdateClient({currentVersion:'0.7.0',platform:'win32',arch:'x64',directory,
+      fetcher:async(url:string)=>url.startsWith('https://api.github.com/')?Response.json(release()):Promise.reject(Object.assign(new Error('private-path'),{code:'ENOSPC'})),opener:async()=>''});
+    await updater.check();await assert.rejects(updater.download(),{code:'UPDATE_STORAGE',message:'更新目录空间不足，无法保存安装包。'});
+    assert.deepEqual(await readdir(directory),[]);
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
 test('updater rejects unsafe redirects, incorrect hashes, excessive or short payloads and leaves no partial file', async () => {
   for (const response of [
     () => new Response(null, { status:302, headers:{location:'https://127.0.0.1/secret'} }),
