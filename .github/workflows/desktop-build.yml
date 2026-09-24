@@ -84,6 +84,11 @@ jobs:
         run: pnpm exec electron . --client-smoke-test --data-dir=artifacts/ci-client-smoke
       - name: Require client acceptance report
         run: node -e "const r=require('./artifacts/ci-client-smoke/client-smoke-result.json');if(!r.ok)throw Error('Client smoke failed');console.log(r.checks.length+' mock API/UI checks passed')"
+      - name: Verify Take Time human controls and recorded board
+        timeout-minutes: 3
+        run: pnpm exec electron scripts/test-take-time-ui.cjs
+      - name: Require Take Time rendering report
+        run: node -e "if(!require('./artifacts/take-time-ui/result.json').passed)throw Error('Take Time UI failed')"
       - name: Package management client
         if: runner.os != 'macOS' || env.SIGN_APPLE != 'true'
         run: pnpm exec electron-builder --config build/electron-builder.json ${{ matrix.build-args }} --publish never
@@ -171,6 +176,8 @@ jobs:
             artifacts/ci-packaged-smoke/replay-layout.json
             artifacts/ci-player-smoke/player-smoke-result.json
             artifacts/ci-player-smoke/*.png
+            artifacts/take-time-ui/result.json
+            artifacts/take-time-ui/*.png
 
   ios:
     needs: quality
