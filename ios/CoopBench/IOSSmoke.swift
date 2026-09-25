@@ -110,7 +110,7 @@ import WebKit
             try await wait("agent-submits-action",{app.session.agents.values.first?.data["lastActionResult"] != nil})
             try await wait("model-failure-is-visible",{app.session.agents.values.first?.warning?.contains("停止") == true})
             try check(try await js("return document.querySelector('#history-panel').open && !document.querySelector('#reason-panel,#decision-reason,#dictate-reason') && !window.coopPlayer.dictate",app.player) as? Bool == true,"history-open-without-reason-or-dictation")
-            _=try await js("""
+            let syntheticProof=try await js("""
                 window.historySmokeOriginal=await window.coopPlayer.command('status');
                 const s=structuredClone(window.historySmokeOriginal),o=s.observation;
                 o.observationId='synthetic-third-seat';o.playerId='p3';o.view.current='p3';
@@ -120,10 +120,21 @@ import WebKit
                   {seq:1,event:{type:'discard',player:'p3',index:0,card:{color:'white',value:4}}},
                   {seq:2,event:{type:'hint',player:'p1',target:'p3',kind:'value',value:2,touched:[0,2,4]}},
                   {seq:3,event:{type:'play',player:'p2',index:1,card:{color:'red',value:3},played:false}}
-                ];render(s);return true;
+                ];render(s);
+                return JSON.stringify({
+                  seats:[...document.querySelectorAll('.player-hand')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(e=>e.dataset.player).join(',')==='p1,p2,p3' && [...document.querySelectorAll('.own-hand .card-face strong')].every(e=>e.textContent==='?'),
+                  recentCount:document.querySelectorAll('#recent-action-history li').length,
+                  scope:document.querySelector('#recent-history-scope').textContent,
+                  panelAbove:document.querySelector('#recent-history-panel').getBoundingClientRect().bottom<=document.querySelector('.board-panel').getBoundingClientRect().top,
+                  rowsFit:[...document.querySelectorAll('.history-row')].every(e=>e.scrollWidth<=e.clientWidth+1&&e.getBoundingClientRect().height<=44)
+                });
                 """,app.player)
-            try check(try await js("return [...document.querySelectorAll('.player-hand')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(e=>e.dataset.player).join(',')==='p1,p2,p3' && [...document.querySelectorAll('.own-hand .card-face strong')].every(e=>e.textContent==='?')",app.player) as? Bool == true,"third-seat-in-third-row-with-hidden-cards")
-            try check(try await js("return document.querySelectorAll('#recent-action-history li').length===2 && document.querySelector('#recent-history-scope').textContent==='自你上次行动后' && document.querySelector('#recent-history-panel').getBoundingClientRect().bottom<=document.querySelector('.board-panel').getBoundingClientRect().top && [...document.querySelectorAll('.history-row')].every(e=>e.scrollWidth<=e.clientWidth+1&&e.getBoundingClientRect().height<=44)",app.player) as? Bool == true,"recent-teammate-actions-prominent-and-single-line")
+            let proofText=syntheticProof as? String ?? "{}"
+            let proof=(try JSONSerialization.jsonObject(with:Data(proofText.utf8))) as? JSON ?? [:]
+            try check(proof["seats"] as? Bool == true,"third-seat-in-third-row-with-hidden-cards")
+            let recentOK=proof["recentCount"] as? Int == 2 && proof["scope"] as? String == "自你上次行动后" && proof["panelAbove"] as? Bool == true && proof["rowsFit"] as? Bool == true
+            try require(recentOK,"recent-teammate-actions-prominent-and-single-line: \(proofText)","SMOKE_FAILED")
+            checks.append("recent-teammate-actions-prominent-and-single-line")
             try await snapshot("player-third-seat-history",app.player)
             _=try await js("render(window.historySmokeOriginal);delete window.historySmokeOriginal;return true",app.player)
             let runtime=app.session.player!
