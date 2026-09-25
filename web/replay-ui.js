@@ -202,7 +202,7 @@
       hints.title='提示消耗 1 枚；弃牌或成功打出 5 恢复 1 枚，最多 8 枚。0 枚不能提示，8 枚不能弃牌。';
       shared.append(node('strong','',`${Object.values(view.fireworks).reduce((a,b)=>a+Number(b),0)} / 25`),hints,node('span','board-counts',`失误 ${view.errors} / 3 · 牌库 ${view.deckCount}`));
     }else if(state.rollout.summary.gameId==='take-time'){
-      const slots=node('div','clock-overview');for(let n=1;n<=6;n++){const cards=(view.placements??[]).filter(p=>p.position===n);slots.append(node('span','',`${n}号位：${cards.length?cards.map(c=>c.value??'?').join(' + '):'空'}`));}shared.append(slots,node('span','',phaseNames[view.phase]??view.phase??''));
+      const board=node('div','tt-shared');window.CoopTakeTime.renderBoard(board,{...view,ownPlacements:[]},{compact:true});shared.append(board);
     }else{
       const keys=['phase','current','level','hints','lives','piles','stacks','trick','tasks','position','altitude','speed'];
       for(const k of keys.filter(k=>view[k]!==undefined).slice(0,5))shared.append(node('span','',`${labels[k]??k}：${compact(view[k])}`));
